@@ -158,6 +158,8 @@ export class Game {
     this.sounds = [];
     this.flashes = [];
     this.sneak = false;
+    this.debugMode = false;
+    this.debugFreeze = false;
     this.blind = false;
     this.particles = makeDust(this.level);
     this.camX = this.level.size.w / 2;
@@ -178,6 +180,8 @@ export class Game {
   startWorld(seed = 424242) {
     const level = generateWorld(seed);
     if (!level) return false;
+    this.worldSeed = seed;
+    this.customData = null;
     this.audio.unlock();
     this.worldMode = true;
     this.level = level;
@@ -217,6 +221,8 @@ export class Game {
 
   /** Build mode: play the map the player drew. */
   startCustom(data) {
+    this.customData = data;
+    this.worldMode = false;
     const w = data.w;
     const h = data.h;
     const grid = Uint8Array.from(data.cells);
@@ -337,9 +343,12 @@ export class Game {
   }
 
   restart() {
-    if (this.state === 'playing' || this.state === 'dead' || this.state === 'paused') {
-      this.startChamber(this.chamberIndex);
-    }
+    if (this.state !== 'playing' && this.state !== 'dead' && this.state !== 'paused') return;
+    // Same room, same seed — a retry must not quietly hand you a new map.
+    if (this.worldMode) this.startWorld(this.worldSeed ?? 424242);
+    else if (this.customData) this.startCustom(this.customData);
+    else this.startChamber(this.chamberIndex);
+    if (this.state !== 'playing') this.state = 'playing';
   }
 
   toggleMute() {
@@ -410,6 +419,15 @@ export class Game {
 
   handleGlobalKeys() {
     if (this.input.consume('KeyM')) this.toggleMute();
+    if (this.input.consume('Backquote')) {
+      this.debugMode = !this.debugMode;
+      if (!this.debugMode) this.debugFreeze = false;
+      this.ui.toast(this.debugMode ? 'shard' : 'deny');
+    }
+    if (this.debugMode && this.input.consume('Digit1')) {
+      this.debugFreeze = !this.debugFreeze;
+      this.ui.toast(this.debugFreeze ? 'deny' : 'shard');
+    }
     if (this.state === 'edit' && this.input.consume('Escape')) this.closeEditor();
     else if (this.state === 'playing' && this.input.consume('Escape')) this.pause();
     else if (this.state === 'paused' && this.input.consume('Escape')) this.resume();
@@ -468,13 +486,27 @@ export class Game {
   update(dt) {
     const p = this.player;
     const L = this.level;
+    if (this.debugFreeze && this.debugMode) {
+      this.updateRays(0);
+      this.updateParticles(dt);
+      this.ui.updateHUD({
+        chamber: this.chamberLabel,
+        shards: this.totalShards - this.shards.length,
+        total: this.totalShards,
+        charges: this.charges,
+        listen: this.listen,
+        muted: this.audio.muted,
+        danger: this.danger,
+      });
+      return;
+    }
     this.levelTime += dt;
 
-    // Shift toggles stealth: silent, but blind — no sound means no picture.
-    // Space is the only sound you make on purpose.
-    if (this.input.consume('ShiftLeft') || this.input.consume('ShiftRight')) {
-      this.sneak = !this.sneak;
-      this.audio.click(0.5);
+    // Shift is HELD, not toggled: silent and blind while the key is down.
+    const sneaking = this.input.down('ShiftLeft') || this.input.down('ShiftRight');
+    if (sneaking !== this.sneak) {
+      this.sneak = sneaking;
+      this.audio.click(0.4);
       if (this.sneak) this.audio.noise({ dur: 0.25, gain: 0.01, type: 'lowpass', freq: 300, send: 0.4 });
     }
     this.blind = this.sneak;
@@ -500,7 +532,6 @@ export class Game {
       if (p.stepPhase > 58) {
         p.stepPhase = 0;
         this.audio.footstep(0, 0.85);
-        this.emitSound(p.x, p.y, { range: STEP_RANGE, kind: 'step' });
         this.stepEcho(p.x, p.y);
       }
     }
@@ -518,7 +549,6 @@ export class Game {
       }
     }
 
-    this.updateSounds();
 
     // charge regen
     if (this.charges < PING_MAX) {
@@ -546,7 +576,7 @@ export class Game {
         this.audio.shard();
         this.flash = 1;
         this.shake = Math.max(this.shake, 2.5);
-        this.emitSound(p.x, p.y, { range: SHARD_NOISE, kind: 'shard' });
+        this.stepEcho(p.x, p.y, null, { count: 34, speed: 380, life: 0.7 });
         if (this.shards.length === 0) this.tryOpenExit(true);
       }
     }
@@ -611,7 +641,7 @@ export class Game {
       if (this.humT <= 0) {
         this.humT = 3.6;
         this.audio.gateHum();
-        this.emitSound(L.exit.x, L.exit.y, { range: 700, kind: 'hum', speed: 520 });
+        this.stepEcho(L.exit.x, L.exit.y, '140,240,170', { count: 18, speed: 260, life: 0.9 });
       }
     }
 
@@ -680,48 +710,22 @@ export class Game {
   }
 
   /** Spawn a fan of sonar rays that bounce off walls and leave light trails. */
-  /** One expanding shell of sound. Everything that hears does so when the
-   *  front actually reaches it — never by proximity alone. */
-  emitSound(x, y, { range = STEP_RANGE, kind = 'step', speed = SOUND_SPEED } = {}) {
-    this.sounds.push({ x, y, t0: this.now, speed, range, kind, hit: new Set(), hitM: new Set() });
-  }
-
-  /** Walls eat sound. A listener behind a wall only hears half as far. */
-  _hears(snd, x, y) {
-    const d = dist(snd.x, snd.y, x, y);
-    if (d > snd.range) return false;
-    const L = this.level;
-    const through = lineOfSight(L.grid, L.w, L.h, snd.x, snd.y, x, y, L.tile);
-    return through || d <= snd.range * THROUGH_WALL;
-  }
-
-  updateSounds() {
-    const alive = [];
-    for (const snd of this.sounds) {
-      const age = this.now - snd.t0;
-      if (age < 0) { alive.push(snd); continue; }
-      const R = age * snd.speed;
-      if (R > snd.range + 40) continue;
-      for (const h of this.hunters) {
-        if (snd.hit.has(h.id)) continue;
-        if (Math.abs(dist(snd.x, snd.y, h.x, h.y) - R) >= 26) continue;
-        if (!this._hears(snd, h.x, h.y)) continue;
-        snd.hit.add(h.id);
-        this.alertHunter(h, snd.x, snd.y, 0.14);
-      }
-      for (const sk of this.skitters) {
-        if (snd.hitM.has(sk.id)) continue;
-        const d = dist(snd.x, snd.y, sk.x, sk.y);
-        if (Math.abs(d - R) > 26) continue;
-        if (!this._hears(snd, sk.x, sk.y)) continue;
-        snd.hitM.add(sk.id);
-        sk.hear(snd.x, snd.y, snd.kind, snd.kind === 'ping' ? 1.05 : 1.35);
-      }
-      alive.push(snd);
+  /** A sound line touched a body: it now knows the tagged origin of that sound.
+   *  Newer tags overwrite older ones; an equal tag changes nothing. */
+  onRayTouch(e, tag) {
+    if (!e || !tag) return;
+    if (e instanceof Hunter) {
+      if (tag.t <= (e.lastTag ?? -1)) return;
+      e.lastTag = tag.t;
+      this.alertHunter(e, tag.x, tag.y, 0.14);
+    } else if (e instanceof Skitter) {
+      if (tag.t <= (e.lastTag ?? -1)) return;
+      e.lastTag = tag.t;
+      e.hear(tag.x, tag.y, tag.kind, tag.kind === 'ping' ? 1.05 : 1.35);
     }
-    this.sounds = alive.slice(-40);
   }
 
+  /** Which body a ray touched, if any. */
   /** What a ray is allowed to touch. Colour is knowledge: gold is a shard,
    *  green is the door, red is something that hunts you. */
   hitEntity(x, y) {
@@ -741,13 +745,17 @@ export class Game {
 
   /** Every footstep is a small sonar ring. White for you and for hunters,
    *  blue for the mimic, which is neither prey nor predator. */
-  stepEcho(x, y, tint = null) {
-    this.spawnRays(x, y, { count: 22, speed: 330, life: 0.5, tint });
-    this.pings.push({ x, y, t0: this.now, speed: 330, life: 0.5, small: true, tint });
+  stepEcho(x, y, tint = null, opts = {}) {
+    const count = opts.count ?? 22;
+    const speed = opts.speed ?? 330;
+    const life = opts.life ?? 0.5;
+    this.spawnRays(x, y, { count, speed, life, tint, kind: opts.kind || 'step' });
+    this.pings.push({ x, y, t0: this.now, speed, life, small: true, tint });
     this.contacts.push({ x, y, t: this.now, tint });
   }
 
-  spawnRays(x, y, { count = RAY_COUNT, speed = RAY_SPEED, life = RAY_LIFE, tint = null } = {}) {
+  spawnRays(x, y, { count = RAY_COUNT, speed = RAY_SPEED, life = RAY_LIFE, tint = null, kind = 'ping', tag = null } = {}) {
+    const stamp = tag || { x, y, t: this.now, kind };
     for (let i = 0; i < count; i++) {
       const a = (i / count) * Math.PI * 2 + Math.random() * 0.035;
       this.rays.push({
@@ -761,6 +769,7 @@ export class Game {
         bounce: 0,
         hot: false,
         tint,
+        tag: stamp,
         pts: [{ x, y }],
       });
     }
@@ -786,6 +795,7 @@ export class Game {
           const ent = this.hitEntity(nx, ny);
           if (ent) {
             ent.e.seenAt = this.now;
+            this.onRayTouch(ent.e, r.tag);
             r.tint = ent.tint;
             r.hot = !!ent.hot;
             if (ent.hot) {
@@ -864,7 +874,7 @@ export class Game {
       this.pingHintShown = true;
       this.ui.toast('shard');
     }
-    this.emitSound(p.x, p.y, { range: WAVE_LISTEN, kind: 'ping', speed: PING_SPEED });
+
   }
 
   /** The shards are not silent. A pulse reaching them is answered by a bell

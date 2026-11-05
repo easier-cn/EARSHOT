@@ -19,6 +19,11 @@ const canvas = document.getElementById('game');
 const game = new Game(canvas, document.getElementById('ui'));
 window.__hush = game;
 if (params.has('edit')) setTimeout(() => game.openEditor(), 60);
+if (params.has('debug')) {
+  setTimeout(() => {
+    game.debugMode = true;
+  }, 600);
+}
 if (params.has('blue')) {
   setTimeout(() => {
     game.startChamber(0);

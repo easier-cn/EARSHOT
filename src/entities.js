@@ -124,6 +124,7 @@ export class Hunter {
     this.path = [];
     this.searchT = 0;
     this.pending = null;
+    this.lastTag = -1;
     this.face = Math.random() * Math.PI * 2;
     this.speed = 0;
     this.stepAcc = 0;
@@ -233,6 +234,7 @@ export class Skitter {
     this.wobble = Math.random() * 6;
     this.echoT = 0;
     this.echoCool = 0;
+    this.lastTag = -1;
     this.echoKind = null;
     this.echoSrc = null;
     this.revealT = 0;

@@ -262,6 +262,34 @@ export class Renderer {
       ctx.stroke();
     }
 
+    // ---- debug view (only when ~ was pressed) -------------------------------
+    if (game.debugMode) {
+      ctx.save();
+      ctx.lineWidth = 1;
+      for (const h of game.hunters) {
+        ctx.strokeStyle = 'rgba(255, 70, 70, 0.95)';
+        ctx.strokeRect(h.x - 11, h.y - 11, 22, 22);
+        if (h.path && h.path.length) {
+          ctx.beginPath();
+          ctx.moveTo(h.x, h.y);
+          for (const wp of h.path) ctx.lineTo(wp.x, wp.y);
+          ctx.strokeStyle = 'rgba(255, 70, 70, 0.45)';
+          ctx.stroke();
+        }
+        if (h.pending) {
+          ctx.strokeStyle = 'rgba(255, 200, 120, 0.9)';
+          ctx.beginPath();
+          ctx.arc(h.pending.x, h.pending.y, 8, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
+      for (const sk of game.skitters || []) {
+        ctx.strokeStyle = 'rgba(110, 180, 255, 0.95)';
+        ctx.strokeRect(sk.x - 9, sk.y - 9, 18, 18);
+      }
+      ctx.restore();
+    }
+
     // ---- player -------------------------------------------------------------
     if (game.player) {
       const p = game.player;
@@ -344,6 +372,20 @@ export class Renderer {
       const a = clamp(0.55 - game.deathT * 0.25, 0, 0.55);
       ctx.fillStyle = `rgba(120, 8, 8, ${a})`;
       ctx.fillRect(0, 0, this.cw, this.ch);
+    }
+    if (game.debugMode) {
+      ctx.save();
+      ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+      ctx.font = '11px ui-monospace, monospace';
+      ctx.fillStyle = 'rgba(255, 90, 90, 0.85)';
+      const p = game.player || { x: 0, y: 0 };
+      const lines = [
+        `hunters ${game.hunters.length}  mimics ${(game.skitters || []).length}  shards ${game.shards.length}`,
+        `player ${Math.round(p.x)},${Math.round(p.y)}  rays ${(game.rays || []).length}`,
+        `freeze ${game.debugFreeze ? 'ON (1)' : 'off (1)'}`,
+      ];
+      lines.forEach((t, i) => ctx.fillText(t, 18, this.ch - 54 + i * 15));
+      ctx.restore();
     }
     if (game.flash > 0) {
       ctx.fillStyle = `rgba(190, 255, 245, ${game.flash * 0.06})`;
