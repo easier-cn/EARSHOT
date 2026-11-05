@@ -236,6 +236,13 @@ export class AudioEngine {
     this.tone({ freq: 180, freqEnd: 120, type: 'square', dur: 0.12, gain: 0.05, send: 0.1 });
   }
 
+  // A hunter just heard something. Low, sour, panned toward it: the "it knows"
+  // tell, so the player can connect their own noise to the reaction.
+  alert(pan = 0) {
+    this.tone({ freq: 150, freqEnd: 96, type: 'triangle', dur: 0.28, gain: 0.05, pan, send: 0.25 });
+    this.tone({ freq: 300, freqEnd: 240, type: 'sine', dur: 0.09, gain: 0.02, pan, send: 0.2, delay: 0.02 });
+  }
+
   footstep(pan = 0, loud = 1) {
     this.noise({ dur: 0.07, gain: 0.035 * loud, type: 'bandpass', freq: 900 + Math.random() * 300, q: 1.2, pan, send: 0.12 });
   }

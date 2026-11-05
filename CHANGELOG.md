@@ -3,6 +3,14 @@
 All notable changes to HUSH. The format follows [Keep a Changelog](https://keepachangelog.com/),
 and the game follows [SemVer](https://semver.org/).
 
+## [0.2.3] - 2026-11-05
+
+### Added
+- An "it heard that" stinger: when a hunter first wakes to a noise, a low sour
+  cue pans toward it. Rate-limited to 0.75s and silent while it is already
+  tracking, so it reads as a reaction rather than a metronome.
+- `tools/probe.mjs`: evaluate one expression inside the running game.
+
 ## [0.2.2] - 2026-11-05
 
 ### Added

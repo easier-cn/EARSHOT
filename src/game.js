@@ -69,6 +69,7 @@ export class Game {
     this.camY = 0;
     this.chamberIndex = 0;
     this.denyCooldown = 0;
+    this.alertCd = 0;
     this.titlePingTimer = 0;
 
     this.ui.build();
@@ -324,7 +325,7 @@ export class Game {
         this.audio.footstep(0, run ? 1.4 : 1);
         const noiseRadius = creeping ? 90 : run ? 340 : 215;
         for (const h of this.hunters) {
-          if (dist(p.x, p.y, h.x, h.y) < noiseRadius) h.hear(p.x, p.y, 0.18);
+          if (dist(p.x, p.y, h.x, h.y) < noiseRadius) this.alertHunter(h, p.x, p.y, 0.18);
         }
       }
     }
@@ -354,7 +355,7 @@ export class Game {
         const d = dist(ping.x, ping.y, h.x, h.y);
         if (Math.abs(d - R) < 44) {
           ping.heard.add(h.id);
-          h.hear(ping.x, ping.y, 0.08);
+          this.alertHunter(h, ping.x, ping.y, 0.08);
         }
       }
     }
@@ -370,7 +371,7 @@ export class Game {
         this.flash = 1;
         this.shake = Math.max(this.shake, 2.5);
         for (const h of this.hunters) {
-          if (dist(sh.x, sh.y, h.x, h.y) < 330) h.hear(sh.x, sh.y, 0.2);
+          if (dist(sh.x, sh.y, h.x, h.y) < 330) this.alertHunter(h, sh.x, sh.y, 0.2);
         }
         if (this.shards.length === 0) {
           this.exitOpen = true;
@@ -393,6 +394,7 @@ export class Game {
       }
     }
     this.denyCooldown -= dt;
+    this.alertCd -= dt;
 
     // hunters
     let nearest = Infinity;
@@ -424,6 +426,17 @@ export class Game {
       muted: this.audio.muted,
       danger: this.danger,
     });
+  }
+
+  // Every noise source goes through here, so the "it heard that" stinger stays
+  // tied to the moment a hunter actually wakes up rather than to every step.
+  alertHunter(h, x, y, delay) {
+    const tracking = h.state === 'investigate';
+    h.hear(x, y, delay);
+    if (tracking || this.alertCd > 0) return;
+    this.alertCd = 0.75;
+    const pan = clamp((h.x - this.player.x) / 420, -1, 1) * 0.8;
+    this.audio.alert(pan);
   }
 
   resolve(entity, dx, dy) {
