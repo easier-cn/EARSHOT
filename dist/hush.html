@@ -3442,7 +3442,10 @@ class Game {
     this.speedT = 0;
     this.speedMul = 1;
     this.invulnT = 0;
-    this.stressReady = 0;
+    this.stressCharges = 0;
+    this.starKills = 0;
+    this.counterReady = false;
+    this.rewindUsed = false;
     this.denyCooldown = 0;
     this.alertCd = 0;
     this.titlePingTimer = 0;
@@ -3630,6 +3633,10 @@ class Game {
     this.speedT = 0;
     this.speedMul = 1;
     this.invulnT = 0;
+    this.lives = this.maxLives();
+    this.starKills = 0;
+    this.counterReady = this.inv.level('counter') > 0;
+    this.stressCharges = this.inv.level('stress') ? 1 : 0;
     this.refreshStones();
     this.ui.showGame();
     return true;
@@ -3674,7 +3681,7 @@ class Game {
       this.flash = 1;
     } else if (id === 'totem') {
       if (!take()) return this.audio.deny();
-      this.stressReady += 1;
+      this.stressCharges += 1;
       this.audio.gateOpen();
     } else if (id === 'scanner') {
       if (!take()) return this.audio.deny();
@@ -3683,7 +3690,22 @@ class Game {
     }
   }
 
-  throwItem(id) {
+  throwStone() {
+    const lvl = this.inv.level('stone');
+    if (!lvl || this.inv.stones <= 0) return;
+    this.inv.stones -= 1;
+    this.throwItem(lvl >= CHARMS.stone.sharp ? 'sharpStone' : 'pebbles', { free: true, noise: CHARMS.stone.noise[lvl - 1] });
+  }
+
+  tryPing() {
+    if (this.charges < 1) {
+      this.audio.deny();
+      return;
+    }
+    this.firePing();
+  }
+
+  throwItem(id, opts = {}) {
     const p = this.player;
     const r = this.renderer;
     const wx = this.camX + (this.msx - r.cw / 2) / r.scale;
@@ -3697,7 +3719,8 @@ class Game {
       speed, life: 1.6, id,
       kills: !!def.kills, noise: def.noise || 1,
     });
-    if (id === 'pebbles') {
+    if (opts.noise) this.throws[this.throws.length - 1].noise = opts.noise;
+    if (id === 'pebbles' && !opts.free) {
       const idx = this.inv.pack.findIndex((s) => s && s.id === 'pebbles');
       if (idx >= 0) {
         this.inv.pack[idx].n -= 1;
@@ -3742,6 +3765,66 @@ class Game {
         this.throws.splice(i, 1);
       }
     }
+  }
+
+  maxLives() {
+    const lvl = this.inv.level('survive');
+    return 1 + (lvl ? CHARMS.survive.extraLives[lvl - 1] : 0);
+  }
+
+  /** Everything that can hurt you comes through here: charms get a say first. */
+  hurt(source) {
+    if (this.state !== 'playing') return;
+    if (this.debugInvincible || this.invulnT > 0) return;
+    if (this.starKills > 0) {
+      if (source && source.x != null) this.killHunter(source);
+      this.invulnT = Math.max(this.invulnT, 0.6);
+      return;
+    }
+    if (this.stressCharges > 0) {
+      this.stressCharges -= 1;
+      this.enterStress();
+      return;
+    }
+    if (this.counterReady) {
+      this.counterReady = false;
+      if (source && source.x != null) this.killHunter(source);
+      this.invulnT = CHARMS.counter.window;
+      this.flash = 1;
+      this.audio.gateOpen();
+      return;
+    }
+    this.lives -= 1;
+    if (this.lives > 0) {
+      this.invulnT = 1.4;
+      this.flash = 1;
+      this.shake = Math.max(this.shake, 9);
+      this.audio.alert(0);
+      return;
+    }
+    // 时间逆流: the first lethal hit of a run is always forgiven.
+    const rw = this.inv.level('rewind');
+    if (rw) {
+      const chance = CHARMS.rewind.chance[rw - 1];
+      const forced = !this.rewindUsed;
+      this.rewindUsed = true;
+      if (forced || Math.random() < chance) {
+        this.startFloor(this.depth);
+        this.flash = 1;
+        this.audio.gateOpen();
+        return;
+      }
+    }
+    this.die();
+  }
+
+  enterStress() {
+    this.invulnT = CHARMS.stress.invuln;
+    this.speedT = CHARMS.stress.invuln;
+    this.flash = 1;
+    this.shake = Math.max(this.shake, 8);
+    this.audio.gateOpen();
+    this.stepEcho(this.player.x, this.player.y, '255, 210, 120', { count: 48, speed: 520, life: 1.2, tagged: false });
   }
 
   refreshStones() {
@@ -4131,8 +4214,10 @@ class Game {
     }
 
     // pinging
-    if (this.input.consume('Mouse0') && this.activeItem) {
-      this.throwItem(this.activeItem);
+    if (this.input.consume('Mouse0')) {
+      if (this.activeItem) this.throwItem(this.activeItem);
+      else if (this.inv.stones > 0) this.throwStone();
+      else this.tryPing();
     }
     if ((this.input.consume('Space') || this.input.consume('KeyJ')) && this.charges > 0) {
       const sonarLvl = this.inv.level('sneakSonar');
@@ -4238,7 +4323,7 @@ class Game {
       const d = dist(p.x, p.y, h.x, h.y);
       if (d < nearest) nearest = d;
       if (d < p.r + h.r - 1) {
-        this.die();
+        this.hurt(h);
         return;
       }
     }
