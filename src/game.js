@@ -793,7 +793,9 @@ export class Game {
           move -= d;
           const nx = r.x + r.dx * d;
           const ny = r.y + r.dy * d;
-          const ent = this.hitEntity(nx, ny);
+          // Only tagged (player-made) sound can touch a body. A hunter's own
+          // footstep is scenery: it must not collide with the hunter itself.
+          const ent = r.tag ? this.hitEntity(nx, ny) : null;
           if (ent) {
             ent.e.seenAt = this.now;
             if (r.tag) this.onRayTouch(ent.e, r.tag);
@@ -822,7 +824,7 @@ export class Game {
           if (hitY) r.dy *= -1;
           if (hitX || hitY) {
             r.bounce++;
-            this.contacts.push({ x: r.x, y: r.y, t: this.now });
+            this.contacts.push({ x: r.x, y: r.y, t: this.now, tint: r.tint });
           }
           r.x = hitX ? r.x : nx;
           r.y = hitY ? r.y : ny;
