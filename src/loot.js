@@ -99,14 +99,14 @@ export class Inventory {
   constructor() {
     this.pack = new Array(8).fill(null); // { id, n }
     this.hot = [null, null, null, null];
-    this.charms = []; // charm ids, max 4, one per category
+    this.charms = []; // { id, lvl }, max 4 slots
     this.work = [null, null];
     this.active = null; // hotkey index bound to left click
     this.stones = 0; // 投石问路 charges, refreshed per floor
   }
 
   level(id) {
-    return this.charms.filter((c) => c === id).length;
+    return this.charms.reduce((sum, c) => sum + (c.id === id ? c.lvl : 0), 0);
   }
 
   has(id) {
@@ -117,19 +117,51 @@ export class Inventory {
     return this.charms[i] || null;
   }
 
+  /** Move a charm between a slot and the workbench; work holds two. */
+  toWork(i) {
+    const c = this.charms[i];
+    if (!c) return false;
+    const w = this.work.indexOf(null);
+    if (w < 0) return false;
+    this.work[w] = c;
+    this.charms.splice(i, 1);
+    return true;
+  }
+
+  fromWork(w) {
+    const c = this.work[w];
+    if (!c) return false;
+    if (this.charms.length >= 4) return false;
+    this.charms.push(c);
+    this.work[w] = null;
+    return true;
+  }
+
+  /** 工 + 工 → 成果: two charms of equal id and level become the next level. */
+  craftable() {
+    const [a, b] = this.work;
+    if (!a || !b) return null;
+    if (a.id !== b.id || a.lvl !== b.lvl) return null;
+    if (a.lvl >= CHARMS[a.id].max) return null;
+    return { id: a.id, lvl: a.lvl + 1 };
+  }
+
+  craft() {
+    const out = this.craftable();
+    if (!out) return null;
+    if (this.charms.length >= 4) return null;
+    this.work = [null, null];
+    this.charms.push(out);
+    return out;
+  }
+
   /** Two of the same charm merge into the next level, as long as a slot is free. */
   addCharm(id) {
     const def = CHARMS[id];
     if (!def) return 'bad';
-    const lvl = this.level(id);
-    if (lvl >= def.max) return 'max';
-    if (lvl > 0) {
-      this.charms.splice(this.charms.indexOf(id), 1);
-      this.charms.push(id);
-      return 'upgraded';
-    }
+    // Duplicates never merge in the pack: levelling up is the workbench's job.
     if (this.charms.length >= 4) return 'full';
-    this.charms.push(id);
+    this.charms.push({ id, lvl: 1 });
     return 'added';
   }
 
@@ -145,6 +177,18 @@ export class Inventory {
     const i = this.pack.indexOf(null);
     if (i < 0) return false;
     this.pack[i] = { id, n };
+    return true;
+  }
+
+  /** Spend one of an item from the pack; clears the hotkey too when empty. */
+  consume(id) {
+    const i = this.pack.findIndex((s) => s && s.id === id);
+    if (i < 0) return false;
+    this.pack[i].n -= 1;
+    if (this.pack[i].n <= 0) {
+      this.pack[i] = null;
+      for (let k = 0; k < this.hot.length; k++) if (this.hot[k] && this.hot[k].id === id) this.hot[k] = null;
+    }
     return true;
   }
 

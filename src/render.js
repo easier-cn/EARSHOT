@@ -302,6 +302,56 @@ export class Renderer {
       ctx.restore();
     }
 
+    // ---- throwables: aiming fan and flight trails ---------------------------
+    if (game.player) {
+      const p = game.player;
+      const showAim = game.activeItem || (game.inv && game.inv.stones > 0);
+      if (showAim) {
+        const r = this;
+        const ax = game.camX + ((game.msx || r.cw / 2) - r.cw / 2) / r.scale;
+        const ay = game.camY + ((game.msy || r.ch / 2) - r.ch / 2) / r.scale;
+        const a = Math.atan2(ay - p.y, ax - p.x);
+        const len = 196;
+        ctx.save();
+        ctx.setLineDash([9, 7]);
+        ctx.lineDashOffset = -now * 34;
+        ctx.strokeStyle = 'rgba(255, 214, 150, 0.5)';
+        ctx.lineWidth = 2.6;
+        ctx.beginPath();
+        ctx.moveTo(p.x + Math.cos(a) * 16, p.y + Math.sin(a) * 16);
+        ctx.lineTo(p.x + Math.cos(a) * len, p.y + Math.sin(a) * len);
+        ctx.stroke();
+        ctx.setLineDash([3, 5]);
+        ctx.lineDashOffset = 0;
+        ctx.strokeStyle = 'rgba(255, 236, 200, 0.22)';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(p.x + Math.cos(a) * 16, p.y + Math.sin(a) * 16);
+        ctx.lineTo(p.x + Math.cos(a) * len, p.y + Math.sin(a) * len);
+        ctx.stroke();
+        ctx.restore();
+      }
+      for (const t of game.throws || []) {
+        if (!t.trail || t.trail.length < 2) continue;
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        for (let i = 1; i < t.trail.length; i++) {
+          const k = i / t.trail.length;
+          ctx.strokeStyle = `rgba(${game.activeItem === 'sharpStone' || t.kills ? '255, 205, 120' : '220, 250, 245'}, ${k * 0.5})`;
+          ctx.lineWidth = 0.8 + k * 2.2;
+          ctx.beginPath();
+          ctx.moveTo(t.trail[i - 1].x, t.trail[i - 1].y);
+          ctx.lineTo(t.trail[i].x, t.trail[i].y);
+          ctx.stroke();
+        }
+        ctx.fillStyle = 'rgba(255, 246, 226, 0.95)';
+        ctx.beginPath();
+        ctx.arc(t.x, t.y, 2.6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
     // ---- player -------------------------------------------------------------
     if (game.player) {
       const p = game.player;

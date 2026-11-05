@@ -20,6 +20,7 @@ const MODULES = [
   'src/audio.js',
   'src/chambers.js',
   'src/loot.js',
+  'src/desc.js',
   'src/render.js',
   'src/ui.js',
   'src/game.js',

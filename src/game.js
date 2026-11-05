@@ -1,5 +1,6 @@
 import { generateLevel, generateWorld, sectorOf, TILE } from './levelgen.js';
 import { lineOfSight } from './pathfind.js';
+import { clamp, dist, dist2, echoPan } from './util.js';
 import { Player, Hunter, Skitter, moveCircle, isSolid } from './entities.js';
 import { Renderer } from './render.js';
 import { Input } from './input.js';
@@ -9,7 +10,7 @@ import { Editor } from './editor.js';
 import { CHAMBERS } from './chambers.js';
 import { generateFloor } from './rooms.js';
 import { CHARMS, ITEMS, Inventory, HOTKEY_ORDER } from './loot.js';
-import { clamp, dist, echoPan } from './util.js';
+import { CHARM_TEXT, ITEM_TEXT, charmText } from './desc.js';
 
 const SAVE_KEY = 'hush.save.v1';
 const FLOORS = 5;
@@ -96,6 +97,7 @@ export class Game {
     this.charms = [];
     this.inv = new Inventory();
     this.loot = [];
+    this.guides = {};
     this.throws = [];
     this.activeItem = null;
     this.speedT = 0;
@@ -207,12 +209,15 @@ export class Game {
 
   /** Roguelike run: five floors, each one a room-graph floor. */
   startRun(seed = (Math.random() * 1e9) | 0) {
+    this.guides = {};
     this.runSeed = seed;
     this.diamonds = 0;
     this.gold = 0;
     this.charms = [];
     this.inv = new Inventory();
-    return this.startFloor(1);
+    const ok = this.startFloor(1);
+    this.maybeGuide('start', '按下空格键以开启');
+    return ok;
   }
 
   /** Killing a hunter pays 2 diamonds and 10 gold. 亡命猎屠 multiplies this. */
@@ -373,19 +378,13 @@ export class Game {
     const def = ITEMS[id];
     const speed = id === 'bugspray' ? 190 : 420;
     this.throws.push({
-      x: p.x, y: p.y,
+      x: p.x, y: p.y, trail: [],
       dx: Math.cos(a), dy: Math.sin(a),
       speed, life: 1.6, id,
       kills: !!def.kills, noise: def.noise || 1,
     });
     if (opts.noise) this.throws[this.throws.length - 1].noise = opts.noise;
-    if (id === 'pebbles' && !opts.free) {
-      const idx = this.inv.pack.findIndex((s) => s && s.id === 'pebbles');
-      if (idx >= 0) {
-        this.inv.pack[idx].n -= 1;
-        if (this.inv.pack[idx].n <= 0) this.inv.pack[idx] = null;
-      }
-    }
+    if (!opts.free) this.inv.consume(id);
     this.activeItem = null;
   }
 
@@ -406,6 +405,10 @@ export class Game {
         }
         t.x = nx;
         t.y = ny;
+        if (!t.trail || t.trail.length === 0 || dist2(t.trail[t.trail.length - 1].x, t.trail[t.trail.length - 1].y, nx, ny) > 9) {
+          t.trail.push({ x: nx, y: ny });
+          if (t.trail.length > 16) t.trail.shift();
+        }
         for (const h of this.hunters) {
           if (dist(t.x, t.y, h.x, h.y) < 15) {
             if (t.kills) this.killHunter(h);
@@ -932,22 +935,44 @@ export class Game {
     }
 
     // loot: charms and items sit at the end of side branches
-    for (let i = this.loot.length - 1; i >= 0; i--) {
-      const it = this.loot[i];
-      if (dist(p.x, p.y, it.x, it.y) < 24) {
-        const def = it.kind === 'charm' ? CHARMS[it.id] : ITEMS[it.id];
-        const res = it.kind === 'charm' ? this.inv.addCharm(it.id) : (this.inv.addItem(it.id) ? 'added' : 'full');
-        if (res === 'full') {
-          this.audio.deny();
-          this.ui.toast('deny');
-          continue;
-        }
-        this.loot.splice(i, 1);
+    let near = null;
+    let nd = 46 * 46;
+    for (const it of this.loot) {
+      const d = dist2(p.x, p.y, it.x, it.y);
+      if (d < nd) { nd = d; near = it; }
+    }
+    this.nearLoot = near;
+    if (near) {
+      const txt = near.kind === 'charm' ? CHARM_TEXT[near.id] : ITEM_TEXT[near.id];
+      const r = this.renderer;
+      const sx = r.cw / 2 + (near.x - this.camX) * r.scale;
+      const sy = r.ch / 2 + (near.y - this.camY) * r.scale - 26;
+      this.ui.showTip(txt.name, `${near.kind === 'charm' ? charmText(near.id, 1) : txt.line}
+
+[ F ] 拾取`, sx + 18, sy - 30);
+    } else {
+      this.ui.hideTip();
+    }
+    if (near && this.input.consume('KeyF')) {
+      const res = near.kind === 'charm'
+        ? this.inv.addCharm(near.id)
+        : (this.inv.addItem(near.id) ? 'added' : 'full');
+      if (res === 'full' || res === 'max') {
+        this.audio.deny();
+        this.ui.toast('deny');
+      } else {
+        const it = near;
+        this.loot.splice(this.loot.indexOf(it), 1);
         this.audio.shard();
         this.flash = 1;
         this.refreshStones();
         this.ui.toast('shard');
         this.stepEcho(p.x, p.y, '255, 205, 110', { count: 26, speed: 360, life: 0.6 });
+        this.nearLoot = null;
+        this.ui.hideTip();
+        if (it.id === 'stone' || (it.kind === 'item' && ITEMS[it.id] && ITEMS[it.id].kind === 'throw')) {
+          this.maybeGuide('throw', '鼠标选择角度以丢出');
+        }
       }
     }
 
@@ -1079,12 +1104,20 @@ export class Game {
   }
 
   alertHunter(h, x, y, delay) {
+    this.maybeGuide('sneak', '按下 Shift 潜行');
     const tracking = h.state === 'investigate';
     h.hear(x, y, delay);
     if (tracking || this.alertCd > 0) return;
     this.alertCd = 0.75;
     const pan = clamp((h.x - this.player.x) / 420, -1, 1) * 0.8;
     this.audio.alert(pan);
+  }
+
+  maybeGuide(key, text) {
+    if (!this.guides) this.guides = {};
+    if (this.guides[key]) return;
+    this.guides[key] = true;
+    this.ui.guide(text);
   }
 
   resolve(entity, dx, dy) {

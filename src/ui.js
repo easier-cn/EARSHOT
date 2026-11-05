@@ -1,7 +1,8 @@
 // The interface never speaks. Every message is a shape, a pulse, or a change
 // in colour — because in this game words would do the listening for you.
 
-import { ITEMS } from './loot.js';
+import { ITEMS, CHARMS } from './loot.js';
+import { charmText, CHARM_TEXT, ITEM_TEXT, CHARM_GLYPH, ITEM_GLYPH } from './desc.js';
 
 const ICON = {
   play: '<svg viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z"/></svg>',
@@ -304,7 +305,13 @@ export class UI {
     this.hudNum.classList.add('pulse');
   }
 
-  /** Tab: the six-by-four panel — workbench, pack, hotkeys, charms. No words. */
+  glyph(kind, id) {
+    const path = kind === 'charm' ? CHARM_GLYPH[id] : ITEM_GLYPH[id];
+    if (!path) return '';
+    return `<svg class="glyph ${kind}" viewBox="0 0 24 24">${path}</svg>`;
+  }
+
+  /** Tab: the six-by-four panel — workbench, pack, hotkeys, charms. */
   toggleInventory(game) {
     if (!this.invPanel) {
       const el = document.createElement('div');
@@ -323,51 +330,123 @@ export class UI {
           if (!slot) return;
           const free = g.inv.hot.indexOf(null);
           g.inv.bindHot(free < 0 ? 0 : free, i);
-          this.renderInventory(g);
           g.audio.click(0.4);
+          this.renderInventory(g);
         } else if (kind === 'hot') {
           g.useHotkey(i);
           this.renderInventory(g);
+        } else if (kind === 'charm') {
+          if (g.inv.toWork(i)) g.audio.click(0.4);
+          this.renderInventory(g);
+        } else if (kind === 'work') {
+          if (g.inv.fromWork(i)) g.audio.click(0.4);
+          this.renderInventory(g);
+        } else if (kind === 'result') {
+          const out = g.inv.craft();
+          if (out) {
+            g.audio.shard();
+            g.flash = 0.6;
+            g.refreshStones();
+            if (out.id === 'stone' || out.id === 'survive') g.refreshStones();
+          } else g.audio.deny();
+          this.renderInventory(g);
         }
       });
+      el.addEventListener('mouseover', (e) => {
+        const cell = e.target.closest('.inv-cell');
+        if (!cell) return this.hideTip();
+        const tip = cell.dataset.tip;
+        if (!tip) return this.hideTip();
+        const r = cell.getBoundingClientRect();
+        this.showTip(cell.dataset.title || '', tip, r.right + 12, r.top);
+      });
+      el.addEventListener('mouseleave', () => this.hideTip());
     }
     this.invPanel.classList.toggle('hidden');
-    if (!this.invPanel.classList.contains('hidden')) this.renderInventory(game);
+    const open = !this.invPanel.classList.contains('hidden');
+    if (open) this.renderInventory(game);
+    else this.hideTip();
+    if (this.guideEl) this.guideEl.style.visibility = open ? 'hidden' : '';
   }
 
   renderInventory(game) {
     const inv = game.inv;
     const cells = [];
-    const push = (kind, i, html, cls = '') => cells.push(`<div class="inv-cell ${cls}" data-kind="${kind}" data-i="${i}">${html}</div>`);
-    // row 1: 空空工工 — workbench on the right
-    push('blank', 0, '');
-    push('blank', 1, '');
-    for (let i = 0; i < 2; i++) push('work', i, inv.work[i] ? '<i class="c-charm"></i>' : '');
-    // rows 2: four empty
-    for (let i = 0; i < 4; i++) push('blank', 2 + i, '');
+    const open = `<div class="area-line work-line"></div>`;
+    const push = (kind, i, html, cls = '', tip = '') =>
+      cells.push(`<div class="inv-cell ${cls}" data-kind="${kind}" data-i="${i}" ${tip ? `data-tip="${tip.replace(/"/g, '&quot;')}"` : ''}>${html}</div>`);
+    const charmTip = (c) => c ? `${CHARM_TEXT[c.id].name}　其${['一', '二', '三'][c.lvl - 1] || '一'}\u00b7${charmText(c.id, c.lvl)}` : '';
+    // row 1: two work cells, an arrow, the result
+    for (let i = 0; i < 2; i++) {
+      const c = inv.work[i];
+      push('work', i, c ? this.glyph('charm', c.id) + `<b class="lvl">${c.lvl}</b>` : '', c ? 'filled charm work' : 'work', charmTip(c));
+    }
+    const out = inv.craftable();
+    cells.push(`<div class="inv-cell arrow">→</div>`);
+    push('result', 0, out ? this.glyph('charm', out.id) + `<b class="lvl">${out.lvl}</b>` : '', out ? 'filled charm result ready' : 'result',
+      out ? `${CHARM_TEXT[out.id].name}　可成\n${charmText(out.id, out.lvl)}` : '');
+    cells.push('<div class="inv-cut work"></div>');
+    cells.push('<div class="inv-cut hot"></div>');
     // row 3: hotkeys
     for (let i = 0; i < 4; i++) {
       const h = inv.hot[i];
-      push('hot', i, h ? `<i class="c-${ITEMS[h.id] && ITEMS[h.id].kind === 'throw' ? 'throw' : 'use'}"></i>` : '', h ? 'filled' : '');
+      const def = h && ITEMS[h.id];
+      push('hot', i, h ? this.glyph('item', h.id) + `<b class="key">${i + 1}</b>` : `<b class="key">${i + 1}</b>`, h ? 'filled hot' : 'hot',
+        h ? `${ITEM_TEXT[h.id].name}\n${ITEM_TEXT[h.id].line}` : '');
     }
+    cells.push('<div class="inv-cut charm"></div>');
     // row 4: charms
     for (let i = 0; i < 4; i++) {
       const c = inv.charmAt(i);
-      const lvl = c ? inv.level(c) : 0;
-      let marks = '';
-      for (let k = 0; k < lvl; k++) marks += '<b></b>';
-      push('charm', i, c ? `<i class="c-charm"></i>${marks}` : '', c ? 'filled charm' : '');
+      push('charm', i, c ? this.glyph('charm', c.id) + `<b class="lvl">${c.lvl}</b>` : '', c ? 'filled charm' : 'charm', charmTip(c));
     }
-    // rows 5-6: pack; the last cell of row 6 mirrors the charm count
+    cells.push('<div class="inv-cut pack"></div>');
+    // rows 5-6: pack; the last cell mirrors the charm count
     for (let i = 0; i < 8; i++) {
       const s = inv.pack[i];
       const def = s && ITEMS[s.id];
-      push('pack', i, s ? `<i class="c-${def && def.kind === 'throw' ? 'throw' : 'use'}"></i><em>${s.n}</em>` : '', s ? 'filled' : '');
+      push('pack', i, s ? this.glyph('item', s.id) + `<em>${s.n}</em>` : '', s ? 'filled pack' : 'pack',
+        s ? `${ITEM_TEXT[s.id].name}\n${ITEM_TEXT[s.id].line}` : '');
     }
     let charmMarks = '';
-    for (let i = 0; i < inv.charms.length; i++) charmMarks += '<i class="c-charm"></i>';
+    for (const c of inv.charms) charmMarks += `<i class="c-charm l${c.lvl}"></i>`;
     cells.push(`<div class="inv-cell charm-count">${charmMarks}</div>`);
-    this.invPanel.innerHTML = `<div class="inv-grid">${cells.join('')}</div><div class="inv-foot"><i class="c-charm"></i><i class="c-throw"></i><i class="c-use"></i></div>`;
+    this.invPanel.innerHTML = `<div class="inv-grid">${cells.join('')}</div>`;
+  }
+
+  showTip(title, body, x, y) {
+    if (!this.tip) {
+      this.tip = document.createElement('div');
+      this.tip.id = 'tip';
+      this.tip.className = 'tip hidden';
+      document.body.appendChild(this.tip);
+    }
+    const lines = String(body).split('\n');
+    this.tip.innerHTML = `${title ? `<h4>${title}</h4>` : ''}${lines.map((l) => `<p>${l}</p>`).join('')}`;
+    this.tip.classList.remove('hidden');
+    const w = 260;
+    const left = Math.min(window.innerWidth - w - 16, x);
+    const top = Math.min(window.innerHeight - 120, Math.max(12, y - 8));
+    this.tip.style.left = `${left}px`;
+    this.tip.style.top = `${top}px`;
+    this.tip.style.width = `${w}px`;
+  }
+
+  hideTip() {
+    if (this.tip) this.tip.classList.add('hidden');
+  }
+
+  /** Bottom-of-screen guidance: plain words, only the first time. */
+  guide(text) {
+    if (!this.guideEl) {
+      this.guideEl = document.createElement('div');
+      this.guideEl.className = 'guide';
+      document.body.appendChild(this.guideEl);
+    }
+    this.guideEl.textContent = text;
+    this.guideEl.classList.add('show');
+    clearTimeout(this.guideT);
+    this.guideT = setTimeout(() => this.guideEl.classList.remove('show'), 7200);
   }
 
   updateHUD({ shards = 0, total = 1, charges = 0, listen = false, danger = 0, depth = 0, diamonds = 0, gold = 0 } = {}) {
