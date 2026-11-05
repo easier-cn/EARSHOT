@@ -339,6 +339,13 @@ export class Game {
     }
   }
 
+  toggleMute() {
+    const muted = this.audio.toggleMute();
+    this.ui.toast(muted ? 'deny' : 'shard');
+    this.ui.syncMute();
+    return muted;
+  }
+
   pause() {
     if (this.state !== 'playing') return;
     this.state = 'paused';
@@ -399,10 +406,7 @@ export class Game {
   };
 
   handleGlobalKeys() {
-    if (this.input.consume('KeyM')) {
-      const muted = this.audio.toggleMute();
-      this.ui.toast(muted ? 'deny' : 'shard');
-    }
+    if (this.input.consume('KeyM')) this.toggleMute();
     if (this.state === 'edit' && this.input.consume('Escape')) this.closeEditor();
     else if (this.state === 'playing' && this.input.consume('Escape')) this.pause();
     else if (this.state === 'paused' && this.input.consume('Escape')) this.resume();
@@ -473,7 +477,7 @@ export class Game {
     this.blind = this.sneak;
     const creeping = this.sneak;
     const run = false;
-    const move = this.input.moveVector();
+    const move = this.debugMove || this.input.moveVector();
 
     const listen = !this.sneak && (this.debugListen === true || (this.listenT > 0.26 && !p.moving));
     this.listen = listen;
@@ -494,6 +498,8 @@ export class Game {
         p.stepPhase = 0;
         this.audio.footstep(0, 0.85);
         this.emitSound(p.x, p.y, { range: STEP_RANGE, kind: 'step' });
+        this.spawnRays(p.x, p.y, { count: 22, speed: 330, life: 0.5 });
+        this.pings.push({ x: p.x, y: p.y, t0: this.now, speed: 330, life: 0.5, small: true });
       }
     }
 
@@ -721,16 +727,17 @@ export class Game {
     return null;
   }
 
-  spawnRays(x, y) {
-    for (let i = 0; i < RAY_COUNT; i++) {
-      const a = (i / RAY_COUNT) * Math.PI * 2 + Math.random() * 0.035;
+  spawnRays(x, y, { count = RAY_COUNT, speed = RAY_SPEED, life = RAY_LIFE } = {}) {
+    for (let i = 0; i < count; i++) {
+      const a = (i / count) * Math.PI * 2 + Math.random() * 0.035;
       this.rays.push({
         x,
         y,
         dx: Math.cos(a),
         dy: Math.sin(a),
         age: 0,
-        life: RAY_LIFE * (0.85 + Math.random() * 0.25),
+        speed,
+        life: life * (0.85 + Math.random() * 0.25),
         bounce: 0,
         tint: null,
         pts: [{ x, y }],
@@ -749,7 +756,7 @@ export class Game {
       r.age += dt;
       if (r.age > r.life + 1.5) continue;
       if (r.age <= r.life) {
-        let move = RAY_SPEED * dt;
+        let move = (r.speed || RAY_SPEED) * dt;
         while (move > 0.001) {
           const d = Math.min(6, move);
           move -= d;
@@ -939,6 +946,7 @@ export class Game {
   // Deterministic capture: step the world forward without relying on rAF,
   // then leave one ping mid-flight so the sonar shell is visible.
   debugSimulate(seconds, opts = {}) {
+    this.debugMove = opts.move || null;
     const dt = 1 / 60;
     const steps = Math.max(1, Math.round(seconds / dt));
     let next = opts.every || 0;
@@ -971,6 +979,7 @@ export class Game {
       this.spawnRays(this.player.x, this.player.y);
       if (wave > 0) this.updateRays(wave);
     }
+    this.debugMove = null;
     this.frozen = true;
   }
 }

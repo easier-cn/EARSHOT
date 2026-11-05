@@ -13,12 +13,12 @@ window.addEventListener('error', (e) => {
 });
 
 const params = new URLSearchParams(location.search);
-  if (params.has('edit')) setTimeout(() => game.openEditor(), 60);
 if (params.has('static')) document.documentElement.classList.add('no-anim');
 
 const canvas = document.getElementById('game');
 const game = new Game(canvas, document.getElementById('ui'));
 window.__hush = game;
+if (params.has('edit')) setTimeout(() => game.openEditor(), 60);
 
 // Debug / screenshot helpers. None of this is reachable from the UI.
 const chamber = params.get('c');
@@ -37,6 +37,7 @@ if (sim !== null) {
       wave: Number(params.get('wave') ?? 0.45),
       every: Number(params.get('every') || 0),
       ping: params.has('ping'),
+      move: params.has('move') ? { x: 1, y: 0 } : null,
     });
   }, 500);
 } else if (params.has('ping')) {

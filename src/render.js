@@ -360,7 +360,7 @@ export class Renderer {
       const age = now - p.t0;
       if (age < 0 || age > p.life) continue;
       const R = age * p.speed;
-      const fade = 1 - age / p.life;
+      const fade = (1 - age / p.life) * (p.small ? 0.45 : 1);
       ctx.strokeStyle = `rgba(${TEAL}, ${fade * 0.2})`;
       ctx.lineWidth = 1.4;
       ctx.beginPath();

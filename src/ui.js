@@ -155,14 +155,14 @@ export class UI {
     bind('btn-start', () => g.startBest());
     bind('btn-edit', () => g.openEditor());
     bind('btn-resume', () => g.resume());
-    bind('btn-restart', () => g.retry());
+    bind('btn-restart', () => g.restart());
     bind('btn-mute', () => g.toggleMute());
-    bind('btn-title', () => g.toTitle());
-    bind('btn-retry', () => g.retry());
-    bind('btn-dead-title', () => g.toTitle());
+    bind('btn-title', () => g.quitToTitle());
+    bind('btn-retry', () => g.restart());
+    bind('btn-dead-title', () => g.quitToTitle());
     bind('btn-next', () => g.next());
-    bind('btn-clear-title', () => g.toTitle());
-    bind('btn-victory-home', () => g.toTitle());
+    bind('btn-clear-title', () => g.quitToTitle());
+    bind('btn-victory-home', () => g.quitToTitle());
     this.muteBtn = $('btn-mute');
   }
 
@@ -192,7 +192,7 @@ export class UI {
       cell.disabled = i >= unlocked;
       cell.addEventListener('click', () => {
         cell.blur();
-        this.game.start(i);
+        this.game.startChamber(i);
       });
       this.grid.appendChild(cell);
     }

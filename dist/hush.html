@@ -2629,7 +2629,7 @@ class Renderer {
       const age = now - p.t0;
       if (age < 0 || age > p.life) continue;
       const R = age * p.speed;
-      const fade = 1 - age / p.life;
+      const fade = (1 - age / p.life) * (p.small ? 0.45 : 1);
       ctx.strokeStyle = `rgba(${TEAL}, ${fade * 0.2})`;
       ctx.lineWidth = 1.4;
       ctx.beginPath();
@@ -2870,14 +2870,14 @@ class UI {
     bind('btn-start', () => g.startBest());
     bind('btn-edit', () => g.openEditor());
     bind('btn-resume', () => g.resume());
-    bind('btn-restart', () => g.retry());
+    bind('btn-restart', () => g.restart());
     bind('btn-mute', () => g.toggleMute());
-    bind('btn-title', () => g.toTitle());
-    bind('btn-retry', () => g.retry());
-    bind('btn-dead-title', () => g.toTitle());
+    bind('btn-title', () => g.quitToTitle());
+    bind('btn-retry', () => g.restart());
+    bind('btn-dead-title', () => g.quitToTitle());
     bind('btn-next', () => g.next());
-    bind('btn-clear-title', () => g.toTitle());
-    bind('btn-victory-home', () => g.toTitle());
+    bind('btn-clear-title', () => g.quitToTitle());
+    bind('btn-victory-home', () => g.quitToTitle());
     this.muteBtn = $('btn-mute');
   }
 
@@ -2907,7 +2907,7 @@ class UI {
       cell.disabled = i >= unlocked;
       cell.addEventListener('click', () => {
         cell.blur();
-        this.game.start(i);
+        this.game.startChamber(i);
       });
       this.grid.appendChild(cell);
     }
@@ -3374,6 +3374,13 @@ class Game {
     }
   }
 
+  toggleMute() {
+    const muted = this.audio.toggleMute();
+    this.ui.toast(muted ? 'deny' : 'shard');
+    this.ui.syncMute();
+    return muted;
+  }
+
   pause() {
     if (this.state !== 'playing') return;
     this.state = 'paused';
@@ -3434,10 +3441,7 @@ class Game {
   };
 
   handleGlobalKeys() {
-    if (this.input.consume('KeyM')) {
-      const muted = this.audio.toggleMute();
-      this.ui.toast(muted ? 'deny' : 'shard');
-    }
+    if (this.input.consume('KeyM')) this.toggleMute();
     if (this.state === 'edit' && this.input.consume('Escape')) this.closeEditor();
     else if (this.state === 'playing' && this.input.consume('Escape')) this.pause();
     else if (this.state === 'paused' && this.input.consume('Escape')) this.resume();
@@ -3508,7 +3512,7 @@ class Game {
     this.blind = this.sneak;
     const creeping = this.sneak;
     const run = false;
-    const move = this.input.moveVector();
+    const move = this.debugMove || this.input.moveVector();
 
     const listen = !this.sneak && (this.debugListen === true || (this.listenT > 0.26 && !p.moving));
     this.listen = listen;
@@ -3529,6 +3533,8 @@ class Game {
         p.stepPhase = 0;
         this.audio.footstep(0, 0.85);
         this.emitSound(p.x, p.y, { range: STEP_RANGE, kind: 'step' });
+        this.spawnRays(p.x, p.y, { count: 22, speed: 330, life: 0.5 });
+        this.pings.push({ x: p.x, y: p.y, t0: this.now, speed: 330, life: 0.5, small: true });
       }
     }
 
@@ -3756,16 +3762,17 @@ class Game {
     return null;
   }
 
-  spawnRays(x, y) {
-    for (let i = 0; i < RAY_COUNT; i++) {
-      const a = (i / RAY_COUNT) * Math.PI * 2 + Math.random() * 0.035;
+  spawnRays(x, y, { count = RAY_COUNT, speed = RAY_SPEED, life = RAY_LIFE } = {}) {
+    for (let i = 0; i < count; i++) {
+      const a = (i / count) * Math.PI * 2 + Math.random() * 0.035;
       this.rays.push({
         x,
         y,
         dx: Math.cos(a),
         dy: Math.sin(a),
         age: 0,
-        life: RAY_LIFE * (0.85 + Math.random() * 0.25),
+        speed,
+        life: life * (0.85 + Math.random() * 0.25),
         bounce: 0,
         tint: null,
         pts: [{ x, y }],
@@ -3784,7 +3791,7 @@ class Game {
       r.age += dt;
       if (r.age > r.life + 1.5) continue;
       if (r.age <= r.life) {
-        let move = RAY_SPEED * dt;
+        let move = (r.speed || RAY_SPEED) * dt;
         while (move > 0.001) {
           const d = Math.min(6, move);
           move -= d;
@@ -3974,6 +3981,7 @@ class Game {
   // Deterministic capture: step the world forward without relying on rAF,
   // then leave one ping mid-flight so the sonar shell is visible.
   debugSimulate(seconds, opts = {}) {
+    this.debugMove = opts.move || null;
     const dt = 1 / 60;
     const steps = Math.max(1, Math.round(seconds / dt));
     let next = opts.every || 0;
@@ -4006,6 +4014,7 @@ class Game {
       this.spawnRays(this.player.x, this.player.y);
       if (wave > 0) this.updateRays(wave);
     }
+    this.debugMove = null;
     this.frozen = true;
   }
 }
@@ -4025,12 +4034,12 @@ window.addEventListener('error', (e) => {
 });
 
 const params = new URLSearchParams(location.search);
-  if (params.has('edit')) setTimeout(() => game.openEditor(), 60);
 if (params.has('static')) document.documentElement.classList.add('no-anim');
 
 const canvas = document.getElementById('game');
 const game = new Game(canvas, document.getElementById('ui'));
 window.__hush = game;
+if (params.has('edit')) setTimeout(() => game.openEditor(), 60);
 
 // Debug / screenshot helpers. None of this is reachable from the UI.
 const chamber = params.get('c');
@@ -4049,6 +4058,7 @@ if (sim !== null) {
       wave: Number(params.get('wave') ?? 0.45),
       every: Number(params.get('every') || 0),
       ping: params.has('ping'),
+      move: params.has('move') ? { x: 1, y: 0 } : null,
     });
   }, 500);
 } else if (params.has('ping')) {
