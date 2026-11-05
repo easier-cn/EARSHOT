@@ -369,13 +369,24 @@ export class UI {
       }
       ghost.innerHTML = press.cell.innerHTML;
       ghost.classList.remove('hidden');
-      ghost.style.left = `${e.clientX - 30}px`;
-      ghost.style.top = `${e.clientY - 30}px`;
+      ghost.style.left = `${e.clientX - 32}px`;
+      ghost.style.top = `${e.clientY - 32}px`;
+    });
+
+    el.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      ghost.style.left = `${e.clientX - 32}px`;
+      ghost.style.top = `${e.clientY - 32}px`;
+      const under = document.elementFromPoint(e.clientX, e.clientY);
+      const cell = under && under.closest ? under.closest('.inv-cell') : null;
+      for (const c of el.querySelectorAll('.inv-cell.drop-on')) c.classList.remove('drop-on');
+      if (cell && cell.dataset.kind && cell.dataset.kind !== 'result') cell.classList.add('drop-on');
     });
 
     el.addEventListener('pointerup', (e) => {
       if (drag) {
         ghost.classList.add('hidden');
+        for (const c of el.querySelectorAll('.inv-cell.drop-on')) c.classList.remove('drop-on');
         drag.ghostMoved = true;
         const under = document.elementFromPoint(e.clientX, e.clientY);
         const cell = under && under.closest ? under.closest('.inv-cell') : null;
@@ -463,7 +474,9 @@ export class UI {
 
   dropDragged(drag, target) {
     const inv = this.game.inv;
-    if (target && inv.place(target.kind, target.i, drag.obj)) return true;
+    // dropped outside the panel: the thing is gone, on purpose
+    if (!target) return true;
+    if (inv.place(target.kind, target.i, drag.obj)) return true;
     // nothing accepted: put it back
     const back = drag.from;
     if (back) {

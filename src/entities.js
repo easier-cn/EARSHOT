@@ -115,12 +115,16 @@ export class Player {
 let hunterId = 0;
 
 export class Hunter {
-  constructor(x, y) {
+  constructor(x, y, type = 'hunter', home = null) {
     this.id = hunterId++;
     this.x = x;
     this.y = y;
     this.r = 11;
-    this.state = 'idle';
+    this.type = type;
+    this.home = home;
+    this.route = home && home.route ? home.route : null;
+    this.routeIdx = 0;
+    this.state = this.route ? 'patrol' : 'idle';
     this.path = [];
     this.searchT = 0;
     this.pending = null;
@@ -130,14 +134,25 @@ export class Hunter {
     this.stepAcc = 0;
     this.wanderCooldown = Math.random() * 2;
     this.turn = 0;
+    this.target = null;
+    this.chaseT = 0;
+    this.windT = 0;
+    this.burstT = 0;
+    this.restT = 0;
+    this.chargeT = 0;
+    this.vx = 0;
+    this.vy = 0;
+    this.bounces = 0;
+    this.cycleT = 0;
+    this.pulseDone = false;
+    this.pounce = null;
+    this.dashT = 0;
   }
 
   hear(x, y, delay = 0.25) {
     this.pending = { x, y, t: delay };
   }
 
-  // Re-planning on every single ray hit made the hunter stutter in place.
-  // A new sound only counts if it points somewhere genuinely different.
   _retarget(game, x, y) {
     const far = !this.target || Math.hypot(this.target.x - x, this.target.y - y) > 22;
     if (this.path.length && !far) return;
@@ -158,48 +173,22 @@ export class Hunter {
     }
     const path = findPath(L.grid, L.w, L.h, sx, sy, tx, ty);
     if (path && path.length) {
-      this.path = path.map((p) => ({
-        x: (p.x + 0.5) * L.tile,
-        y: (p.y + 0.5) * L.tile,
-      }));
+      this.path = path.map((p) => ({ x: (p.x + 0.5) * L.tile, y: (p.y + 0.5) * L.tile }));
       return true;
     }
     return false;
   }
 
-  // A hunter has no will of its own. It stands still until a sound front
-  // touches it, walks to exactly that point, and stops again.
-  update(dt, game) {
+  _walk(dt, game, speed) {
     const L = game.level;
-
-    if (this.pending) {
-      this.pending.t -= dt;
-      if (this.pending.t <= 0) {
-        const sound = this.pending;
-        this.pending = null;
-        this.state = 'investigate';
-        this._retarget(game, sound.x, sound.y);
-        if (!this.path.length) this.state = 'idle';
-      }
-    }
-
     let tx = this.x;
     let ty = this.y;
-    let arrived = this.path.length === 0;
-    if (this.path.length) {
-      const wp = this.path[0];
-      while (this.path.length && Math.hypot(this.path[0].x - this.x, this.path[0].y - this.y) < 9) {
-        this.path.shift();
-      }
-      if (this.path.length) {
-        tx = this.path[0].x;
-        ty = this.path[0].y;
-      } else {
-        arrived = true;
-      }
+    while (this.path.length && Math.hypot(this.path[0].x - this.x, this.path[0].y - this.y) < 9) this.path.shift();
+    const arrived = this.path.length === 0;
+    if (!arrived) {
+      tx = this.path[0].x;
+      ty = this.path[0].y;
     }
-
-    const speed = 126;
     let dx = 0;
     let dy = 0;
     if (!arrived) {
@@ -209,26 +198,167 @@ export class Hunter {
       this.face = Math.atan2(dy, dx);
     }
     this.speed = Math.hypot(dx, dy);
-
     const step = moveCircle(L.grid, L.w, L.h, L.tile, this.x, this.y, this.r, dx * dt, dy * dt);
     this.x = step.x;
     this.y = step.y;
+    this._footsteps(dt, game);
+    return arrived;
+  }
 
-    if (arrived && this.state === 'investigate') this.state = 'idle';
+  _footsteps(dt, game) {
+    if (this.speed <= 5) return;
+    this.stepAcc += this.speed * dt;
+    if (this.stepAcc < 58) return;
+    this.stepAcc = 0;
+    const rel = this.x - game.player.x;
+    const d = Math.hypot(rel, this.y - game.player.y);
+    if (d < 620) game.audio.hunterStep(Math.max(-1, Math.min(1, rel / 380)), Math.min(1, 1.15 - d / 640));
+    game.stepEcho?.(this.x, this.y, this.type === 'butcher' ? '255, 90, 60' : '255, 70, 70', { tagged: false });
+  }
 
-    if (this.speed > 5) {
-      this.stepAcc += this.speed * dt;
-      if (this.stepAcc > 58) {
-        this.stepAcc = 0;
-        const rel = this.x - game.player.x;
-        const dist = Math.hypot(rel, this.y - game.player.y);
-        if (dist < 620) {
-          const pan = Math.max(-1, Math.min(1, rel / 380));
-          game.audio.hunterStep(pan, Math.min(1, 1.15 - dist / 640));
-        }
-        game.stepEcho?.(this.x, this.y, '255, 70, 70', { tagged: false });
+  _burst(game, tint = '255, 110, 90', count = 12) {
+    game.stepEcho?.(this.x, this.y, tint, { count, speed: 300, life: 0.45, tagged: false });
+  }
+
+  update(dt, game) {
+    const speed = game.hunterSpeed ? game.hunterSpeed() : 126;
+    if (this.pending) {
+      this.pending.t -= dt;
+      if (this.pending.t <= 0) {
+        const s = this.pending;
+        this.pending = null;
+        this.target = { x: s.x, y: s.y };
+        this.chaseT = 0;
+        this._plan(game, s.x, s.y);
+        if (this.type === 'patroller') this.state = 'chase';
+        else if (this.type === 'stalker') {
+          if (this.state !== 'windup' && this.state !== 'charge') this.state = 'chase';
+        } else if (this.type === 'hunter') this.state = 'investigate';
       }
     }
+
+    if (this.type === 'patroller') return this._patrol(dt, game, speed);
+    if (this.type === 'stalker') return this._stalker(dt, game, speed);
+    if (this.type === 'butcher') return this._butcher(dt, game, speed);
+
+    const arrived = this._walk(dt, game, speed);
+    if (arrived && this.state === 'investigate') this.state = 'idle';
+  }
+
+  _patrol(dt, game, speed) {
+    if (this.state === 'chase') {
+      this.chaseT += dt;
+      const arrived = this._walk(dt, game, speed * 1.05);
+      if (arrived || this.chaseT > 9) {
+        this._returnHome(game);
+      }
+      return;
+    }
+    if (this.state === 'return' && this.path.length === 0) this._returnHome(game);
+    if (!this.path.length) {
+      if (!this.route || !this.route.length) return;
+      const wp = this.route[this.routeIdx % this.route.length];
+      this.routeIdx = (this.routeIdx + 1) % this.route.length;
+      this._plan(game, wp.x, wp.y);
+    }
+    this._walk(dt, game, speed * 0.72);
+  }
+
+  _returnHome(game) {
+    const route = this.route;
+    if (!route) return;
+    let best = 0;
+    let bd = Infinity;
+    for (let i = 0; i < route.length; i++) {
+      const d = Math.hypot(route[i].x - this.x, route[i].y - this.y);
+      if (d < bd) { bd = d; best = i; }
+    }
+    this.routeIdx = (best + 1) % route.length;
+    this._plan(game, route[best].x, route[best].y);
+    this.state = 'patrol';
+  }
+
+  _stalker(dt, game, speed) {
+    if (this.state === 'windup') {
+      this.windT -= dt;
+      this.burstT -= dt;
+      if (this.burstT <= 0) { this.burstT = 0.17; this._burst(game, '255, 120, 90', 10); }
+      if (this.windT <= 0) {
+        const tx = this.target ? this.target.x : this.x;
+        const ty = this.target ? this.target.y : this.y;
+        const d = Math.hypot(tx - this.x, ty - this.y) || 1;
+        this.vx = ((tx - this.x) / d) * 560;
+        this.vy = ((ty - this.y) / d) * 560;
+        this.chargeT = 0.95;
+        this.bounces = 0;
+        this.state = 'charge';
+      }
+      return;
+    }
+    if (this.state === 'charge') {
+      this.chargeT -= dt;
+      this.burstT -= dt;
+      if (this.burstT <= 0) { this.burstT = 0.12; this._burst(game, '255, 110, 80', 8); }
+      const L = game.level;
+      const wantX = this.vx * dt;
+      const wantY = this.vy * dt;
+      const step = moveCircle(L.grid, L.w, L.h, L.tile, this.x, this.y, this.r, wantX, wantY);
+      const blockedX = Math.abs((step.x - this.x) - wantX) > 0.6;
+      const blockedY = Math.abs((step.y - this.y) - wantY) > 0.6;
+      this.x = step.x;
+      this.y = step.y;
+      if (blockedX) { this.vx = -this.vx; this.bounces += 1; }
+      if (blockedY) { this.vy = -this.vy; this.bounces += 1; }
+      this.speed = Math.hypot(this.vx, this.vy);
+      if (this.bounces >= 2 || this.chargeT <= 0) {
+        this.state = 'rest';
+        this.restT = 1.3;
+      }
+      return;
+    }
+    if (this.state === 'rest') {
+      this.restT -= dt;
+      if (this.restT <= 0) this.state = this.target ? 'chase' : 'idle';
+      return;
+    }
+    if (this.state === 'chase') {
+      const arrived = this._walk(dt, game, speed * 1.15);
+      const near = this.target && Math.hypot(this.target.x - this.x, this.target.y - this.y) < 130;
+      if (arrived || near) {
+        this.state = 'windup';
+        this.windT = 1.05;
+        this.burstT = 0;
+      }
+    }
+  }
+
+  _butcher(dt, game, speed) {
+    if (this.pounce) {
+      this.dashT -= dt;
+      if (this.dashT <= 0) { this.pounce = null; this.cycleT = 0; this.pulseDone = false; return; }
+      const tx = this.pounce.x;
+      const ty = this.pounce.y;
+      const d = Math.hypot(tx - this.x, ty - this.y) || 1;
+      const step = moveCircle(game.level.grid, game.level.w, game.level.h, game.level.tile, this.x, this.y, this.r, ((tx - this.x) / d) * 640 * dt, ((ty - this.y) / d) * 640 * dt);
+      this.x = step.x;
+      this.y = step.y;
+      this.speed = 640;
+      this._footsteps(dt, game);
+      return;
+    }
+    this.cycleT += dt;
+    const phase = this.cycleT % 4;
+    if (phase >= 2) {
+      this.burstT -= dt;
+      if (this.burstT <= 0 && phase < 3.2) { this.burstT = 0.13; this._burst(game, '255, 150, 90', 7); }
+      if (!this.pulseDone && phase >= 3.2) {
+        this.pulseDone = true;
+        game.emitShock?.(this.x, this.y, this);
+      }
+      return;
+    }
+    this.pulseDone = false;
+    if (this.target) this._walk(dt, game, speed * 0.85);
   }
 }
 

@@ -142,7 +142,8 @@ async function main() {
   await key('keyDown', 'Space', ' ', 32);
   await key('keyUp', 'Space', ' ', 32);
   await sleep(120);
-  report.sneakRefusesPing = await evaluate('window.__hush.charges') === cSneak;
+  // since v0.6 sneaking no longer forbids pings: silence is the passive sonar, not the ping
+  report.sneakPingAllowed = await evaluate('window.__hush.charges') < cSneak;
   await key('keyDown', 'KeyD', 'd', 68);
   await sleep(420);
   report.creepSlow = await evaluate('window.__hush.player.speed <= 60');

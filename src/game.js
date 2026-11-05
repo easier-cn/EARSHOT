@@ -247,15 +247,29 @@ export class Game {
     this.level = level;
     this.chamberIndex = 0;
     this.player = new Player(level.spawn.x, level.spawn.y);
-    const n = Math.min(6, 1 + this.depth);
-    this.hunters = level.rooms
+    const centers = level.rooms
       .filter((r) => r.kind !== 'start')
-      .slice(0, n)
       .map((r) => {
         const t = r.x + 2 + ((r.w - 4) >> 1);
         const u = r.y + 2 + ((r.h - 4) >> 1);
-        return new Hunter((t + 0.5) * TILE, (u + 0.5) * TILE);
+        return { x: (t + 0.5) * TILE, y: (u + 0.5) * TILE };
       });
+    const at = (i) => centers[i % Math.max(1, centers.length)] || { x: level.spawn.x, y: level.spawn.y };
+    const route = centers.slice(0, Math.min(4, centers.length));
+    const mk = (i, type = 'hunter', home = null) => {
+      const c = at(i);
+      return new Hunter(c.x, c.y, type, home);
+    };
+    this.hunters = [];
+    if (this.depth >= 5) {
+      this.hunters.push(mk(0, 'butcher'), mk(1, 'patroller', { route }), mk(2, 'stalker'), mk(3));
+    } else if (this.depth === 4) {
+      this.hunters.push(mk(0), mk(1), mk(2, 'patroller', { route }), mk(3, 'stalker'));
+    } else if (this.depth === 3) {
+      this.hunters.push(mk(0), mk(1), mk(2, 'patroller', { route }));
+    } else {
+      for (let i = 0; i < this.depth; i++) this.hunters.push(mk(i));
+    }
     this.skitters = [];
     this.shards = [{ x: level.key.x, y: level.key.y, key: true, id: 0 }];
     this.loot = (level.loot || []).map((l) => {
@@ -502,6 +516,50 @@ export class Game {
    * Stones are a per-floor pool. Equipping twice must not refill the quiver,
    * but a level-up hands over the difference (3 -> 5 -> 7 is +2 each time).
    */
+  /** Every floor makes the same bodies a little faster. */
+  hunterSpeed() {
+    const depth = this.floorMode ? this.depth : 1;
+    return 126 * (1 + 0.07 * (depth - 1));
+  }
+
+  /** The butcher's long sweep: a slow ring that reveals and shares a target. */
+  emitShock(x, y, owner) {
+    if (!this.shocks) this.shocks = [];
+    this.shocks.push({ x, y, r: 0, max: 560, speed: 520, owner, hit: new Set() });
+    this.audio.echo(clamp((x - this.player.x) / 480, -1, 1), 'ping');
+    this.flash = Math.max(this.flash, 0.35);
+  }
+
+  updateShocks(dt) {
+    if (!this.shocks || !this.shocks.length) return;
+    const p = this.player;
+    for (const s of this.shocks) {
+      const prev = s.r;
+      s.r += s.speed * dt;
+      const dp = dist(p.x, p.y, s.x, s.y);
+      if (!s.hit.has('p') && dp >= prev - 16 && dp <= s.r + 16) {
+        s.hit.add('p');
+        if (s.owner && s.owner.type === 'butcher') {
+          s.owner.target = { x: p.x, y: p.y };
+          s.owner.pounce = { x: p.x, y: p.y };
+          s.owner.dashT = 0.7;
+          this.flash = 1;
+          this.shake = Math.max(this.shake, 7);
+          this.audio.alert(0);
+        }
+      }
+      for (const h of this.hunters) {
+        if (h === s.owner || s.hit.has(h.id)) continue;
+        const dh = dist(h.x, h.y, s.x, s.y);
+        if (dh >= prev - 16 && dh <= s.r + 16) {
+          s.hit.add(h.id);
+          if (s.owner && s.owner.target) h.pending = { x: s.owner.target.x, y: s.owner.target.y, t: 0.15 };
+        }
+      }
+    }
+    this.shocks = this.shocks.filter((s) => s.r < s.max);
+  }
+
   refreshStones() {
     const lvl = this.inv.level('stone');
     if (lvl < 1) return;
@@ -900,31 +958,31 @@ export class Game {
       }
     }
 
+    // 潜行声呐: while creeping the charm draws quiet lines on its own; they are
+    // untagged, so no hunter ever learns anything from them.
+    if (this.sneak && p.moving && this.inv.level('sneakSonar')) {
+      this.sneakAcc = (this.sneakAcc || 0) + dt;
+      if (this.sneakAcc > 0.42) {
+        this.sneakAcc = 0;
+        const lvl = this.inv.level('sneakSonar');
+        this.spawnRays(p.x, p.y, {
+          count: CHARMS.sneakSonar.directions[lvl - 1],
+          speed: 300,
+          life: 0.55,
+          tag: null,
+        });
+      }
+    } else {
+      this.sneakAcc = 0;
+    }
+
     // pinging
     if (this.input.consume('Mouse0')) {
       if (this.activeItem) this.throwItem(this.activeItem);
       else if (this.inv.stones > 0) this.throwStone();
       else this.tryPing();
     }
-    if ((this.input.consume('Space') || this.input.consume('KeyJ')) && this.charges > 0) {
-      const sonarLvl = this.inv.level('sneakSonar');
-      if (this.sneak && sonarLvl) {
-        // 潜行声呐: a short fan that makes no tagged sound, so nothing hears it.
-        this.charges--;
-        if (this.chargeTimer <= 0) this.chargeTimer = PING_REGEN;
-        const dirs = CHARMS.sneakSonar.directions[sonarLvl - 1];
-        this.spawnRays(p.x, p.y, { count: dirs, speed: 300, life: 0.5, tag: null });
-        this.audio.click(0.3);
-      } else if (this.sneak) {
-        this.audio.deny();
-        if (!this.sneakHintShown) {
-          this.sneakHintShown = true;
-          this.audio.noise({ dur: 0.4, gain: 0.02, type: 'lowpass', freq: 240, send: 0.5 });
-        }
-      } else {
-        this.firePing();
-      }
-    }
+    if (this.input.consume('Space') || this.input.consume('KeyJ')) this.firePing();
 
 
     // charge regen
@@ -985,6 +1043,7 @@ export class Game {
       if (res === 'full' || res === 'max') {
         this.audio.deny();
         this.ui.toast('deny');
+        this.ui.guide('背包已满：按 Tab 打开背包，把物品拖到外面即可丢弃');
       } else {
         const it = near;
         this.loot.splice(this.loot.indexOf(it), 1);
@@ -1070,6 +1129,7 @@ export class Game {
     if (this.invulnT > 0) this.invulnT = Math.max(0, this.invulnT - dt);
     this.audio.update(dt, { danger: this.danger });
     this.updateRays(dt);
+    this.updateShocks(dt);
     this.updateParticles(dt);
     this.shake = Math.max(0, this.shake - dt * 24);
     this.flash = Math.max(0, this.flash - dt * 3.4);
