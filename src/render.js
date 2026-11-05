@@ -170,7 +170,7 @@ export class Renderer {
         const fade = r.age <= r.life ? 1 : Math.max(0, 1 - (r.age - r.life) / 1.2);
         if (fade <= 0.02) continue;
         const head = Math.min(1, r.age / r.life);
-        const a = (0.5 - head * 0.3) * fade;
+        const a = (0.5 - head * 0.3) * fade * (r.tint ? 1.45 : 1);
         if (a <= 0.02) continue;
         const pts = r.pts;
         const n = pts.length;
@@ -187,15 +187,13 @@ export class Renderer {
             ctx.moveTo(pts[i0].x, pts[i0].y);
             for (let j = i0 + 1; j <= i1; j++) ctx.lineTo(pts[j].x, pts[j].y);
             if (b === batches - 1) ctx.lineTo(r.x, r.y);
-            ctx.strokeStyle = `rgba(${r.tint || '240,253,252'}, ${Math.min(1, ta * (r.hot ? 2.1 : 1))})`;
-            ctx.lineWidth = (r.hot ? 1.6 : 0.8) + ta * (r.hot ? 2.4 : 1.4);
+            ctx.strokeStyle = `rgba(${r.tint || '240,253,252'}, ${Math.min(1, ta * (r.hot ? 2.1 : r.tint ? 1.5 : 1))})`;
+            ctx.lineWidth = (r.hot ? 1.6 : r.tint ? 1.0 : 0.8) + ta * (r.hot ? 2.4 : 1.4);
             ctx.stroke();
           }
         }
         if (r.age <= r.life) {
-          ctx.fillStyle = r.hot
-            ? `rgba(255, 70, 70, ${Math.min(1, a * 3)})`
-            : `rgba(240, 253, 252, ${Math.min(0.9, a * 1.4)})`;
+          ctx.fillStyle = `rgba(${r.tint || '240,253,252'}, ${Math.min(0.9, a * (r.hot ? 3 : 1.4))})`;
           ctx.beginPath();
           ctx.arc(r.x, r.y, r.hot ? 2.6 : 1.4, 0, Math.PI * 2);
           ctx.fill();
@@ -338,12 +336,12 @@ export class Renderer {
       if (age < 0 || age > p.life) continue;
       const R = age * p.speed;
       const fade = (1 - age / p.life) * (p.small ? 0.45 : 1);
-      ctx.strokeStyle = `rgba(${p.tint || TEAL}, ${fade * 0.2})`;
+      ctx.strokeStyle = `rgba(${p.tint || TEAL}, ${fade * (p.tint ? 0.6 : 0.2)})`;
       ctx.lineWidth = 1.4;
       ctx.beginPath();
       ctx.arc(p.x, p.y, R, 0, Math.PI * 2);
       ctx.stroke();
-      ctx.strokeStyle = `rgba(${TEAL}, ${fade * fade * 0.05})`;
+      ctx.strokeStyle = `rgba(${p.tint || TEAL}, ${fade * fade * 0.09})`;
       ctx.lineWidth = 7;
       ctx.beginPath();
       ctx.arc(p.x, p.y, R, 0, Math.PI * 2);

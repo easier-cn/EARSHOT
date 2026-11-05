@@ -136,6 +136,15 @@ export class Hunter {
     this.pending = { x, y, t: delay };
   }
 
+  // Re-planning on every single ray hit made the hunter stutter in place.
+  // A new sound only counts if it points somewhere genuinely different.
+  _retarget(game, x, y) {
+    const far = !this.target || Math.hypot(this.target.x - x, this.target.y - y) > 22;
+    if (this.path.length && !far) return;
+    this.target = { x, y };
+    this._plan(game, x, y);
+  }
+
   _plan(game, x, y) {
     const L = game.level;
     const sx = Math.floor(this.x / L.tile);
@@ -164,7 +173,7 @@ export class Hunter {
         const sound = this.pending;
         this.pending = null;
         this.state = 'investigate';
-        this._plan(game, sound.x, sound.y);
+        this._retarget(game, sound.x, sound.y);
         if (!this.path.length) this.state = 'idle';
       }
     }
@@ -174,11 +183,14 @@ export class Hunter {
     let arrived = this.path.length === 0;
     if (this.path.length) {
       const wp = this.path[0];
-      tx = wp.x;
-      ty = wp.y;
-      if (Math.hypot(wp.x - this.x, wp.y - this.y) < 7) {
+      while (this.path.length && Math.hypot(this.path[0].x - this.x, this.path[0].y - this.y) < 9) {
         this.path.shift();
-        if (!this.path.length) arrived = true;
+      }
+      if (this.path.length) {
+        tx = this.path[0].x;
+        ty = this.path[0].y;
+      } else {
+        arrived = true;
       }
     }
 

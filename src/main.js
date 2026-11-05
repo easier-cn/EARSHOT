@@ -22,11 +22,34 @@ if (params.has('edit')) setTimeout(() => game.openEditor(), 60);
 if (params.has('hunt')) {
   setTimeout(() => {
     game.startChamber(1);
+    const L = game.level;
+    const T = L.tile;
+    const px = Math.floor(game.player.x / T);
+    const py = Math.floor(game.player.y / T);
+    let spot = null;
+    for (let r = 6; r <= 7 && !spot; r++) {
+      for (const [dx, dy] of [[r, 0], [-r, 0], [0, r], [0, -r], [r, r], [-r, -r], [r, -r], [-r, r]]) {
+        const x = px + dx;
+        const y = py + dy;
+        if (x > 1 && y > 1 && x < L.w - 1 && y < L.h - 1 && !L.grid[y * L.w + x]) {
+          spot = { x: (x + 0.5) * T, y: (y + 0.5) * T };
+          break;
+        }
+      }
+    }
     const h = game.hunters[0];
-    h.x = game.player.x + 230;
-    h.y = game.player.y + 40;
+    if (spot) { h.x = spot.x; h.y = spot.y; }
     h.hear(game.player.x, game.player.y, 0.05);
-    game.debugSimulate(1.8, {});
+    game.debugSimulate(0.75, {});
+    game.stepEcho(h.x, h.y, '255, 70, 70');
+    game.debugSimulate(0.16, {});
+  }, 700);
+}
+if (params.has('red')) {
+  setTimeout(() => {
+    game.startChamber(1);
+    game.stepEcho(game.player.x + 40, game.player.y + 2, '255, 70, 70');
+    game.debugSimulate(0.2, {});
   }, 700);
 }
 if (params.has('debug')) {

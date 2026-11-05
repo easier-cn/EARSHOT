@@ -748,7 +748,7 @@ export class Game {
   stepEcho(x, y, tint = null, opts = {}) {
     const count = opts.count ?? 22;
     const speed = opts.speed ?? 330;
-    const life = opts.life ?? 0.5;
+    const life = opts.life ?? 0.58;
     this.spawnRays(x, y, { count, speed, life, tint, kind: opts.kind || 'step' });
     this.pings.push({ x, y, t0: this.now, speed, life, small: true, tint });
     this.contacts.push({ x, y, t: this.now, tint });
