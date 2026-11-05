@@ -1,0 +1,157 @@
+// Headless playtest through the Chrome DevTools Protocol.
+// Verifies the title -> chamber transition, keyboard movement and mouse sonar
+// with real (trusted) input events, then saves a screenshot.
+import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+
+const EDGE = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
+const PORT = 9333;
+const BASE = 'http://127.0.0.1:8080/';
+const SHOTS = path.resolve('shots');
+fs.mkdirSync(SHOTS, { recursive: true });
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const child = spawn(
+  EDGE,
+  [
+    '--headless=new',
+    '--disable-gpu',
+    '--hide-scrollbars',
+    '--mute-audio',
+    `--remote-debugging-port=${PORT}`,
+    `--user-data-dir=${process.env.TEMP}\\hush-cdp-${Date.now()}`,
+    '--window-size=1400,800',
+    `${BASE}?static=1`,
+  ],
+  { stdio: 'ignore' },
+);
+
+let ws;
+let nextId = 0;
+const pending = new Map();
+
+async function connect() {
+  for (let i = 0; i < 60; i++) {
+    try {
+      const res = await fetch(`http://127.0.0.1:${PORT}/json/list`);
+      const list = await res.json();
+      const page = list.find((t) => t.type === 'page' && t.url.includes('8080'));
+      if (page) return page;
+    } catch {
+      /* browser not up yet */
+    }
+    await sleep(250);
+  }
+  throw new Error('devtools target never appeared');
+}
+
+function send(method, params = {}) {
+  const id = ++nextId;
+  ws.send(JSON.stringify({ id, method, params }));
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve({ error: { message: 'timeout' } }), 10000);
+    pending.set(id, (msg) => {
+      clearTimeout(timer);
+      resolve(msg);
+    });
+  });
+}
+
+async function evaluate(expression) {
+  const r = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
+  return r.result?.result?.value;
+}
+
+const key = (type, code, keyName, vk) =>
+  send('Input.dispatchKeyEvent', {
+    type,
+    code,
+    key: keyName,
+    windowsVirtualKeyCode: vk,
+    nativeVirtualKeyCode: vk,
+  });
+
+async function main() {
+  const page = await connect();
+  ws = new WebSocket(page.webSocketDebuggerUrl);
+  ws.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
+    if (msg.id && pending.has(msg.id)) {
+      pending.get(msg.id)(msg);
+      pending.delete(msg.id);
+    }
+  };
+  await new Promise((r) => (ws.onopen = r));
+  await send('Runtime.enable');
+  await send('Page.enable');
+
+  const ready = await evaluate(
+    `(async () => {
+       for (let i = 0; i < 100 && !window.__hush; i++) await new Promise(r => setTimeout(r, 50));
+       return !!window.__hush;
+     })()`,
+  );
+  const report = { ready };
+
+  report.state0 = await evaluate('window.__hush.state');
+  report.titleVisible = await evaluate(
+    `!document.getElementById('scr-title').classList.contains('hidden')`,
+  );
+
+  // Any key starts the run.
+  await key('keyDown', 'Enter', 'Enter', 13);
+  await key('keyUp', 'Enter', 'Enter', 13);
+  await sleep(300);
+  report.state1 = await evaluate('window.__hush.state');
+  report.chamber = await evaluate('window.__hush.chamberIndex');
+
+  // Hold D for a moment.
+  const x0 = await evaluate('window.__hush.player.x');
+  await key('keyDown', 'KeyD', 'd', 68);
+  await sleep(900);
+  await key('keyUp', 'KeyD', 'd', 68);
+  await sleep(100);
+  const x1 = await evaluate('window.__hush.player.x');
+  report.moved = +(x1 - x0).toFixed(1);
+
+  // Click to ping.
+  const before = await evaluate('window.__hush.charges');
+  await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: 700, y: 400, button: 'left', clickCount: 1 });
+  await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: 700, y: 400, button: 'left', clickCount: 1 });
+  await sleep(120);
+  report.chargesBefore = before;
+  report.chargesAfter = await evaluate('window.__hush.charges');
+  report.pings = await evaluate('window.__hush.pings.length');
+
+  await sleep(700);
+  const shot = await send('Page.captureScreenshot', { format: 'png' });
+  if (shot.result?.data) {
+    fs.writeFileSync(path.join(SHOTS, 'cdp-play.png'), Buffer.from(shot.result.data, 'base64'));
+    report.screenshot = 'shots/cdp-play.png';
+  }
+
+  // Escape pauses.
+  await key('keyDown', 'Escape', 'Escape', 27);
+  await key('keyUp', 'Escape', 'Escape', 27);
+  await sleep(200);
+  report.state2 = await evaluate('window.__hush.state');
+  report.pauseVisible = await evaluate(
+    `!document.getElementById('scr-pause').classList.contains('hidden')`,
+  );
+
+  console.log(JSON.stringify(report, null, 2));
+}
+
+main()
+  .catch((e) => {
+    console.error('playtest failed:', e);
+    process.exitCode = 1;
+  })
+  .finally(() => {
+    try {
+      ws?.close();
+    } catch {}
+    child.kill();
+  });
