@@ -75,6 +75,8 @@ const key = (type, code, keyName, vk) =>
     nativeVirtualKeyCode: vk,
   });
 
+const exceptions = [];
+
 async function main() {
   const page = await connect();
   ws = new WebSocket(page.webSocketDebuggerUrl);
@@ -83,6 +85,10 @@ async function main() {
     if (msg.id && pending.has(msg.id)) {
       pending.get(msg.id)(msg);
       pending.delete(msg.id);
+    }
+    if (msg.method === 'Runtime.exceptionThrown') {
+      const d = msg.params?.exceptionDetails;
+      exceptions.push(d?.exception?.description || d?.text || 'unknown exception');
     }
   };
   await new Promise((r) => (ws.onopen = r));
@@ -138,6 +144,13 @@ async function main() {
   report.chargesBefore = before;
   report.chargesAfter = await evaluate('window.__hush.charges');
   report.pings = await evaluate('window.__hush.pings.length');
+  report.audio = await evaluate(
+    `(() => { const a = window.__hush.audio; return {
+       ready: a.ready,
+       state: a.ctx ? a.ctx.state : null,
+       master: a.master ? +a.master.gain.value.toFixed(2) : null,
+     }; })()`,
+  );
 
   await sleep(700);
   const shot = await send('Page.captureScreenshot', { format: 'png' });
@@ -184,6 +197,7 @@ async function main() {
     report.clearShot = 'shots/cdp-clear.png';
   }
 
+  report.errors = exceptions;
   console.log(JSON.stringify(report, null, 2));
 }
 
