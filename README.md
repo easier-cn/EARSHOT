@@ -58,12 +58,15 @@ DESIGN.md         设计与数值
 ```bash
 npm test            # 逻辑测试（关卡连通性、寻路、碰撞）
 npm run playtest    # 无头浏览器自动试玩（真实按键 + 截图）
+npm run balance     # 每个密室的最短步行路线（配速参考）
 npm run serve       # 本地服务器
 ```
 
 调试用 URL 参数：`?c=0..7` 直接进关、`?static` 关闭入场动画、`?ping` 自动脉冲、`?sim=秒` 快进模拟、`?freeze=毫秒` 定格、`?doc=dead|clear|victory` 预览结算界面。
 
 ## 版本
+
+见 [CHANGELOG.md](CHANGELOG.md)。
 
 - **v0.1.1** 声音提示、结算面板修正、自动化试玩、Windows 一键启动
 - **v0.1** 可玩核心：声呐渲染、8 密室、猎手 AI、程序化音频、存档

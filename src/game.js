@@ -84,6 +84,9 @@ export class Game {
     document.addEventListener('visibilitychange', () => {
       if (document.hidden && this.state === 'playing') this.pause();
     });
+    window.addEventListener('blur', () => {
+      if (this.state === 'playing' && !this.frozen) this.pause();
+    });
 
     requestAnimationFrame(this.frame);
   }
@@ -131,6 +134,7 @@ export class Game {
   }
 
   startBest() {
+    if (this.state !== 'title') return;
     const idx = clamp((this.progress.unlocked || 1) - 1, 0, CHAMBERS.length - 1);
     this.startChamber(idx);
   }
