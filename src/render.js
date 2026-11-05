@@ -135,17 +135,35 @@ export class Renderer {
       ctx.lineJoin = 'round';
       for (let i = 0; i < contacts.length; i++) {
         const c = contacts[i];
+        if (c.kind === 'hunter' || c.kind === 'skitter') continue;
         const k = Math.max(0, 1 - (now - c.t) / 1.7);
         if (k <= 0.02) continue;
         const col = c.kind === 'shard' ? '255,205,110'
           : c.kind === 'exit' ? '140,240,170'
-            : (c.kind === 'hunter' || c.kind === 'skitter') ? '255,86,86'
-              : '150,246,232';
-        ctx.fillStyle = `rgba(${col}, ${k * 0.55})`;
+            : '236,252,250';
+        ctx.fillStyle = `rgba(${col}, ${k * 0.5})`;
         ctx.beginPath();
         ctx.arc(c.x, c.y, 1.4 + k * 1.3, 0, Math.PI * 2);
         ctx.fill();
       }
+      // A reflection off something that hunts you is the loudest thing in the dark.
+      ctx.globalCompositeOperation = 'source-over';
+      for (let i = 0; i < contacts.length; i++) {
+        const c = contacts[i];
+        if (c.kind !== 'hunter' && c.kind !== 'skitter') continue;
+        const k = Math.max(0, 1 - (now - c.t) / 1.7);
+        if (k <= 0.02) continue;
+        ctx.fillStyle = `rgba(255, 44, 44, ${0.55 + k * 0.45})`;
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, 1.2 + k * 0.9, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = `rgba(255, 90, 90, ${k * 0.5})`;
+        ctx.lineWidth = 0.7;
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, 3.2 + (1 - k) * 6, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.globalCompositeOperation = 'lighter';
       for (let i = 0; i < rays.length; i++) {
         const r = rays[i];
         if (!r.pts || r.pts.length < 2) continue;
@@ -169,15 +187,17 @@ export class Renderer {
             ctx.moveTo(pts[i0].x, pts[i0].y);
             for (let j = i0 + 1; j <= i1; j++) ctx.lineTo(pts[j].x, pts[j].y);
             if (b === batches - 1) ctx.lineTo(r.x, r.y);
-            ctx.strokeStyle = `rgba(${r.tint || '150,246,232'}, ${ta})`;
-            ctx.lineWidth = 0.8 + ta * 1.6;
+            ctx.strokeStyle = `rgba(${r.tint || '240,253,252'}, ${Math.min(1, ta * (r.hot ? 2.1 : 1))})`;
+            ctx.lineWidth = (r.hot ? 1.6 : 0.8) + ta * (r.hot ? 2.4 : 1.4);
             ctx.stroke();
           }
         }
         if (r.age <= r.life) {
-          ctx.fillStyle = `rgba(226, 255, 250, ${Math.min(0.9, a * 1.5)})`;
+          ctx.fillStyle = r.hot
+            ? `rgba(255, 70, 70, ${Math.min(1, a * 3)})`
+            : `rgba(240, 253, 252, ${Math.min(0.9, a * 1.4)})`;
           ctx.beginPath();
-          ctx.arc(r.x, r.y, 1.5, 0, Math.PI * 2);
+          ctx.arc(r.x, r.y, r.hot ? 2.6 : 1.4, 0, Math.PI * 2);
           ctx.fill();
         }
       }
@@ -191,7 +211,7 @@ export class Renderer {
         const p = dust[i];
         const b = this._pointBrightness(p.x, p.y, game.pings, now, level, false);
         if (b < 0.02) continue;
-        ctx.fillStyle = `rgba(180, 245, 238, ${b * 0.5})`;
+        ctx.fillStyle = `rgba(225, 248, 246, ${b * 0.45})`;
         ctx.fillRect(p.x, p.y, 1.5, 1.5);
       }
     }
@@ -229,37 +249,7 @@ export class Renderer {
       }
     }
 
-    // ---- hunters ------------------------------------------------------------
-    for (const h of game.hunters) {
-      if (!vision) continue;
-      const seen = now - (h.seenAt ?? -99);
-      if (seen > 2.3) continue;
-      const a = clamp(0.35 + 0.75 * (1 - seen / 2.3), 0.1, 1);
-      const wobble = 1 + 0.04 * Math.sin(now * 9 + h.id);
-      ctx.save();
-      ctx.translate(h.x, h.y);
-      ctx.rotate(h.face + Math.PI / 2);
-      ctx.scale(wobble, wobble);
-      ctx.fillStyle = `rgba(10, 14, 18, ${0.9 * a})`;
-      ctx.strokeStyle = `rgba(${RED}, ${a})`;
-      ctx.lineWidth = 1.6;
-      ctx.beginPath();
-      ctx.moveTo(0, -15);
-      ctx.lineTo(10, 8);
-      ctx.lineTo(4, 4);
-      ctx.lineTo(0, 13);
-      ctx.lineTo(-4, 4);
-      ctx.lineTo(-10, 8);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-      ctx.fillStyle = `rgba(${RED}, ${a})`;
-      ctx.beginPath();
-      ctx.arc(-4, -4, 1.7, 0, Math.PI * 2);
-      ctx.arc(4, -4, 1.7, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-    }
+    // ---- hunters: never drawn as bodies. Only their reflection exists --------
 
     // ---- echo rings: where a mimic answered --------------------------------
     for (const r of game.echoRings || []) {
@@ -270,47 +260,6 @@ export class Renderer {
       ctx.beginPath();
       ctx.arc(r.x, r.y, 7 + k * 54, 0, Math.PI * 2);
       ctx.stroke();
-    }
-
-    // ---- skitters -----------------------------------------------------------
-    for (const sk of game.skitters || []) {
-      if (!vision) continue;
-      const seen = now - (sk.seenAt ?? -99);
-      const revealed = (sk.revealT || 0) > 0;
-      if (seen > 2.3 && !revealed) continue;
-      const a = revealed ? 0.85 : clamp(0.35 + 0.75 * (1 - seen / 2.3), 0.1, 1);
-      const stride = Math.sin(sk.wobble) * 2.2;
-      ctx.save();
-      ctx.translate(sk.x, sk.y);
-      ctx.rotate(sk.face);
-      ctx.strokeStyle = `rgba(${RED}, ${a * 0.9})`;
-      ctx.lineWidth = 1.4;
-      // four legs, two forward two back, scissoring
-      ctx.beginPath();
-      for (const side of [-1, 1]) {
-        ctx.moveTo(-2, side * 3);
-        ctx.lineTo(-9 - stride, side * 9);
-        ctx.moveTo(3, side * 3);
-        ctx.lineTo(9 + stride, side * 9);
-      }
-      ctx.stroke();
-      // a thin carapace with a hot core
-      ctx.fillStyle = `rgba(8, 10, 12, ${0.85 * a})`;
-      ctx.beginPath();
-      ctx.moveTo(11, 0);
-      ctx.lineTo(3, 6);
-      ctx.lineTo(-9, 4);
-      ctx.lineTo(-9, -4);
-      ctx.lineTo(3, -6);
-      ctx.closePath();
-      ctx.fill();
-      ctx.strokeStyle = `rgba(${RED}, ${a})`;
-      ctx.stroke();
-      ctx.fillStyle = `rgba(255, 220, 210, ${a})`;
-      ctx.beginPath();
-      ctx.arc(2, 0, 2.1, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
     }
 
     // ---- player -------------------------------------------------------------

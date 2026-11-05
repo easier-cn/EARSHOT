@@ -229,6 +229,7 @@ export class Hunter {
       if (game.audio) {
         const pan = Math.max(-1, Math.min(1, (this.x - game.player.x) / 420));
         game.audio.hunterStep(pan, 0.5);
+        game.hunterSpark?.(this.x, this.y, 14);
       }
     }
 
@@ -242,6 +243,7 @@ export class Hunter {
         if (dist < 620) {
           const pan = Math.max(-1, Math.min(1, rel / 380));
           game.audio.hunterStep(pan, Math.min(1, 1.15 - dist / 640));
+          game.hunterSpark?.(this.x, this.y, 18);
         }
       }
     }

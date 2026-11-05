@@ -154,6 +154,7 @@ export class Game {
     this.rays = [];
     this.contacts = [];
     this.sounds = [];
+    this.flashes = [];
     this.sneak = false;
     this.blind = false;
     this.particles = makeDust(this.level);
@@ -719,12 +720,18 @@ export class Game {
     const ex = this.level.exit;
     if (dist(x, y, ex.x, ex.y) < 17) return { e: ex, kind: 'exit', tint: '140,240,170' };
     for (const h of this.hunters) {
-      if (dist(x, y, h.x, h.y) < 15) return { e: h, kind: 'hunter', tint: '255,86,86' };
+      if (dist(x, y, h.x, h.y) < 15) return { e: h, kind: 'hunter', tint: '255,58,58', hot: true };
     }
     for (const sk of this.skitters) {
-      if (dist(x, y, sk.x, sk.y) < 12) return { e: sk, kind: 'skitter', tint: '255,120,120' };
+      if (dist(x, y, sk.x, sk.y) < 12) return { e: sk, kind: 'skitter', tint: '255,58,58', hot: true };
     }
     return null;
+  }
+
+  /** A creature's own step still makes a (smaller, cooler) splash of light. */
+  hunterSpark(x, y, count = 16) {
+    this.spawnRays(x, y, { count, speed: 300, life: 0.5 });
+    this.contacts.push({ x, y, t: this.now });
   }
 
   spawnRays(x, y, { count = RAY_COUNT, speed = RAY_SPEED, life = RAY_LIFE } = {}) {
@@ -766,6 +773,11 @@ export class Game {
           if (ent) {
             ent.e.seenAt = this.now;
             r.tint = ent.tint;
+            r.hot = !!ent.hot;
+            if (ent.hot) {
+              r.life += 0.55;
+              this.flashes.push({ x: ent.e.x, y: ent.e.y, t: this.now });
+            }
             this.contacts.push({ x: r.x, y: r.y, t: this.now, kind: ent.kind });
             const nlen = Math.hypot(r.x - ent.e.x, r.y - ent.e.y) || 1;
             const nxn = (r.x - ent.e.x) / nlen;
@@ -803,6 +815,7 @@ export class Game {
       alive.push(r);
     }
     this.rays = alive;
+    if (this.flashes.length) this.flashes = this.flashes.filter((f) => this.now - f.t < 0.55);
     if (this.contacts.length > 40) {
       let cut = 0;
       while (cut < this.contacts.length && this.now - this.contacts[cut].t > 1.9) cut++;
