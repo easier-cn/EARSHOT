@@ -3,6 +3,18 @@
 All notable changes to HUSH. The format follows [Keep a Changelog](https://keepachangelog.com/),
 and the game follows [SemVer](https://semver.org/).
 
+## [0.3.4] - 2026-11-05
+
+### Added
+- **Shards answer the pulse.** Every ping makes up to four nearby shards (within
+  1150px) ring back with a thin high bell. The delay is the distance (1500px/s)
+  and the pan is the bearing, so the cave becomes a map you hear rather than
+  read. No HUD, no pointer.
+
+### Fixed
+- Mimics only heard pings when a hunter happened to be in the level (the loop
+  was nested inside the hunter loop), so chamber I's mimic was deaf.
+
 ## [0.3.3] - 2026-11-05
 
 ### Changed

@@ -254,6 +254,7 @@ async function main() {
     const g = window.__hush;
     const step = (ms) => new Promise((r) => setTimeout(r, ms || 60));
     if (!g.worldMode) return { error: 'world mode did not start: ' + g.state };
+    g.debugInvincible = true; // scripted flow, not a survival test
     const total = g.totalShards;
     const startSector = g.sector;
     const ch = g.level.size.h / 4;
@@ -262,6 +263,15 @@ async function main() {
     g.player.y = ch * 3.5;
     await step(150);
     const crossed = { sector: g.sector, num: document.getElementById('hud-num').textContent };
+    g.charges = 3;
+    g.firePing();
+    await step(120);
+    const echoes = g.lastShardEchoes || [];
+    const echoCheck = {
+      count: echoes.length,
+      sorted: echoes.every((e, i) => i === 0 || echoes[i - 1].delay <= e.delay),
+      nearest: echoes[0] ? echoes[0].d : null,
+    };
     for (let guard = 0; guard < 40 && g.shards.length; guard++) {
       g.player.x = g.shards[0].x;
       g.player.y = g.shards[0].y;
@@ -282,7 +292,7 @@ async function main() {
     g.player.y = g.level.exit.y;
     await step(300);
     return {
-      total, startSector, crossed, before, open,
+      total, startSector, crossed, echoCheck, before, open,
       state: g.state,
       panel: !document.getElementById('scr-victory').classList.contains('hidden'),
       cleared: !!g.progress.worldCleared,

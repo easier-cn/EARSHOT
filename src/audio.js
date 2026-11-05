@@ -280,6 +280,13 @@ export class AudioEngine {
     );
   }
 
+  /** A shard answering a pulse: thin, high, far away. */
+  shardEcho(pan = 0, gain = 0.02, delay = 0) {
+    const f = 1876 + Math.random() * 120;
+    this.tone({ freq: f, type: 'sine', dur: 0.5, gain, pan, delay, send: 1.1 });
+    this.tone({ freq: f * 1.5, type: 'sine', dur: 0.35, gain: gain * 0.35, pan, delay: delay + 0.04, send: 1.3 });
+  }
+
   gateOpen() {
     this.tone({ freq: 220, freqEnd: 55, type: 'sawtooth', dur: 1.4, gain: 0.07, send: 0.7 });
     this.tone({ freq: 660, freqEnd: 990, type: 'sine', dur: 1.2, gain: 0.05, send: 0.9 });

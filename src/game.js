@@ -13,6 +13,8 @@ const PING_REGEN = 2.4;
 const PING_SPEED = 720;
 const PING_LIFE = 0.9;
 const WAVE_LISTEN = 760;
+const SHARD_ECHO_RANGE = 1150;
+const SHARD_ECHO_SPEED = 1500;
 const RAY_COUNT = 96;
 const RAY_SPEED = 560;
 const RAY_LIFE = 0.95;
@@ -202,7 +204,7 @@ export class Game {
       num: CHAMBERS[this.sector].num,
       title: CHAMBERS[this.sector].title,
       shards: this.totalShards,
-      intro: '',
+      intro: this.progress.worldCleared ? '' : '敲一下。墙会回答——远的碎片也会，只是晚一点。',
     });
     return true;
   }
@@ -434,6 +436,9 @@ export class Game {
           ping.heard.add(h.id);
           this.alertHunter(h, ping.x, ping.y, 0.08);
         }
+      }
+      if (!ping.mimicsHeard) {
+        ping.mimicsHeard = true;
         for (const sk of this.skitters) {
           if (dist(ping.x, ping.y, sk.x, sk.y) < 600) sk.hear(ping.x, ping.y, 'ping', 1.05);
         }
@@ -673,6 +678,7 @@ export class Game {
     this.pingsUsed++;
     this.spawnRays(p.x, p.y);
     this.audio.ping();
+    this.echoShards(p.x, p.y);
     this.shake = Math.max(this.shake, 2.4);
     this.flash = 0.85;
     if (!this.pingHintShown) {
@@ -683,6 +689,24 @@ export class Game {
     for (const h of this.hunters) {
       if (dist(p.x, p.y, h.x, h.y) < WAVE_LISTEN * 0.15) h.hear(p.x, p.y, 0.3);
     }
+  }
+
+  /** The shards are not silent. A pulse reaching them is answered by a bell
+   *  whose delay is its distance and whose pan is its bearing — navigation by
+   *  ear, never by pointer. */
+  echoShards(px, py) {
+    const reached = [];
+    for (const sh of this.shards) {
+      const d = dist(px, py, sh.x, sh.y);
+      if (d > SHARD_ECHO_RANGE) continue;
+      const delay = d / SHARD_ECHO_SPEED;
+      const gain = 0.05 * (1 - d / SHARD_ECHO_RANGE) ** 1.4 + 0.006;
+      const pan = clamp((sh.x - px) / 420, -1, 1);
+      this.audio.shardEcho(pan, gain, delay);
+      reached.push({ id: sh.id, d: Math.round(d), delay: +delay.toFixed(3) });
+    }
+    reached.sort((a, b) => a.d - b.d);
+    this.lastShardEchoes = reached.slice(0, 4);
   }
 
   die() {
