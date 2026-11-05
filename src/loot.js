@@ -87,26 +87,30 @@ export const ITEMS = {
 
 /** Six rows of four: two workbench cells, eight pack slots, four hotkeys, four charms. */
 export const SLOTS = {
-  work: [0, 1],
-  pack: [8, 15],
-  hot: [16, 19],
-  charm: [20, 23],
+  cols: 4,
+  rows: 6,
 };
 
+/** Hotkey order on the number row: 1, 2, 4, 3. */
 export const HOTKEY_ORDER = [1, 2, 4, 3];
 
+/**
+ * Inventory: four charm sockets (only these take effect), four hotkey cells,
+ * a two-cell workbench, and a deliberately small six-cell pack. Charms ride in
+ * the pack until dragged into a socket, so every pickup competes for space.
+ */
 export class Inventory {
   constructor() {
-    this.pack = new Array(8).fill(null); // { id, n }
-    this.hot = [null, null, null, null];
-    this.charms = []; // { id, lvl }, max 4 slots
-    this.work = [null, null];
-    this.active = null; // hotkey index bound to left click
-    this.stones = 0; // 投石问路 charges, refreshed per floor
+    this.pack = new Array(6).fill(null); // { kind:'item', id, n } | { kind:'charm', id, lvl }
+    this.hot = new Array(4).fill(null); // references a pack entry
+    this.charms = new Array(4).fill(null); // equipped, effective
+    this.work = [null, null]; // charms moved out of pack/socket for fusing
+    this.stones = 0;
   }
 
+  /** Only equipped charms count. */
   level(id) {
-    return this.charms.reduce((sum, c) => sum + (c.id === id ? c.lvl : 0), 0);
+    return this.charms.reduce((sum, c) => sum + (c && c.id === id ? c.lvl : 0), 0);
   }
 
   has(id) {
@@ -117,97 +121,130 @@ export class Inventory {
     return this.charms[i] || null;
   }
 
-  /** Move a charm between a slot and the workbench; work holds two. */
-  toWork(i) {
-    const c = this.charms[i];
-    if (!c) return false;
-    const w = this.work.indexOf(null);
-    if (w < 0) return false;
-    this.work[w] = c;
-    this.charms.splice(i, 1);
-    return true;
-  }
-
-  fromWork(w) {
-    const c = this.work[w];
-    if (!c) return false;
-    if (this.charms.length >= 4) return false;
-    this.charms.push(c);
-    this.work[w] = null;
-    return true;
-  }
-
-  /** 工 + 工 → 成果: two charms of equal id and level become the next level. */
-  craftable() {
-    const [a, b] = this.work;
-    if (!a || !b) return null;
-    if (a.id !== b.id || a.lvl !== b.lvl) return null;
-    if (a.lvl >= CHARMS[a.id].max) return null;
-    return { id: a.id, lvl: a.lvl + 1 };
-  }
-
-  craft() {
-    const out = this.craftable();
-    if (!out) return null;
-    if (this.charms.length >= 4) return null;
-    this.work = [null, null];
-    this.charms.push(out);
-    return out;
-  }
-
-  /** Two of the same charm merge into the next level, as long as a slot is free. */
-  addCharm(id) {
-    const def = CHARMS[id];
-    if (!def) return 'bad';
-    // Duplicates never merge in the pack: levelling up is the workbench's job.
-    if (this.charms.length >= 4) return 'full';
-    this.charms.push({ id, lvl: 1 });
-    return 'added';
-  }
-
   addItem(id, n = 1) {
-    const def = ITEMS[id];
-    if (!def) return false;
+    if (!ITEMS[id]) return false;
     for (const slot of this.pack) {
-      if (slot && slot.id === id) {
+      if (slot && slot.kind === 'item' && slot.id === id) {
         slot.n += n;
         return true;
       }
     }
     const i = this.pack.indexOf(null);
     if (i < 0) return false;
-    this.pack[i] = { id, n };
+    this.pack[i] = { kind: 'item', id, n };
     return true;
   }
 
-  /** Spend one of an item from the pack; clears the hotkey too when empty. */
-  consume(id) {
-    const i = this.pack.findIndex((s) => s && s.id === id);
-    if (i < 0) return false;
-    this.pack[i].n -= 1;
-    if (this.pack[i].n <= 0) {
+  /** Charms drop into the pack; they must be dragged into a socket to work. */
+  addCharm(id) {
+    if (!CHARMS[id]) return 'bad';
+    if (this.pack.indexOf(null) < 0) return 'full';
+    this.pack[this.pack.indexOf(null)] = { kind: 'charm', id, lvl: 1 };
+    return 'added';
+  }
+
+  /** Detach an entry from wherever it lives. */
+  take(kind, i) {
+    if (kind === 'pack') {
+      const o = this.pack[i];
+      if (!o) return null;
       this.pack[i] = null;
-      for (let k = 0; k < this.hot.length; k++) if (this.hot[k] && this.hot[k].id === id) this.hot[k] = null;
+      for (let k = 0; k < this.hot.length; k++) if (this.hot[k] === o) this.hot[k] = null;
+      return o;
     }
-    return true;
+    if (kind === 'charm') {
+      const o = this.charms[i];
+      this.charms[i] = null;
+      return o || null;
+    }
+    if (kind === 'work') {
+      const o = this.work[i];
+      this.work[i] = null;
+      return o || null;
+    }
+    if (kind === 'hot') {
+      const o = this.hot[i];
+      this.hot[i] = null;
+      return o ? { recycle: o } : null;
+    }
+    return null;
   }
 
-  usePack(i) {
-    const slot = this.pack[i];
-    if (!slot) return false;
-    const def = ITEMS[slot.id];
-    if (!def) return false;
-    if (def.kind === 'use') {
-      slot.n -= 1;
-      if (slot.n <= 0) this.pack[i] = null;
-      return { id: slot.id };
+  /** Place an object into a cell. */
+  place(kind, i, o) {
+    if (!o) return false;
+    if (kind === 'pack') {
+      if (this.pack[i]) return false;
+      this.pack[i] = o;
+      return true;
     }
-    return { id: slot.id, throwable: true };
+    if (kind === 'charm') {
+      if (this.charms[i] || !o || o.kind !== 'charm') return false;
+      this.charms[i] = { kind: 'charm', id: o.id, lvl: o.lvl };
+      return true;
+    }
+    if (kind === 'work') {
+      if (this.work[i] || !o || o.kind !== 'charm') return false;
+      this.work[i] = { kind: 'charm', id: o.id, lvl: o.lvl };
+      return true;
+    }
+    if (kind === 'hot') {
+      if (this.hot[i] || !o || o.kind !== 'item') return false;
+      const def = ITEMS[o.id];
+      if (!def) return false;
+      this.hot[i] = o;
+      return true;
+    }
+    return false;
+  }
+
+  /** Drag from one cell to another. Returns true when something changed. */
+  move(fromKind, fromI, toKind, toI) {
+    if (fromKind === toKind && fromI === toI) return false;
+    if (fromKind === 'result') return false;
+    const o = this.take(fromKind, fromI);
+    if (!o) return false;
+    if (o.recycle) return true;
+    if (this.place(toKind, toI, o)) return true;
+    if (fromKind === 'pack') this.pack[fromI] = o;
+    else if (fromKind === 'charm') this.charms[fromI] = { kind: 'charm', id: o.id, lvl: o.lvl };
+    else if (fromKind === 'work') this.work[fromI] = o;
+    else if (fromKind === 'hot') this.hot[fromI] = o;
+    return false;
+  }
+
+  craftable() {
+    const [a, b] = this.work;
+    if (!a || !b) return null;
+    if (a.id !== b.id || a.lvl !== b.lvl) return null;
+    if (a.lvl >= CHARMS[a.id].max) return null;
+    return { kind: 'charm', id: a.id, lvl: a.lvl + 1 };
+  }
+
+  /** Consume both workbench charms and hand the result back (caller places it). */
+  craft() {
+    const out = this.craftable();
+    if (!out) return null;
+    this.work = [null, null];
+    return out;
+  }
+
+  /** Spend one item from the pack; clears stale hotkey references. */
+  consume(id) {
+    const i = this.pack.findIndex((s) => s && s.kind === 'item' && s.id === id);
+    if (i < 0) return false;
+    const slot = this.pack[i];
+    slot.n -= 1;
+    if (slot.n <= 0) {
+      this.pack[i] = null;
+      for (let k = 0; k < this.hot.length; k++) if (this.hot[k] === slot) this.hot[k] = null;
+    }
+    return true;
   }
 
   bindHot(i, packIndex) {
     const slot = this.pack[packIndex];
-    this.hot[i] = slot ? { id: slot.id, from: packIndex } : null;
+    this.hot[i] = slot || null;
     return !!slot;
   }
 }

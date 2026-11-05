@@ -887,3 +887,21 @@ kbd {
 .inv-cut.pack { background: linear-gradient(90deg, transparent, rgba(255, 214, 155, 0.4), transparent); }
 .inv-cell.hot .glyph { color: rgba(150, 215, 245, 0.95); }
 .inv-cell.charm .glyph { color: rgba(186, 160, 255, 0.95); }
+.inv-ghost {
+  position: fixed;
+  width: 60px; height: 60px;
+  z-index: 60;
+  pointer-events: none;
+  display: grid; place-items: center;
+  border: 1px solid rgba(255, 214, 155, 0.55);
+  background: rgba(8, 14, 15, 0.92);
+  opacity: 0.9;
+}
+.inv-ghost.hidden { display: none; }
+.inv-ghost .glyph { width: 36px; height: 36px; fill: none; stroke: currentColor; stroke-width: 1.2; }
+.inv-cell.deco { border: 0; background: none; }
+.inv-cell .throw-dot {
+  position: absolute; left: 6px; bottom: 6px;
+  width: 4px; height: 4px; border-radius: 50%;
+  background: rgba(255, 214, 155, 0.85);
+}

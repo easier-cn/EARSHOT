@@ -3,40 +3,62 @@ import assert from 'node:assert/strict';
 import { Inventory, CHARMS, ITEMS } from '../src/loot.js';
 import { CHARM_TEXT, ITEM_TEXT, charmText, CHARM_GLYPH, ITEM_GLYPH } from '../src/desc.js';
 
-test('workbench turns two identical level-1 charms into one level-2', () => {
+test('charms sit in the six-slot pack and only work once socketed', () => {
   const inv = new Inventory();
+  assert.equal(inv.pack.length, 6);
   inv.addCharm('sleep');
-  inv.addCharm('sleep');
-  assert.equal(inv.charms.length, 2, 'duplicates stay separate in the pack');
-  assert.equal(inv.toWork(0), true);
-  assert.equal(inv.toWork(0), true);
-  assert.deepEqual(inv.craftable(), { id: 'sleep', lvl: 2 });
+  assert.equal(inv.level('sleep'), 0, 'a charm in the pack does nothing');
+  assert.equal(inv.move('pack', 0, 'charm', 0), true);
+  assert.equal(inv.level('sleep'), 1);
+  assert.equal(inv.pack[0], null);
+  assert.equal(inv.move('charm', 0, 'pack', 0), true);
+  assert.equal(inv.level('sleep'), 0);
+});
+
+test('pack is small enough that charms and items compete', () => {
+  const inv = new Inventory();
+  for (let i = 0; i < 6; i++) assert.equal(inv.addCharm('hunt'), 'added');
+  assert.equal(inv.addCharm('hunt'), 'full');
+  assert.equal(inv.addItem('pebbles'), false);
+});
+
+test('workbench fuses two equal charms and hands back the next level', () => {
+  const inv = new Inventory();
+  inv.addCharm('hunt');
+  inv.addCharm('hunt');
+  inv.move('pack', 0, 'work', 0);
+  inv.move('pack', 1, 'work', 1);
+  assert.deepEqual(inv.craftable(), { kind: 'charm', id: 'hunt', lvl: 2 });
   const out = inv.craft();
-  assert.deepEqual(out, { id: 'sleep', lvl: 2 });
-  assert.equal(inv.charms.length, 1);
-  assert.equal(inv.level('sleep'), 2);
+  assert.equal(inv.work[0], null);
+  assert.equal(out.lvl, 2);
+  inv.place('pack', 0, out);
+  assert.equal(inv.pack[0].lvl, 2);
 });
 
-test('workbench refuses mismatched or max-level charms', () => {
+test('workbench refuses mismatched charms and max levels', () => {
   const inv = new Inventory();
-  inv.work[0] = { id: 'sleep', lvl: 1 };
-  inv.work[1] = { id: 'swift', lvl: 1 };
+  inv.work[0] = { kind: 'charm', id: 'hunt', lvl: 1 };
+  inv.work[1] = { kind: 'charm', id: 'sleep', lvl: 1 };
   assert.equal(inv.craftable(), null);
-  inv.work[1] = { id: 'sleep', lvl: 3 };
-  inv.work[0] = { id: 'sleep', lvl: 3 };
+  inv.work[0] = { kind: 'charm', id: 'survive', lvl: 3 };
+  inv.work[1] = { kind: 'charm', id: 'survive', lvl: 3 };
   assert.equal(inv.craftable(), null);
 });
 
-test('thrown items are spent; stones from the charm are free', () => {
+test('items stack, spend, and unbind their hotkey when exhausted', () => {
   const inv = new Inventory();
   inv.addItem('sharpStone', 3);
   inv.bindHot(0, 0);
   assert.equal(inv.consume('sharpStone'), true);
   assert.equal(inv.pack[0].n, 2);
-  assert.equal(inv.consume('pebbles'), false);
+  inv.consume('sharpStone');
+  inv.consume('sharpStone');
+  assert.equal(inv.hot[0], null);
+  assert.equal(inv.consume('sharpStone'), false);
 });
 
-test('every charm and item has words and a glyph; longer words per level', () => {
+test('every charm and item has words and a glyph; words grow with level', () => {
   for (const id of Object.keys(CHARMS)) {
     assert.ok(CHARM_TEXT[id], `${id} needs text`);
     assert.ok(CHARM_GLYPH[id], `${id} needs a glyph`);

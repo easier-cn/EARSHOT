@@ -311,7 +311,7 @@ export class UI {
     return `<svg class="glyph ${kind}" viewBox="0 0 24 24">${path}</svg>`;
   }
 
-  /** Tab: the six-by-four panel — workbench, pack, hotkeys, charms. */
+  /** Tab: workbench, hotkeys, sockets, pack. Everything moves by dragging. */
   toggleInventory(game) {
     if (!this.invPanel) {
       const el = document.createElement('div');
@@ -319,48 +319,7 @@ export class UI {
       el.className = 'inv-panel hidden';
       document.body.appendChild(el);
       this.invPanel = el;
-      el.addEventListener('click', (e) => {
-        const cell = e.target.closest('.inv-cell');
-        if (!cell) return;
-        const kind = cell.dataset.kind;
-        const i = Number(cell.dataset.i);
-        const g = this.game;
-        if (kind === 'pack') {
-          const slot = g.inv.pack[i];
-          if (!slot) return;
-          const free = g.inv.hot.indexOf(null);
-          g.inv.bindHot(free < 0 ? 0 : free, i);
-          g.audio.click(0.4);
-          this.renderInventory(g);
-        } else if (kind === 'hot') {
-          g.useHotkey(i);
-          this.renderInventory(g);
-        } else if (kind === 'charm') {
-          if (g.inv.toWork(i)) g.audio.click(0.4);
-          this.renderInventory(g);
-        } else if (kind === 'work') {
-          if (g.inv.fromWork(i)) g.audio.click(0.4);
-          this.renderInventory(g);
-        } else if (kind === 'result') {
-          const out = g.inv.craft();
-          if (out) {
-            g.audio.shard();
-            g.flash = 0.6;
-            g.refreshStones();
-            if (out.id === 'stone' || out.id === 'survive') g.refreshStones();
-          } else g.audio.deny();
-          this.renderInventory(g);
-        }
-      });
-      el.addEventListener('mouseover', (e) => {
-        const cell = e.target.closest('.inv-cell');
-        if (!cell) return this.hideTip();
-        const tip = cell.dataset.tip;
-        if (!tip) return this.hideTip();
-        const r = cell.getBoundingClientRect();
-        this.showTip(cell.dataset.title || '', tip, r.right + 12, r.top);
-      });
-      el.addEventListener('mouseleave', () => this.hideTip());
+      this.bindInventory(el);
     }
     this.invPanel.classList.toggle('hidden');
     const open = !this.invPanel.classList.contains('hidden');
@@ -369,48 +328,199 @@ export class UI {
     if (this.guideEl) this.guideEl.style.visibility = open ? 'hidden' : '';
   }
 
+  bindInventory(el) {
+    let press = null;   // { kind, i, x, y }
+    let drag = null;     // { obj, from, hotRef, pending }
+    const ghost = document.createElement('div');
+    ghost.className = 'inv-ghost hidden';
+    document.body.appendChild(ghost);
+
+    const peek = (kind, i) => {
+      const g = this.game;
+      if (kind === 'pack') return g.inv.pack[i];
+      if (kind === 'charm') return g.inv.charms[i];
+      if (kind === 'work') return g.inv.work[i];
+      if (kind === 'hot') return g.inv.hot[i];
+      return null;
+    };
+
+    el.addEventListener('pointerdown', (e) => {
+      const cell = e.target.closest('.inv-cell');
+      if (!cell || !cell.dataset.kind || cell.dataset.kind === 'result') return;
+      const kind = cell.dataset.kind;
+      const i = Number(cell.dataset.i);
+      if (!peek(kind, i)) return;
+      press = { kind, i, x: e.clientX, y: e.clientY, cell };
+      el.setPointerCapture(e.pointerId);
+    });
+
+    el.addEventListener('pointermove', (e) => {
+      if (!press || drag) return;
+      if (Math.hypot(e.clientX - press.x, e.clientY - press.y) < 6) return;
+      const g = this.game;
+      const kind = press.kind;
+      const i = press.i;
+      if (kind === 'hot') {
+        drag = { obj: g.inv.hot[i], from: { kind, i }, hotRef: true };
+      } else {
+        const o = g.inv.take(kind, i);
+        if (!o) return;
+        drag = { obj: o, from: { kind, i } };
+      }
+      ghost.innerHTML = press.cell.innerHTML;
+      ghost.classList.remove('hidden');
+      ghost.style.left = `${e.clientX - 30}px`;
+      ghost.style.top = `${e.clientY - 30}px`;
+    });
+
+    el.addEventListener('pointerup', (e) => {
+      if (drag) {
+        ghost.classList.add('hidden');
+        drag.ghostMoved = true;
+        const under = document.elementFromPoint(e.clientX, e.clientY);
+        const cell = under && under.closest ? under.closest('.inv-cell') : null;
+        const target = cell && cell.dataset.kind && cell.dataset.kind !== 'result'
+          ? { kind: cell.dataset.kind, i: Number(cell.dataset.i) }
+          : null;
+        if (drag.hotRef) {
+          if (target && target.kind === 'hot') {
+            this.game.inv.hot[target.i] = drag.obj;
+            this.game.inv.hot[drag.from.i] = target.i === drag.from.i ? drag.obj : null;
+            this.game.audio.click(0.35);
+          } else {
+            // dropped anywhere else: unbind this hotkey
+            this.game.inv.hot[drag.from.i] = null;
+            this.game.audio.click(0.3);
+          }
+        } else {
+          this.dropDragged(drag, target);
+        }
+        this.game.refreshStones();
+        this.renderInventory(this.game);
+        drag = null;
+        press = null;
+        return;
+      }
+      // a press without movement is a click
+      if (press && e.target.closest('.inv-cell') === press.cell) {
+        const g = this.game;
+        if (press.kind === 'hot') {
+          g.useHotkey(press.i);
+          this.renderInventory(g);
+        } else if (press.kind === 'result') {
+          // handled below by pointerdown on result
+        }
+      }
+      press = null;
+    });
+
+    el.addEventListener('pointerdown', (e) => {
+      const cell = e.target.closest('.inv-cell');
+      if (!cell || cell.dataset.kind !== 'result') return;
+      const g = this.game;
+      const out = g.inv.craftable();
+      if (!out) return;
+      const target = g.inv.pack.indexOf(null);
+      const slot = g.inv.charms.indexOf(null);
+      const where = target >= 0 ? { kind: 'pack', i: target } : slot >= 0 ? { kind: 'charm', i: slot } : null;
+      if (!where) {
+        g.audio.deny();
+        return;
+      }
+      const made = g.inv.craft();
+      if (!made) return;
+      g.inv.place(where.kind, where.i, made);
+      g.refreshStones();
+      g.audio.shard();
+      g.flash = 0.5;
+      this.renderInventory(g);
+    });
+
+    el.addEventListener('pointercancel', () => {
+      if (drag && drag.from) {
+        const g = this.game;
+        const back = drag.from;
+        if (back.kind === 'pack') g.inv.pack[back.i] = drag.obj;
+        else if (back.kind === 'charm') g.inv.charms[back.i] = drag.obj;
+        else if (back.kind === 'work') g.inv.work[back.i] = drag.obj;
+        this.renderInventory(g);
+      }
+      drag = null;
+      press = null;
+      ghost.classList.add('hidden');
+    });
+
+    el.addEventListener('mouseover', (e) => {
+      const cell = e.target.closest('.inv-cell');
+      if (!cell) return this.hideTip();
+      const tip = cell.dataset.tip;
+      if (!tip) return this.hideTip();
+      const r = cell.getBoundingClientRect();
+      this.showTip(cell.dataset.title || '', tip, r.right + 12, r.top);
+    });
+    el.addEventListener('mouseleave', () => this.hideTip());
+  }
+
+  dropDragged(drag, target) {
+    const inv = this.game.inv;
+    if (target && inv.place(target.kind, target.i, drag.obj)) return true;
+    // nothing accepted: put it back
+    const back = drag.from;
+    if (back) {
+      if (back.kind === 'hot') { inv.hot[back.i] = drag.obj; return true; }
+      if (back.kind === 'pack') inv.pack[back.i] = drag.obj;
+      else if (back.kind === 'charm') inv.charms[back.i] = { kind: 'charm', id: drag.obj.id, lvl: drag.obj.lvl };
+      else if (back.kind === 'work') inv.work[back.i] = { id: drag.obj.id, lvl: drag.obj.lvl };
+    }
+    return false;
+  }
+
+  cellBody(o) {
+    if (!o) return '';
+    if (o.kind === 'charm') {
+      return this.glyph('charm', o.id) + `<b class="lvl">${o.lvl}</b>`;
+    }
+    const def = ITEMS[o.id];
+    return this.glyph('item', o.id) + `<em>${o.n}</em>` + (def && def.kind === 'throw' ? '<i class="throw-dot"></i>' : '');
+  }
+
+  cellTip(o) {
+    if (!o) return { title: '', tip: '' };
+    if (o.kind === 'charm') {
+      const t = CHARM_TEXT[o.id];
+      if (!t) return { title: '', tip: '' };
+      return { title: `${t.name} · ${'一二三'[o.lvl - 1]}级`, tip: charmText(o.id, o.lvl) };
+    }
+    const t = ITEM_TEXT[o.id];
+    if (!t) { console.warn('unknown item', o.id, o); return { title: '', tip: '' }; }
+    return { title: t.name, tip: t.line };
+  }
+
   renderInventory(game) {
     const inv = game.inv;
     const cells = [];
-    const open = `<div class="area-line work-line"></div>`;
-    const push = (kind, i, html, cls = '', tip = '') =>
-      cells.push(`<div class="inv-cell ${cls}" data-kind="${kind}" data-i="${i}" ${tip ? `data-tip="${tip.replace(/"/g, '&quot;')}"` : ''}>${html}</div>`);
-    const charmTip = (c) => c ? `${CHARM_TEXT[c.id].name}　其${['一', '二', '三'][c.lvl - 1] || '一'}\u00b7${charmText(c.id, c.lvl)}` : '';
-    // row 1: two work cells, an arrow, the result
-    for (let i = 0; i < 2; i++) {
-      const c = inv.work[i];
-      push('work', i, c ? this.glyph('charm', c.id) + `<b class="lvl">${c.lvl}</b>` : '', c ? 'filled charm work' : 'work', charmTip(c));
-    }
+    const push = (kind, i, o, cls = '') => {
+      const t = this.cellTip(o);
+      const tip = t.tip ? `data-tip="${t.tip.replace(/"/g, '&quot;')}" data-title="${t.title.replace(/"/g, '&quot;')}"` : '';
+      cells.push(`<div class="inv-cell ${cls}${o ? ' filled' : ''}" data-kind="${kind}" data-i="${i}" ${tip}>${this.cellBody(o)}</div>`);
+    };
+    for (let i = 0; i < 2; i++) push('work', i, inv.work[i], 'work');
+    cells.push('<div class="inv-cell arrow">→</div>');
     const out = inv.craftable();
-    cells.push(`<div class="inv-cell arrow">→</div>`);
-    push('result', 0, out ? this.glyph('charm', out.id) + `<b class="lvl">${out.lvl}</b>` : '', out ? 'filled charm result ready' : 'result',
-      out ? `${CHARM_TEXT[out.id].name}　可成\n${charmText(out.id, out.lvl)}` : '');
+    push('result', 0, out, out ? 'result ready' : 'result');
     cells.push('<div class="inv-cut work"></div>');
+    for (let i = 0; i < 4; i++) {
+      const o = inv.hot[i];
+      const t = this.cellTip(o);
+      const tip = o ? `data-tip="${t.tip.replace(/"/g, '&quot;')}" data-title="${t.title.replace(/"/g, '&quot;')}"` : '';
+      cells.push(`<div class="inv-cell hot${o ? ' filled' : ''}" data-kind="hot" data-i="${i}" ${tip}>${this.cellBody(o)}<b class="key">${i + 1}</b></div>`);
+    }
     cells.push('<div class="inv-cut hot"></div>');
-    // row 3: hotkeys
-    for (let i = 0; i < 4; i++) {
-      const h = inv.hot[i];
-      const def = h && ITEMS[h.id];
-      push('hot', i, h ? this.glyph('item', h.id) + `<b class="key">${i + 1}</b>` : `<b class="key">${i + 1}</b>`, h ? 'filled hot' : 'hot',
-        h ? `${ITEM_TEXT[h.id].name}\n${ITEM_TEXT[h.id].line}` : '');
-    }
+    for (let i = 0; i < 4; i++) push('charm', i, inv.charms[i], 'charm');
     cells.push('<div class="inv-cut charm"></div>');
-    // row 4: charms
-    for (let i = 0; i < 4; i++) {
-      const c = inv.charmAt(i);
-      push('charm', i, c ? this.glyph('charm', c.id) + `<b class="lvl">${c.lvl}</b>` : '', c ? 'filled charm' : 'charm', charmTip(c));
-    }
+    for (let i = 0; i < 6; i++) push('pack', i, inv.pack[i], 'pack');
+    for (let i = 0; i < 2; i++) cells.push('<div class="inv-cell deco"></div>');
     cells.push('<div class="inv-cut pack"></div>');
-    // rows 5-6: pack; the last cell mirrors the charm count
-    for (let i = 0; i < 8; i++) {
-      const s = inv.pack[i];
-      const def = s && ITEMS[s.id];
-      push('pack', i, s ? this.glyph('item', s.id) + `<em>${s.n}</em>` : '', s ? 'filled pack' : 'pack',
-        s ? `${ITEM_TEXT[s.id].name}\n${ITEM_TEXT[s.id].line}` : '');
-    }
-    let charmMarks = '';
-    for (const c of inv.charms) charmMarks += `<i class="c-charm l${c.lvl}"></i>`;
-    cells.push(`<div class="inv-cell charm-count">${charmMarks}</div>`);
     this.invPanel.innerHTML = `<div class="inv-grid">${cells.join('')}</div>`;
   }
 

@@ -305,7 +305,7 @@ export class Renderer {
     // ---- throwables: aiming fan and flight trails ---------------------------
     if (game.player) {
       const p = game.player;
-      const showAim = game.activeItem || (game.inv && game.inv.stones > 0);
+      const showAim = !!game.activeItem || (game.inv && game.inv.stones > 0);
       if (showAim) {
         const r = this;
         const ax = game.camX + ((game.msx || r.cw / 2) - r.cw / 2) / r.scale;

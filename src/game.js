@@ -316,7 +316,8 @@ export class Game {
     const def = ITEMS[slot.id];
     if (!def) return;
     if (def.kind === 'throw') {
-      this.activeItem = slot.id;
+      const id = slot.id;
+      this.activeItem = this.activeItem === id ? null : id;
       this.audio.click(0.4);
       return;
     }
@@ -385,7 +386,8 @@ export class Game {
     });
     if (opts.noise) this.throws[this.throws.length - 1].noise = opts.noise;
     if (!opts.free) this.inv.consume(id);
-    this.activeItem = null;
+    const still = this.inv.pack.some((sl) => sl && sl.kind === 'item' && sl.id === id);
+    if (!still) this.activeItem = null;
   }
 
   updateThrows(dt) {
@@ -970,6 +972,7 @@ export class Game {
         this.stepEcho(p.x, p.y, '255, 205, 110', { count: 26, speed: 360, life: 0.6 });
         this.nearLoot = null;
         this.ui.hideTip();
+        this.maybeGuide('bag', '按下 Tab 键打开背包');
         if (it.id === 'stone' || (it.kind === 'item' && ITEMS[it.id] && ITEMS[it.id].kind === 'throw')) {
           this.maybeGuide('throw', '鼠标选择角度以丢出');
         }
