@@ -30,6 +30,7 @@ export class UI {
           <div class="rule"></div>
           <p class="tagline">你什么都看不见。<span>黑暗在听。</span></p>
           <button class="btn primary" id="btn-start">进入黑暗</button>
+          <div class="grid-label">或回到一间旧密室</div>
           <div class="chamber-grid" id="chamber-grid"></div>
           <div class="hints">
             <span><b>WASD</b> 移动</span>
@@ -38,7 +39,7 @@ export class UI {
             <span><b>Shift</b> 奔跑</span>
           </div>
         </div>
-        <div class="title-foot">v0.2 · 一个关于声音的实验</div>
+        <div class="title-foot">v0.3.2 · 一个关于声音的实验</div>
       </section>
 
       <section class="screen pause-screen hidden" id="scr-pause">
@@ -130,6 +131,7 @@ export class UI {
       dead: $('scr-dead'),
       clear: $('scr-clear'),
       victory: $('scr-victory'),
+      clearPanel: $('scr-clear'),
       hud: $('hud'),
       hudNum: $('hud-num'),
       hudTitle: $('hud-title'),
@@ -288,6 +290,33 @@ export class UI {
       <div><span>最佳总用时</span><b>${keys.length ? fmtTime(total) : '—'}</b></div>
       <div><span>声呐</span><b>${pings} 次</b></div>
     `;
+  }
+
+  /** Crossing into a new neighbourhood of the same cave. No fanfare, just a
+   *  name, the way a place tells you where you are. */
+  setSector(num, title) {
+    this.el.hudNum.textContent = num;
+    this.el.hudTitle.textContent = title;
+    this.el.hudTitle.classList.remove('pulse');
+    void this.el.hudTitle.offsetWidth;
+    this.el.hudTitle.classList.add('pulse');
+  }
+
+  showWorldVictory({ time, pings, best, isRecord, shards }) {
+    this.el.hud.classList.add('hidden');
+    this.showScreen('victory');
+    const panel = this.el.victory.querySelector('.panel');
+    panel.querySelector('.panel-kicker').textContent = 'THE NEST IS QUIET';
+    panel.querySelector('.panel-sub').textContent =
+      '整座巢都安静下来了。你走完了它，没有让它听见最后一次。';
+    this.el.victoryStats.innerHTML = `
+      <div><span>用时</span><b>${fmtTime(time)}</b></div>
+      <div><span>声呐</span><b>${pings} 次</b></div>
+      <div><span>碎片</span><b>${shards} 块</b></div>
+      <div><span>最佳</span><b>${best ? fmtTime(best.time) : '—'}</b></div>
+    `;
+    const kicker = panel.querySelector('.panel-kicker');
+    if (isRecord) kicker.innerHTML = 'THE NEST IS QUIET <span class="record-badge">新纪录</span>';
   }
 
   // ------------------------------------------------------------------- hud

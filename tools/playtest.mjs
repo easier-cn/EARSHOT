@@ -246,6 +246,48 @@ async function main() {
       after: { open: g.exitOpen, echoHeard: g.echoHeard, echoes: g.echoRings.length },
     };
   })()`);
+  // The continuous world: sectors rename themselves as you cross them, all
+  // shards still gate the exit, and the echo door still needs an answer.
+  await send('Page.navigate', { url: BASE + '?world=1&static=1' });
+  await sleep(1500);
+  report.world = await evaluate(`(async () => {
+    const g = window.__hush;
+    const step = (ms) => new Promise((r) => setTimeout(r, ms || 60));
+    if (!g.worldMode) return { error: 'world mode did not start: ' + g.state };
+    const total = g.totalShards;
+    const startSector = g.sector;
+    const ch = g.level.size.h / 4;
+    const cw = g.level.size.w / 2;
+    g.player.x = cw * 0.5;
+    g.player.y = ch * 3.5;
+    await step(150);
+    const crossed = { sector: g.sector, num: document.getElementById('hud-num').textContent };
+    for (let guard = 0; guard < 40 && g.shards.length; guard++) {
+      g.player.x = g.shards[0].x;
+      g.player.y = g.shards[0].y;
+      await step(50);
+    }
+    const before = { left: g.shards.length, open: g.exitOpen };
+    const m = g.skitters.reduce((best, s) => {
+      const d = Math.hypot(s.x - g.level.exit.x, s.y - g.level.exit.y);
+      return !best || d < best.d ? { s, d } : best;
+    }, null);
+    g.player.x = m.s.x + 110;
+    g.player.y = m.s.y;
+    g.charges = 3;
+    g.firePing();
+    await step(2600);
+    const open = g.exitOpen;
+    g.player.x = g.level.exit.x;
+    g.player.y = g.level.exit.y;
+    await step(300);
+    return {
+      total, startSector, crossed, before, open,
+      state: g.state,
+      panel: !document.getElementById('scr-victory').classList.contains('hidden'),
+      cleared: !!g.progress.worldCleared,
+    };
+  })()`);
   report.errors = exceptions;
   console.log(JSON.stringify(report, null, 2));
 }

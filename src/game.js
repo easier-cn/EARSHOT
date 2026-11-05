@@ -156,6 +156,7 @@ export class Game {
 
   startBest() {
     if (this.state !== 'title') return;
+    if (this.startWorld()) return;
     const idx = clamp((this.progress.unlocked || 1) - 1, 0, CHAMBERS.length - 1);
     this.startChamber(idx);
   }
@@ -195,8 +196,14 @@ export class Game {
     this.flash = 0;
     this.deathT = 0;
     this.denyCooldown = 0;
+    this.sector = sectorOf(this.player.x, this.player.y, level);
     this.state = 'playing';
-    this.ui.showGame(0, { num: '◈', title: '低语之巢', shards: this.totalShards, intro: '' });
+    this.ui.showGame(0, {
+      num: CHAMBERS[this.sector].num,
+      title: CHAMBERS[this.sector].title,
+      shards: this.totalShards,
+      intro: '',
+    });
     return true;
   }
 
@@ -489,6 +496,15 @@ export class Game {
       }
     }
 
+    if (this.worldMode) {
+      const sec = sectorOf(p.x, p.y, L);
+      if (sec !== this.sector) {
+        this.sector = sec;
+        const cfg = CHAMBERS[sec];
+        this.ui.setSector(cfg.num, cfg.title);
+      }
+    }
+
     this.danger = this.hunters.length
       ? clamp(1 - (nearest - 55) / 300, 0, 1)
       : 0;
@@ -686,6 +702,25 @@ export class Game {
 
   complete() {
     if (this.state !== 'playing') return;
+    if (this.worldMode) {
+      const time = Math.max(0, this.levelTime);
+      const prev = this.progress.worldBest;
+      const isRecord = !prev || time < prev.time;
+      if (isRecord) this.progress.worldBest = { time, pings: this.pingsUsed };
+      this.progress.worldCleared = true;
+      this.saveProgress();
+      this.state = 'victory';
+      this.audio.clear();
+      this.ui.dismiss();
+      this.ui.showWorldVictory({
+        time,
+        pings: this.pingsUsed,
+        best: this.progress.worldBest,
+        isRecord,
+        shards: this.collected,
+      });
+      return;
+    }
     this.state = 'complete';
     this.audio.clear();
     const cleared = new Set(this.progress.cleared);

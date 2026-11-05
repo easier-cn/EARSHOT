@@ -3,6 +3,21 @@
 All notable changes to HUSH. The format follows [Keep a Changelog](https://keepachangelog.com/),
 and the game follows [SemVer](https://semver.org/).
 
+## [0.3.3] - 2026-11-05
+
+### Changed
+- **The continuous cave is now the main game.** "进入黑暗" drops you into the
+  37-room nest instead of chamber I; the eight old chambers remain below the
+  title as a legacy grid.
+- Crossing one of the eight sectors renames the HUD in place (no pause, no
+  load): the cave tells you where you are one word at a time.
+- Finishing the nest has its own ending panel with best time and sonar count,
+  saved separately as `worldBest` / `worldCleared`.
+
+### Added
+- Playtest runs the whole nest end to end: sector crossing, all 16 shards,
+  echo door refusing to open, opening after an answer, victory panel, save.
+
 ## [0.3.2] - 2026-11-05
 
 ### Added

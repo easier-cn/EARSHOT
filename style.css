@@ -625,3 +625,17 @@ kbd {
   animation: none !important;
   transition: none !important;
 }
+
+.hud-title.pulse { animation: hud-pulse 0.9s ease; }
+@keyframes hud-pulse {
+  0% { opacity: 0; transform: translateY(-3px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.grid-label {
+  margin: 18px 0 8px;
+  font-size: 10px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--ink-dim, #55605f);
+}

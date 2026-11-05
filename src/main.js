@@ -75,6 +75,15 @@ if (doc) {
       game.victory();
     } else if (doc === 'pause') {
       game.pause();
+    } else if (doc === 'worldwin') {
+      game.startWorld();
+      game.shards = [];
+      game.collected = game.totalShards;
+      game.echoHeard = true;
+      game.exitOpen = true;
+      game.levelTime = 421;
+      game.pingsUsed = 37;
+      game.complete();
     } else if (doc === 'echo') {
       game.startChamber(5);
       const m = game.skitters[0];

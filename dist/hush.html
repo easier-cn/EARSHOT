@@ -639,6 +639,20 @@ kbd {
   transition: none !important;
 }
 
+.hud-title.pulse { animation: hud-pulse 0.9s ease; }
+@keyframes hud-pulse {
+  0% { opacity: 0; transform: translateY(-3px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.grid-label {
+  margin: 18px 0 8px;
+  font-size: 10px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--ink-dim, #55605f);
+}
+
 </style>
   </head>
   <body>
@@ -2603,6 +2617,7 @@ class UI {
           <div class="rule"></div>
           <p class="tagline">你什么都看不见。<span>黑暗在听。</span></p>
           <button class="btn primary" id="btn-start">进入黑暗</button>
+          <div class="grid-label">或回到一间旧密室</div>
           <div class="chamber-grid" id="chamber-grid"></div>
           <div class="hints">
             <span><b>WASD</b> 移动</span>
@@ -2611,7 +2626,7 @@ class UI {
             <span><b>Shift</b> 奔跑</span>
           </div>
         </div>
-        <div class="title-foot">v0.2 · 一个关于声音的实验</div>
+        <div class="title-foot">v0.3.2 · 一个关于声音的实验</div>
       </section>
 
       <section class="screen pause-screen hidden" id="scr-pause">
@@ -2703,6 +2718,7 @@ class UI {
       dead: $('scr-dead'),
       clear: $('scr-clear'),
       victory: $('scr-victory'),
+      clearPanel: $('scr-clear'),
       hud: $('hud'),
       hudNum: $('hud-num'),
       hudTitle: $('hud-title'),
@@ -2861,6 +2877,33 @@ class UI {
       <div><span>最佳总用时</span><b>${keys.length ? fmtTime(total) : '—'}</b></div>
       <div><span>声呐</span><b>${pings} 次</b></div>
     `;
+  }
+
+  /** Crossing into a new neighbourhood of the same cave. No fanfare, just a
+   *  name, the way a place tells you where you are. */
+  setSector(num, title) {
+    this.el.hudNum.textContent = num;
+    this.el.hudTitle.textContent = title;
+    this.el.hudTitle.classList.remove('pulse');
+    void this.el.hudTitle.offsetWidth;
+    this.el.hudTitle.classList.add('pulse');
+  }
+
+  showWorldVictory({ time, pings, best, isRecord, shards }) {
+    this.el.hud.classList.add('hidden');
+    this.showScreen('victory');
+    const panel = this.el.victory.querySelector('.panel');
+    panel.querySelector('.panel-kicker').textContent = 'THE NEST IS QUIET';
+    panel.querySelector('.panel-sub').textContent =
+      '整座巢都安静下来了。你走完了它，没有让它听见最后一次。';
+    this.el.victoryStats.innerHTML = `
+      <div><span>用时</span><b>${fmtTime(time)}</b></div>
+      <div><span>声呐</span><b>${pings} 次</b></div>
+      <div><span>碎片</span><b>${shards} 块</b></div>
+      <div><span>最佳</span><b>${best ? fmtTime(best.time) : '—'}</b></div>
+    `;
+    const kicker = panel.querySelector('.panel-kicker');
+    if (isRecord) kicker.innerHTML = 'THE NEST IS QUIET <span class="record-badge">新纪录</span>';
   }
 
   // ------------------------------------------------------------------- hud
@@ -3058,6 +3101,7 @@ class Game {
 
   startBest() {
     if (this.state !== 'title') return;
+    if (this.startWorld()) return;
     const idx = clamp((this.progress.unlocked || 1) - 1, 0, CHAMBERS.length - 1);
     this.startChamber(idx);
   }
@@ -3097,8 +3141,14 @@ class Game {
     this.flash = 0;
     this.deathT = 0;
     this.denyCooldown = 0;
+    this.sector = sectorOf(this.player.x, this.player.y, level);
     this.state = 'playing';
-    this.ui.showGame(0, { num: '◈', title: '低语之巢', shards: this.totalShards, intro: '' });
+    this.ui.showGame(0, {
+      num: CHAMBERS[this.sector].num,
+      title: CHAMBERS[this.sector].title,
+      shards: this.totalShards,
+      intro: '',
+    });
     return true;
   }
 
@@ -3391,6 +3441,15 @@ class Game {
       }
     }
 
+    if (this.worldMode) {
+      const sec = sectorOf(p.x, p.y, L);
+      if (sec !== this.sector) {
+        this.sector = sec;
+        const cfg = CHAMBERS[sec];
+        this.ui.setSector(cfg.num, cfg.title);
+      }
+    }
+
     this.danger = this.hunters.length
       ? clamp(1 - (nearest - 55) / 300, 0, 1)
       : 0;
@@ -3588,6 +3647,25 @@ class Game {
 
   complete() {
     if (this.state !== 'playing') return;
+    if (this.worldMode) {
+      const time = Math.max(0, this.levelTime);
+      const prev = this.progress.worldBest;
+      const isRecord = !prev || time < prev.time;
+      if (isRecord) this.progress.worldBest = { time, pings: this.pingsUsed };
+      this.progress.worldCleared = true;
+      this.saveProgress();
+      this.state = 'victory';
+      this.audio.clear();
+      this.ui.dismiss();
+      this.ui.showWorldVictory({
+        time,
+        pings: this.pingsUsed,
+        best: this.progress.worldBest,
+        isRecord,
+        shards: this.collected,
+      });
+      return;
+    }
     this.state = 'complete';
     this.audio.clear();
     const cleared = new Set(this.progress.cleared);
@@ -3753,6 +3831,15 @@ if (doc) {
       game.victory();
     } else if (doc === 'pause') {
       game.pause();
+    } else if (doc === 'worldwin') {
+      game.startWorld();
+      game.shards = [];
+      game.collected = game.totalShards;
+      game.echoHeard = true;
+      game.exitOpen = true;
+      game.levelTime = 421;
+      game.pingsUsed = 37;
+      game.complete();
     } else if (doc === 'echo') {
       game.startChamber(5);
       const m = game.skitters[0];
