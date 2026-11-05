@@ -468,7 +468,7 @@ kbd {
   position: absolute;
   inset: 0;
   background: radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(255, 30, 30, 0.5) 100%);
-  opacity: calc(var(--danger, 0) * 0.5);
+  opacity: calc(var(--danger, 0) * 0.32);
   transition: opacity 0.2s linear;
   pointer-events: none;
 }
@@ -1561,7 +1561,7 @@ class Hunter {
           const pan = Math.max(-1, Math.min(1, rel / 380));
           game.audio.hunterStep(pan, Math.min(1, 1.15 - dist / 640));
         }
-        game.stepEcho?.(this.x, this.y);
+        game.stepEcho?.(this.x, this.y, '255, 70, 70');
       }
     }
   }
@@ -3510,7 +3510,7 @@ class Game {
       this.audio.click(0.4);
       if (this.sneak) this.audio.noise({ dur: 0.25, gain: 0.01, type: 'lowpass', freq: 300, send: 0.4 });
     }
-    this.blind = this.sneak;
+    this.blind = false; // sneaking is silence, not blindness: you still see every line
     const creeping = this.sneak;
     const run = false;
     const move = this.debugMove || this.input.moveVector();
@@ -4043,6 +4043,16 @@ const canvas = document.getElementById('game');
 const game = new Game(canvas, document.getElementById('ui'));
 window.__hush = game;
 if (params.has('edit')) setTimeout(() => game.openEditor(), 60);
+if (params.has('hunt')) {
+  setTimeout(() => {
+    game.startChamber(1);
+    const h = game.hunters[0];
+    h.x = game.player.x + 230;
+    h.y = game.player.y + 40;
+    h.hear(game.player.x, game.player.y, 0.05);
+    game.debugSimulate(1.8, {});
+  }, 700);
+}
 if (params.has('debug')) {
   setTimeout(() => {
     game.debugMode = true;

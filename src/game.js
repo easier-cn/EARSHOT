@@ -509,7 +509,7 @@ export class Game {
       this.audio.click(0.4);
       if (this.sneak) this.audio.noise({ dur: 0.25, gain: 0.01, type: 'lowpass', freq: 300, send: 0.4 });
     }
-    this.blind = this.sneak;
+    this.blind = false; // sneaking is silence, not blindness: you still see every line
     const creeping = this.sneak;
     const run = false;
     const move = this.debugMove || this.input.moveVector();

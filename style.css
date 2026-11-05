@@ -455,7 +455,7 @@ kbd {
   position: absolute;
   inset: 0;
   background: radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(255, 30, 30, 0.5) 100%);
-  opacity: calc(var(--danger, 0) * 0.5);
+  opacity: calc(var(--danger, 0) * 0.32);
   transition: opacity 0.2s linear;
   pointer-events: none;
 }

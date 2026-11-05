@@ -134,11 +134,10 @@ async function main() {
   await key('keyUp', 'KeyD', 'd', 68);
   await sleep(120);
 
-  // Shift is a toggle: silent and blind, and the pulse is refused.
+  // Shift is HELD: silent, but still seeing every line; the pulse is refused.
   await key('keyDown', 'ShiftLeft', 'Shift', 16);
-  await key('keyUp', 'ShiftLeft', 'Shift', 16);
-  await sleep(200);
-  report.sneakOn = await evaluate('window.__hush.sneak === true && window.__hush.blind === true');
+  await sleep(220);
+  report.sneakOn = await evaluate('window.__hush.sneak === true && window.__hush.blind === false');
   const cSneak = await evaluate('window.__hush.charges');
   await key('keyDown', 'Space', ' ', 32);
   await key('keyUp', 'Space', ' ', 32);
@@ -148,7 +147,6 @@ async function main() {
   await sleep(420);
   report.creepSlow = await evaluate('window.__hush.player.speed <= 60');
   await key('keyUp', 'KeyD', 'd', 68);
-  await key('keyDown', 'ShiftLeft', 'Shift', 16);
   await key('keyUp', 'ShiftLeft', 'Shift', 16);
   await sleep(150);
   report.sneakOff = await evaluate('window.__hush.sneak === false');

@@ -209,7 +209,7 @@ export class Hunter {
           const pan = Math.max(-1, Math.min(1, rel / 380));
           game.audio.hunterStep(pan, Math.min(1, 1.15 - dist / 640));
         }
-        game.stepEcho?.(this.x, this.y);
+        game.stepEcho?.(this.x, this.y, '255, 70, 70');
       }
     }
   }

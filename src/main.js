@@ -19,6 +19,16 @@ const canvas = document.getElementById('game');
 const game = new Game(canvas, document.getElementById('ui'));
 window.__hush = game;
 if (params.has('edit')) setTimeout(() => game.openEditor(), 60);
+if (params.has('hunt')) {
+  setTimeout(() => {
+    game.startChamber(1);
+    const h = game.hunters[0];
+    h.x = game.player.x + 230;
+    h.y = game.player.y + 40;
+    h.hear(game.player.x, game.player.y, 0.05);
+    game.debugSimulate(1.8, {});
+  }, 700);
+}
 if (params.has('debug')) {
   setTimeout(() => {
     game.debugMode = true;
