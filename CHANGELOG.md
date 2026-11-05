@@ -3,6 +3,15 @@
 All notable changes to HUSH. The format follows [Keep a Changelog](https://keepachangelog.com/),
 and the game follows [SemVer](https://semver.org/).
 
+## [0.2.2] - 2026-11-05
+
+### Added
+- `tools/pressure.mjs`: simulates a ghost walking the shortest route with real
+  hunter hearing and contact, across three play styles, to measure how hard the
+  hunters actually push. Findings written into DESIGN.md.
+- `tools/perf.mjs`: rAF frame-time probe for the heaviest chamber (5 hunters,
+  214 wall segments, pings every 120ms). p95 = 16.7ms, 60fps steady.
+
 ## [0.2.1] - 2026-11-05
 
 ### Added
