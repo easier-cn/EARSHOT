@@ -13,6 +13,7 @@ window.addEventListener('error', (e) => {
 });
 
 const params = new URLSearchParams(location.search);
+  if (params.has('edit')) setTimeout(() => game.openEditor(), 60);
 if (params.has('static')) document.documentElement.classList.add('no-anim');
 
 const canvas = document.getElementById('game');

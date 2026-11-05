@@ -6,6 +6,8 @@ const GLOW_RGB = '80, 210, 198';
 const AMBER = '255, 196, 107';
 const RED = '255, 86, 86';
 const TEAL = '127, 227, 212';
+const GOLD = '255, 205, 110';
+const GREEN = '140, 240, 170';
 
 const BUCKETS = 12;
 
@@ -123,8 +125,10 @@ export class Renderer {
     ctx.scale(this.scale, this.scale);
 
     // ---- sonar: sparks fly out, bounce off walls, leave short comet tails ---
-    const rays = game.rays || [];
-    const contacts = game.contacts || [];
+    // Stealth is silence, and silence is blindness: nothing renders at all.
+    const vision = !game.blind;
+    const rays = vision ? game.rays || [] : [];
+    const contacts = vision ? game.contacts || [] : [];
     if (rays.length || contacts.length) {
       ctx.globalCompositeOperation = 'lighter';
       ctx.lineCap = 'round';
@@ -133,7 +137,11 @@ export class Renderer {
         const c = contacts[i];
         const k = Math.max(0, 1 - (now - c.t) / 1.7);
         if (k <= 0.02) continue;
-        ctx.fillStyle = `rgba(150, 246, 232, ${k * 0.5})`;
+        const col = c.kind === 'shard' ? '255,205,110'
+          : c.kind === 'exit' ? '140,240,170'
+            : (c.kind === 'hunter' || c.kind === 'skitter') ? '255,86,86'
+              : '150,246,232';
+        ctx.fillStyle = `rgba(${col}, ${k * 0.55})`;
         ctx.beginPath();
         ctx.arc(c.x, c.y, 1.4 + k * 1.3, 0, Math.PI * 2);
         ctx.fill();
@@ -161,7 +169,7 @@ export class Renderer {
             ctx.moveTo(pts[i0].x, pts[i0].y);
             for (let j = i0 + 1; j <= i1; j++) ctx.lineTo(pts[j].x, pts[j].y);
             if (b === batches - 1) ctx.lineTo(r.x, r.y);
-            ctx.strokeStyle = `rgba(150, 246, 232, ${ta})`;
+            ctx.strokeStyle = `rgba(${r.tint || '150,246,232'}, ${ta})`;
             ctx.lineWidth = 0.8 + ta * 1.6;
             ctx.stroke();
           }
@@ -190,17 +198,20 @@ export class Renderer {
 
     // ---- shards -------------------------------------------------------------
     for (const sh of game.shards) {
-      const lit = this._pointBrightness(sh.x, sh.y, game.pings, now, level);
-      const near = Math.max(0, 1 - Math.hypot(sh.x - game.camX, sh.y - game.camY) / 90) * 0.35;
-      const a = clamp(Math.max(lit, near), 0, 1);
+      if (!vision) continue;
+      const seen = now - (sh.seenAt ?? -99);
+      const px = game.player ? game.player.x : game.camX;
+      const py = game.player ? game.player.y : game.camY;
+      const near = Math.max(0, 1 - Math.hypot(sh.x - px, sh.y - py) / 46) * 0.22;
+      const a = clamp(seen < 2.6 ? 0.35 + 0.65 * (1 - seen / 2.6) : near, 0, 1);
       if (a < 0.02) continue;
       const pulse = 0.75 + 0.25 * Math.sin(now * 2.4 + sh.id * 1.7);
       ctx.save();
       ctx.translate(sh.x, sh.y);
       ctx.rotate(Math.PI / 4);
-      ctx.fillStyle = `rgba(${AMBER}, ${0.16 * a * pulse})`;
+      ctx.fillStyle = `rgba(${GOLD}, ${0.16 * a * pulse})`;
       ctx.fillRect(-12, -12, 24, 24);
-      ctx.strokeStyle = `rgba(${AMBER}, ${0.9 * a * pulse})`;
+      ctx.strokeStyle = `rgba(${GOLD}, ${0.9 * a * pulse})`;
       ctx.lineWidth = 1.6;
       ctx.strokeRect(-6.5, -6.5, 13, 13);
       ctx.fillStyle = `rgba(255, 240, 210, ${0.9 * a * pulse})`;
@@ -209,18 +220,21 @@ export class Renderer {
     }
 
     // ---- exit ---------------------------------------------------------------
-    if (game.exitOpen) {
-      this._drawExit(level.exit.x, level.exit.y, 0.9, AMBER, now, true);
-    } else {
-      const b = this._pointBrightness(level.exit.x, level.exit.y, game.pings, now, level);
-      this._drawExit(level.exit.x, level.exit.y, Math.max(b, 0.12), TEAL, now, false);
+    if (vision) {
+      const eSeen = now - (level.exit.seenAt ?? -99);
+      if (game.exitOpen) {
+        this._drawExit(level.exit.x, level.exit.y, 0.9, GREEN, now, true);
+      } else if (eSeen < 2.6) {
+        this._drawExit(level.exit.x, level.exit.y, 0.3 + 0.6 * (1 - eSeen / 2.6), GREEN, now, false);
+      }
     }
 
     // ---- hunters ------------------------------------------------------------
     for (const h of game.hunters) {
-      const b = this._pointBrightness(h.x, h.y, game.pings, now, level);
-      if (b < 0.035) continue;
-      const a = clamp(b * 1.8, 0.08, 1);
+      if (!vision) continue;
+      const seen = now - (h.seenAt ?? -99);
+      if (seen > 2.3) continue;
+      const a = clamp(0.35 + 0.75 * (1 - seen / 2.3), 0.1, 1);
       const wobble = 1 + 0.04 * Math.sin(now * 9 + h.id);
       ctx.save();
       ctx.translate(h.x, h.y);
@@ -260,10 +274,11 @@ export class Renderer {
 
     // ---- skitters -----------------------------------------------------------
     for (const sk of game.skitters || []) {
-      const b = this._pointBrightness(sk.x, sk.y, game.pings, now, level);
+      if (!vision) continue;
+      const seen = now - (sk.seenAt ?? -99);
       const revealed = (sk.revealT || 0) > 0;
-      if (b < 0.045 && !revealed) continue;
-      const a = clamp(revealed ? Math.max(0.4, b * 1.9) : b * 1.9, 0.1, 1);
+      if (seen > 2.3 && !revealed) continue;
+      const a = revealed ? 0.85 : clamp(0.35 + 0.75 * (1 - seen / 2.3), 0.1, 1);
       const stride = Math.sin(sk.wobble) * 2.2;
       ctx.save();
       ctx.translate(sk.x, sk.y);
@@ -337,31 +352,6 @@ export class Renderer {
         ctx.arc(p.x, p.y, rr, 0, Math.PI * 2);
         ctx.stroke();
         ctx.setLineDash([]);
-        // directional chevrons
-        const targets = [];
-        for (const h of game.hunters) targets.push({ x: h.x, y: h.y, color: RED, danger: true });
-        for (const s of game.shards) targets.push({ x: s.x, y: s.y, color: AMBER, danger: false });
-        targets.push({ x: level.exit.x, y: level.exit.y, color: TEAL, danger: false });
-        for (const t of targets) {
-          const dx = t.x - p.x;
-          const dy = t.y - p.y;
-          const d = Math.hypot(dx, dy);
-          if (d > 560 || d < 1) continue;
-          const a = clamp(1 - d / 560, 0, 1) * (t.danger ? 0.85 : 0.5);
-          const ang = Math.atan2(dy, dx);
-          const r = 54;
-          ctx.save();
-          ctx.translate(p.x + Math.cos(ang) * r, p.y + Math.sin(ang) * r);
-          ctx.rotate(ang);
-          ctx.fillStyle = `rgba(${t.color}, ${a})`;
-          ctx.beginPath();
-          ctx.moveTo(7, 0);
-          ctx.lineTo(-2, -3.4);
-          ctx.lineTo(-2, 3.4);
-          ctx.closePath();
-          ctx.fill();
-          ctx.restore();
-        }
       }
     }
 

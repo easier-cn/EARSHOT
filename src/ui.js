@@ -1,21 +1,29 @@
-import { CHAMBERS } from './chambers.js';
+// The interface never speaks. Every message is a shape, a pulse, or a change
+// in colour — because in this game words would do the listening for you.
 
-const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'];
-
-const fmtTime = (s) => {
-  const m = Math.floor(s / 60);
-  const sec = Math.floor(s % 60);
-  return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+const ICON = {
+  play: '<svg viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z"/></svg>',
+  resume: '<svg viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z"/></svg>',
+  retry: '<svg viewBox="0 0 24 24"><path d="M12 4a8 8 0 1 1-7.4 5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 3v6h6" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
+  home: '<svg viewBox="0 0 24 24"><path d="M5 11l7-6 7 6v8H5z" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
+  next: '<svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
+  sound: '<svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 8a5 5 0 0 1 0 8" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>',
+  muted: '<svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l5 6M22 9l-5 6" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>',
+  pencil: '<svg viewBox="0 0 24 24"><path d="M4 20l4-1 11-11-3-3L5 16z" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
+  bars: '<svg viewBox="0 0 24 24"><rect x="7" y="5" width="3" height="14"/><rect x="14" y="5" width="3" height="14"/></svg>',
 };
+
+function icon(name, cls = '') {
+  return `<span class="ico ${cls}" aria-hidden="true">${ICON[name]}</span>`;
+}
 
 export class UI {
   constructor(root, game) {
     this.root = root;
     this.game = game;
-    this.screens = {};
-    this.toastTimer = 0;
     this.introTimer = 0;
-    this.lastHud = '';
+    this.toastTimer = 0;
+    this.build();
   }
 
   build() {
@@ -25,357 +33,295 @@ export class UI {
 
       <section class="screen title-screen" id="scr-title">
         <div class="title-inner">
-          <div class="eyebrow">A SONAR STEALTH GAME</div>
-          <h1 class="logo">HUSH</h1>
-          <div class="rule"></div>
-          <p class="tagline">你什么都看不见。<span>黑暗在听。</span></p>
-          <button class="btn primary" id="btn-start">进入黑暗</button>
-          <div class="nest-line" id="nest-line"></div>
-          <div class="grid-label">或回到一间旧密室</div>
-          <div class="chamber-grid" id="chamber-grid"></div>
-          <div class="hints">
-            <span><b>WASD</b> 移动</span>
-            <span><b>左键</b> 声呐</span>
-            <span><b>空格</b> 聆听</span>
-            <span><b>Shift</b> 奔跑</span>
+          <svg class="emblem" viewBox="0 0 160 160" aria-hidden="true">
+            <circle cx="80" cy="80" r="3.2" class="dot"/>
+            <path class="arc a1" d="M80 26a54 54 0 0 1 0 108"/>
+            <path class="arc a2" d="M80 12a68 68 0 0 1 0 136"/>
+            <path class="arc a3" d="M80 44a36 36 0 0 1 0 72"/>
+          </svg>
+          <div class="start-row">
+            <button class="btn primary" id="btn-start" aria-label="进入">${icon('play')}</button>
+            <button class="btn build" id="btn-edit" aria-label="造图">${icon('pencil')}</button>
           </div>
+          <div class="nest-glyph" id="nest-glyph"></div>
+          <div class="chamber-grid" id="chamber-grid"></div>
         </div>
-        <div class="title-foot">v0.3.7 · 一个关于声音的实验</div>
+        <div class="title-foot" id="title-foot"></div>
       </section>
 
       <section class="screen pause-screen hidden" id="scr-pause">
         <div class="panel">
-          <div class="panel-kicker">PAUSED</div>
-          <h2>暂停</h2>
-          <p class="panel-sub">黑暗在等你。</p>
-          <div class="hints compact">
-            <span><b>WASD</b> 移动</span>
-            <span><b>左键</b> 声呐</span>
-            <span><b>站定+空格</b> 聆听</span>
-            <span><b>Shift</b> 奔跑</span>
-          </div>
-          <div class="panel-actions">
-            <button class="btn primary" id="btn-resume">继续</button>
-            <button class="btn" id="btn-restart">重来</button>
-            <button class="btn" id="btn-pause-mute">静音</button>
-            <button class="btn ghost" id="btn-title">返回标题</button>
+          <div class="panel-glyph">${ICON.bars}</div>
+          <div class="icon-row">
+            <button class="btn icon" id="btn-resume" aria-label="继续">${icon('resume')}</button>
+            <button class="btn icon" id="btn-restart" aria-label="重来">${icon('retry')}</button>
+            <button class="btn icon" id="btn-mute" aria-label="静音">${icon('sound')}</button>
+            <button class="btn icon" id="btn-title" aria-label="标题">${icon('home')}</button>
           </div>
         </div>
       </section>
 
       <section class="screen dead-screen hidden" id="scr-dead">
         <div class="panel">
-          <div class="panel-kicker danger">YOU WERE HEARD</div>
-          <h2>你被听见了</h2>
-          <p class="panel-sub">黑暗记住了你的位置。</p>
-          <div class="panel-actions">
-            <button class="btn primary" id="btn-retry">再试一次 <kbd>R</kbd></button>
-            <button class="btn ghost" id="btn-dead-title">返回标题</button>
+          <svg class="panel-glyph broken" viewBox="0 0 100 100" aria-hidden="true">
+            <circle cx="50" cy="50" r="34" class="ring-broken"/>
+            <circle cx="50" cy="50" r="5" class="dot-red"/>
+          </svg>
+          <div class="deep-glyph" id="dead-deep"></div>
+          <div class="icon-row">
+            <button class="btn icon" id="btn-retry" aria-label="再试">${icon('retry')}</button>
+            <button class="btn icon" id="btn-dead-title" aria-label="标题">${icon('home')}</button>
           </div>
         </div>
       </section>
 
       <section class="screen clear-screen hidden" id="scr-clear">
         <div class="panel">
-          <div class="panel-kicker">CHAMBER SILENT</div>
-          <h2>密室已静</h2>
-          <div class="record" id="clear-record"></div>
-          <div class="stats" id="clear-stats"></div>
-          <div class="panel-actions">
-            <button class="btn primary" id="btn-next">下一间</button>
-            <button class="btn ghost" id="btn-clear-title">返回标题</button>
+          <svg class="panel-glyph" viewBox="0 0 100 100" aria-hidden="true">
+            <path class="burst" d="M50 8l7 26 20-18-8 27 27-6-22 19 26 8-27 6 18 21-26-9 2 27-17-22-17 22 2-27-26 9 18-21-27-6 26-8-22-19 27 6-8-27 20 18z"/>
+          </svg>
+          <div class="stats-glyphs" id="clear-stats"></div>
+          <div class="icon-row">
+            <button class="btn icon" id="btn-next" aria-label="下一间">${icon('next')}</button>
+            <button class="btn icon" id="btn-clear-title" aria-label="标题">${icon('home')}</button>
           </div>
         </div>
       </section>
 
       <section class="screen victory-screen hidden" id="scr-victory">
-        <div class="panel wide">
-          <div class="panel-kicker">ALL CHAMBERS SILENT</div>
-          <h2 class="victory-title">HUSH</h2>
-          <p class="panel-sub">所有密室都已安静。你学会了在黑暗里呼吸。</p>
-          <div class="stats" id="victory-stats"></div>
-          <div class="panel-actions">
-            <button class="btn primary" id="btn-victory-title">回到开头</button>
-          </div>
+        <div class="panel">
+          <svg class="panel-glyph" viewBox="0 0 100 100" aria-hidden="true">
+            <circle cx="50" cy="50" r="8" class="dot"/>
+            <circle cx="50" cy="50" r="20" class="ring-dim"/>
+            <circle cx="50" cy="50" r="32" class="ring-dim d2"/>
+            <circle cx="50" cy="50" r="43" class="ring-dim d3"/>
+          </svg>
+          <div class="stats-glyphs" id="victory-stats"></div>
+          <button class="btn icon" id="btn-victory-home" aria-label="标题">${icon('home')}</button>
         </div>
       </section>
 
       <div class="hud hidden" id="hud">
-        <div class="hud-top">
-          <div class="hud-chamber">
-            <span class="hud-label">密室</span>
-            <span class="hud-num" id="hud-num">I</span>
-            <span class="hud-title" id="hud-title">第一次呼吸</span>
-          </div>
-          <div class="hud-shards">
-            <span class="gem"></span>
-            <span id="hud-shard-count">0 / 1</span>
-          </div>
+        <div class="hud-left">
+          <span class="hud-num" id="hud-num" data-sector="I"></span>
+          <span class="hud-sector" id="hud-sector"></span>
         </div>
-        <div class="hud-bottom">
-          <div class="pips" id="hud-pips">
-            <i class="pip on"></i><i class="pip on"></i><i class="pip on"></i>
-          </div>
-          <div class="hud-hint">左键 声呐 &nbsp;·&nbsp; 空格 聆听 &nbsp;·&nbsp; Shift 奔跑</div>
+        <div class="hud-right">
+          <span class="diamond"></span>
+          <span class="shard-bar" id="hud-shards"></span>
+        </div>
+        <div class="hud-charges" id="hud-charges"></div>
+        <div class="hud-listen" id="hud-listen">
+          <svg viewBox="0 0 40 40" aria-hidden="true">
+            <path d="M14 20a6 6 0 0 1 12 0" class="l1"/>
+            <path d="M9 20a11 11 0 0 1 22 0" class="l2"/>
+          </svg>
         </div>
       </div>
-
-      <div class="listen-tag hidden" id="listen-tag">聆听中</div>
-      <div class="toast" id="toast"></div>
-      <div class="intro" id="intro"></div>
     `;
 
-    const $ = (id) => document.getElementById(id);
-    this.el = {
+    const $ = (id) => this.root.querySelector('#' + id);
+    this.scr = {
       title: $('scr-title'),
       pause: $('scr-pause'),
       dead: $('scr-dead'),
       clear: $('scr-clear'),
       victory: $('scr-victory'),
-      dead: $('scr-dead'),
-      clearPanel: $('scr-clear'),
-      hud: $('hud'),
-      hudNum: $('hud-num'),
-      hudTitle: $('hud-title'),
-      hudShard: $('hud-shard-count'),
-      hudPips: $('hud-pips'),
-      listenTag: $('listen-tag'),
-      toast: $('toast'),
-      intro: $('intro'),
-      start: $('btn-start'),
-      grid: $('chamber-grid'),
-      nest: $('nest-line'),
-      stats: $('clear-stats'),
-      record: $('clear-record'),
-      victoryStats: $('victory-stats'),
     };
-    this.screens = {
-      title: this.el.title,
-      pause: this.el.pause,
-      dead: this.el.dead,
-      clear: this.el.clear,
-      victory: this.el.victory,
-    };
+    this.hud = $('hud');
+    this.grid = $('chamber-grid');
+    this.nestGlyph = $('nest-glyph');
+    this.foot = $('title-foot');
+    this.hudNum = $('hud-num');
+    this.hudSector = $('hud-sector');
+    this.hudShards = $('hud-shards');
+    this.hudCharges = $('hud-charges');
+    this.hudListen = $('hud-listen');
+    this.clearStats = $('clear-stats');
+    this.victoryStats = $('victory-stats');
+    this.deadDeep = $('dead-deep');
 
-    const g = this.game;
-    const bind = (el, fn) => {
+    // Buttons blur themselves so Space never triggers twice.
+    const bind = (id, fn) => {
+      const el = $(id);
+      if (!el) return;
       el.addEventListener('click', (e) => {
         e.preventDefault();
-        e.stopPropagation();
         el.blur();
-        g.audio.unlock();
-        g.audio.click();
         fn();
       });
     };
-    bind(this.el.start, () => g.startBest());
-    bind($('btn-resume'), () => g.resume());
-    bind($('btn-restart'), () => g.restart());
-    bind($('btn-pause-mute'), () => {
-      const m = g.audio.toggleMute();
-      $('btn-pause-mute').textContent = m ? '开启声音' : '静音';
-    });
-    bind($('btn-title'), () => g.quitToTitle());
-    bind($('btn-retry'), () => g.restart());
-    bind($('btn-dead-title'), () => g.quitToTitle());
-    bind($('btn-next'), () => {
-      if (g.chamberIndex + 1 >= CHAMBERS.length) g.victory();
-      else g.next();
-    });
-    bind($('btn-clear-title'), () => g.quitToTitle());
-    bind($('btn-victory-title'), () => g.quitToTitle());
+    const g = this.game;
+    bind('btn-start', () => g.startBest());
+    bind('btn-edit', () => g.openEditor());
+    bind('btn-resume', () => g.resume());
+    bind('btn-restart', () => g.retry());
+    bind('btn-mute', () => g.toggleMute());
+    bind('btn-title', () => g.toTitle());
+    bind('btn-retry', () => g.retry());
+    bind('btn-dead-title', () => g.toTitle());
+    bind('btn-next', () => g.next());
+    bind('btn-clear-title', () => g.toTitle());
+    bind('btn-victory-home', () => g.toTitle());
+    this.muteBtn = $('btn-mute');
   }
 
-  // --------------------------------------------------------------- screens
   hideScreens() {
-    for (const el of Object.values(this.screens)) el.classList.add('hidden');
+    for (const s of Object.values(this.scr)) s.classList.add('hidden');
   }
 
   showScreen(name) {
     this.hideScreens();
-    const el = this.screens[name];
-    if (el) el.classList.remove('hidden');
+    this.scr[name].classList.remove('hidden');
   }
 
-  showTitle(progress) {
-    this.hideScreens();
+  showTitle(progress = {}) {
     this.showScreen('title');
-    this.el.hud.classList.add('hidden');
-    this.el.listenTag.classList.add('hidden');
-    const startBtn = this.el.start;
-    startBtn.textContent = progress.worldCleared ? '再次进入巢穴' : '进入黑暗';
-    const wb = progress.worldBest;
-    this.el.nest.textContent = progress.worldCleared
-      ? `巢穴已安静 · 最佳 ${fmtTime(wb.time)} · ${wb.pings} 次声呐`
-      : '一张连续的巢穴 · 16 块碎片 · 门在等一个回声';
-    this.el.grid.innerHTML = CHAMBERS.map((c, i) => {
-      const unlocked = i < progress.unlocked;
-      const cleared = progress.cleared.includes(i);
-      const best = progress.best && progress.best[i];
-      const label = !unlocked ? '未解锁' : best ? `最佳 ${fmtTime(best.time)}` : c.title;
-      return `<button class="chamber ${unlocked ? 'open' : 'locked'} ${cleared ? 'cleared' : ''}"
-        data-i="${i}" ${unlocked ? '' : 'disabled'} title="${label}">
-        <span>${ROMAN[i]}</span>${cleared ? '<i></i>' : ''}
-      </button>`;
-    }).join('');
-    this.el.grid.querySelectorAll('.chamber.open').forEach((btn) => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        btn.blur();
-        this.game.audio.unlock();
-        this.game.startChamber(Number(btn.dataset.i));
+    this.hideHUD();
+    this.grid.innerHTML = '';
+    const unlocked = progress.unlocked || 1;
+    const cleared = new Set(progress.cleared || []);
+    for (let i = 0; i < 8; i++) {
+      const cell = document.createElement('button');
+      cell.className = 'cell' + (i < unlocked ? '' : ' locked') + (cleared.has(i) ? ' cleared' : '');
+      // The chamber's number is drawn as bars, not written.
+      let bars = '<span class="cell-bars">';
+      for (let b = 0; b <= i; b++) bars += '<i></i>';
+      bars += '</span>';
+      cell.innerHTML = bars + (i < unlocked ? '' : '<span class="cell-slash"></span>');
+      cell.disabled = i >= unlocked;
+      cell.addEventListener('click', () => {
+        cell.blur();
+        this.game.start(i);
       });
-    });
-    setTimeout(() => startBtn.focus({ preventScroll: true }), 80);
+      this.grid.appendChild(cell);
+    }
+    this.nestGlyph.innerHTML = '';
+    for (let i = 0; i < 16; i++) {
+      const p = document.createElement('i');
+      if (progress.worldCleared) p.className = 'done';
+      this.nestGlyph.appendChild(p);
+    }
+    this.foot.innerHTML = progress.worldCleared ? `<span class="foot-rings">${icon('sound')}</span>` : '';
   }
 
-  showGame(index, cfg) {
+  showGame() {
     this.hideScreens();
-    this.el.hud.classList.remove('hidden');
-    this.el.hudNum.textContent = cfg.num;
-    this.el.hudTitle.textContent = cfg.title;
-    this.lastHud = '';
-    this.intro(cfg.intro);
-    this.el.listenTag.classList.add('hidden');
-    this.updateHUD({
-      chamber: index,
-      shards: cfg.shards,
-      total: cfg.shards,
-      charges: 3,
-      listen: false,
-      muted: this.game.audio.muted,
-      danger: 0,
-    });
+    this.hud.classList.remove('hidden');
   }
 
   hideHUD() {
-    this.el.hud.classList.add('hidden');
-    this.el.listenTag.classList.add('hidden');
+    this.hud.classList.add('hidden');
   }
 
   showPause() {
     this.showScreen('pause');
-    document.getElementById('btn-pause-mute').textContent = this.game.audio.muted ? '开启声音' : '静音';
+    this.syncMute();
   }
 
-  showDead({ sector = null, deepest = null } = {}) {
-    if (!this.screens.dead.classList.contains('hidden')) return;
-    this.hideHUD();
-    const panel = this.el.dead.querySelector('.panel');
-    const sub = panel.querySelector('.panel-sub');
-    if (sector != null && deepest != null && this.worldLabels) {
-      const name = this.worldLabels[sector];
-      sub.textContent = sector >= deepest
-        ? `你在${name}留下了声音。`
-        : `你在${name}停下了。最远到过${this.worldLabels[deepest]}。`;
-    } else {
-      sub.textContent = '黑暗记住了你的位置。';
-    }
+  showDead({ deepest = null } = {}) {
     this.showScreen('dead');
-  }
-
-  showClear({ chamber, time, pings, best, isRecord, last }) {
-    this.el.hud.classList.add('hidden');
-    this.showScreen('clear');
-    this.el.stats.innerHTML = `
-      <div><span>用时</span><b>${fmtTime(time)}</b></div>
-      <div><span>声呐</span><b>${pings} 次</b></div>
-      <div><span>碎片</span><b>${CHAMBERS[chamber].shards} / ${CHAMBERS[chamber].shards}</b></div>
-    `;
-    const bestTime = best ? fmtTime(best.time) : '—';
-    this.el.record.innerHTML = `
-      ${isRecord ? '<span class="record-badge">新纪录</span>' : ''}
-      <span>最佳 ${bestTime}${best ? ` · ${best.pings} 次声呐` : ''}</span>
-    `;
-    this.el.record.classList.toggle('fresh', !!isRecord);
-    document.getElementById('btn-next').textContent = last ? '完成旅程' : '下一间';
-  }
-
-  showVictory(progress = {}) {
-    this.el.hud.classList.add('hidden');
-    this.showScreen('victory');
-    const best = progress.best || {};
-    const keys = Object.keys(best);
-    let total = 0;
-    let pings = 0;
-    for (const k of keys) {
-      total += best[k].time;
-      pings += best[k].pings;
-    }
-    this.el.victoryStats.innerHTML = `
-      <div><span>密室</span><b>${keys.length} / ${CHAMBERS.length}</b></div>
-      <div><span>最佳总用时</span><b>${keys.length ? fmtTime(total) : '—'}</b></div>
-      <div><span>声呐</span><b>${pings} 次</b></div>
-    `;
-  }
-
-  /** Crossing into a new neighbourhood of the same cave. No fanfare, just a
-   *  name, the way a place tells you where you are. */
-  setSector(num, title) {
-    this.el.hudNum.textContent = num;
-    this.el.hudTitle.textContent = title;
-    this.el.hudTitle.classList.remove('pulse');
-    void this.el.hudTitle.offsetWidth;
-    this.el.hudTitle.classList.add('pulse');
-  }
-
-  showWorldVictory({ time, pings, best, isRecord, shards }) {
-    this.el.hud.classList.add('hidden');
-    this.showScreen('victory');
-    const panel = this.el.victory.querySelector('.panel');
-    panel.querySelector('.panel-kicker').textContent = 'THE NEST IS QUIET';
-    panel.querySelector('.panel-sub').textContent =
-      '整座巢都安静下来了。你走完了它，没有让它听见最后一次。';
-    this.el.victoryStats.innerHTML = `
-      <div><span>用时</span><b>${fmtTime(time)}</b></div>
-      <div><span>声呐</span><b>${pings} 次</b></div>
-      <div><span>碎片</span><b>${shards} 块</b></div>
-      <div><span>最佳</span><b>${best ? fmtTime(best.time) : '—'}</b></div>
-    `;
-    const kicker = panel.querySelector('.panel-kicker');
-    if (isRecord) kicker.innerHTML = 'THE NEST IS QUIET <span class="record-badge">新纪录</span>';
-  }
-
-  // ------------------------------------------------------------------- hud
-  updateHUD(d) {
-    const key = `${d.shards}|${d.charges}|${d.listen}|${d.muted}`;
-    if (key !== this.lastHud) {
-      this.lastHud = key;
-      this.el.hudShard.textContent = `${d.total - d.shards} / ${d.total}`;
-      const pips = this.el.hudPips.children;
-      for (let i = 0; i < pips.length; i++) {
-        pips[i].classList.toggle('on', i < d.charges);
+    this.hideHUD();
+    this.deadDeep.innerHTML = '';
+    if (deepest != null) {
+      const n = Math.min(8, deepest + 1);
+      for (let i = 0; i < 8; i++) {
+        const t = document.createElement('i');
+        if (i < n) t.className = 'lit';
+        this.deadDeep.appendChild(t);
       }
-      this.el.listenTag.classList.toggle('hidden', !d.listen);
     }
-    this.el.hud.style.setProperty('--danger', (d.danger || 0).toFixed(2));
   }
 
-  intro(text) {
-    this.el.intro.textContent = text;
-    this.el.intro.classList.remove('show');
-    void this.el.intro.offsetWidth;
-    this.el.intro.classList.add('show');
+  showClear({ time = 0, pings = 0, isRecord = false } = {}) {
+    this.showScreen('clear');
+    this.hideHUD();
+    this.clearStats.innerHTML = this._statRow(time, pings, isRecord);
+  }
+
+  showVictory() {
+    this.showScreen('victory');
+    this.hideHUD();
+    this.victoryStats.innerHTML = this._statRow(0, 0, false);
+  }
+
+  showWorldVictory({ time = 0, pings = 0, isRecord = false } = {}) {
+    this.showScreen('victory');
+    this.hideHUD();
+    this.victoryStats.innerHTML = this._statRow(time, pings, isRecord);
+  }
+
+  _statRow(time, pings, isRecord) {
+    // Time and pings as bars; the record as a small bright ring.
+    const tBars = Math.min(10, Math.max(1, Math.round(time / 30)));
+    const pBars = Math.min(10, Math.max(0, Math.round(pings / 4)));
+    let t = '<span class="stat"><span class="stat-bars">';
+    for (let i = 0; i < 10; i++) t += `<i class="${i < tBars ? 'on' : ''}"></i>`;
+    t += '</span></span>';
+    let p = '<span class="stat"><span class="stat-bars amber">';
+    for (let i = 0; i < 10; i++) p += `<i class="${i < pBars ? 'on' : ''}"></i>`;
+    p += '</span></span>';
+    const rec = isRecord ? '<span class="record-ring"></span>' : '';
+    return `<div class="stat-row">${t}${p}${rec}</div>`;
+  }
+
+  setSector(num) {
+    this.hudNum.dataset.sector = num;
+    this.hudNum.innerHTML = '';
+    const idx = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'].indexOf(num);
+    const n = idx < 0 ? 1 : idx + 1;
+    for (let i = 0; i < 8; i++) {
+      const d = document.createElement('i');
+      d.className = 'sector-dot';
+      if (i < n) d.classList.add('lit');
+      this.hudNum.appendChild(d);
+    }
+    this.hudNum.classList.remove('pulse');
+    void this.hudNum.offsetWidth;
+    this.hudNum.classList.add('pulse');
+  }
+
+  updateHUD({ shards = 0, total = 1, charges = 0, listen = false, danger = 0 } = {}) {
+    const collected = Math.max(0, total - shards);
+    const filled = total ? Math.round((collected / total) * 12) : 0;
+    let bar = '';
+    for (let i = 0; i < 12; i++) bar += `<i class="${i < filled ? 'on' : ''}"></i>`;
+    this.hudShards.innerHTML = bar;
+    let ch = '';
+    for (let i = 0; i < 3; i++) ch += `<i class="${i < charges ? 'on' : ''}"></i>`;
+    this.hudCharges.innerHTML = ch;
+    this.hudListen.classList.toggle('on', !!listen);
+    this.hud.classList.toggle('sneaking', !!this.game.sneak);
+    this.root.style.setProperty('--danger', String(danger || 0));
+    this.syncMute();
+  }
+
+  syncMute() {
+    if (!this.muteBtn) return;
+    const muted = this.game.audio && this.game.audio.muted;
+    this.muteBtn.innerHTML = icon(muted ? 'muted' : 'sound');
+  }
+
+  /** A shape where a sentence used to be: one soft ring. */
+  intro() {
+    this.root.classList.add('intro-ring');
     clearTimeout(this.introTimer);
-    this.introTimer = setTimeout(() => this.el.intro.classList.remove('show'), 5200);
+    this.introTimer = setTimeout(() => this.root.classList.remove('intro-ring'), 1400);
   }
 
-  toast(text) {
-    this.el.toast.textContent = text;
-    this.el.toast.classList.add('show');
+  /** Feedback without language: amber for a shard, red for a refusal. */
+  toast(kind = 'shard') {
+    const cls = kind === 'deny' ? 'flash-red' : 'flash-amber';
+    this.root.classList.add(cls);
     clearTimeout(this.toastTimer);
-    this.toastTimer = setTimeout(() => this.el.toast.classList.remove('show'), 1700);
+    this.toastTimer = setTimeout(() => this.root.classList.remove(cls), 420);
   }
 
-  // Clear transient overlays so they never sit on top of an end screen.
   dismiss() {
     clearTimeout(this.introTimer);
     clearTimeout(this.toastTimer);
-    this.el.intro.classList.remove('show');
-    this.el.toast.classList.remove('show');
+    this.root.classList.remove('intro-ring', 'flash-red', 'flash-amber');
   }
 
-  tick() {
-    /* reserved for future HUD animation */
-  }
+  tick() {}
 }

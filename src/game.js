@@ -4,6 +4,7 @@ import { Renderer } from './render.js';
 import { Input } from './input.js';
 import { AudioEngine } from './audio.js';
 import { UI } from './ui.js';
+import { Editor } from './editor.js';
 import { CHAMBERS } from './chambers.js';
 import { clamp, dist, echoPan } from './util.js';
 
@@ -15,6 +16,9 @@ const PING_LIFE = 0.9;
 const WAVE_LISTEN = 760;
 const SHARD_ECHO_RANGE = 1150;
 const SHARD_ECHO_SPEED = 1500;
+const SOUND_SPEED = 560;
+const STEP_RANGE = 215;
+const SHARD_NOISE = 330;
 const RAY_COUNT = 96;
 const RAY_SPEED = 560;
 const RAY_LIFE = 0.95;
@@ -83,6 +87,7 @@ export class Game {
     this.titlePingTimer = 0;
 
     this.ui.build();
+    this.editor = new Editor(this);
     this.ui.showTitle(this.progress);
     this.loadDemo();
 
@@ -148,6 +153,9 @@ export class Game {
     this.pings = [];
     this.rays = [];
     this.contacts = [];
+    this.sounds = [];
+    this.sneak = false;
+    this.blind = false;
     this.particles = makeDust(this.level);
     this.camX = this.level.size.w / 2;
     this.camY = this.level.size.h / 2;
@@ -200,13 +208,86 @@ export class Game {
     this.denyCooldown = 0;
     this.sector = sectorOf(this.player.x, this.player.y, level);
     this.state = 'playing';
-    this.ui.showGame(0, {
-      num: CHAMBERS[this.sector].num,
-      title: CHAMBERS[this.sector].title,
-      shards: this.totalShards,
-      intro: this.progress.worldCleared ? '' : '敲一下。墙会回答——远的碎片也会，只是晚一点。',
-    });
+    this.ui.showGame();
     return true;
+  }
+
+  /** Build mode: play the map the player drew. */
+  startCustom(data) {
+    const w = data.w;
+    const h = data.h;
+    const grid = Uint8Array.from(data.cells);
+    const toWorld = (t) => ({ x: (t.x + 0.5) * TILE, y: (t.y + 0.5) * TILE });
+    const level = {
+      w, h, tile: TILE, grid,
+      size: { w: w * TILE, h: h * TILE },
+      rooms: [],
+      spawn: toWorld(data.spawn),
+      spawnTile: { ...data.spawn },
+      exit: toWorld(data.exit),
+      exitTile: { ...data.exit },
+      shards: data.shards.map((t, i) => ({ ...toWorld(t), tile: { ...t }, id: i })),
+      hunters: data.hunters.map((t) => toWorld(t)),
+      skitters: data.skitters.map((t) => toWorld(t)),
+      seed: 'custom',
+    };
+    if (!level.shards.length) {
+      // A map with nothing to gather is a map with nothing to do.
+      level.shards = [{ ...toWorld(data.exit), tile: { ...data.exit }, id: 0 }];
+      level.shards[0].x = (data.exit.x + 0.5) * TILE - TILE * 2;
+    }
+    this.audio.unlock();
+    this.worldMode = false;
+    this.level = level;
+    this.chamberIndex = 0;
+    this.totalShards = level.shards.length;
+    this.player = new Player(level.spawn.x, level.spawn.y);
+    this.hunters = level.hunters.map((hh) => new Hunter(hh.x, hh.y));
+    this.skitters = (level.skitters || []).map((s) => new Skitter(s.x, s.y));
+    this.shards = level.shards.map((s) => ({ ...s }));
+    this.pings = [];
+    this.rays = [];
+    this.contacts = [];
+    this.sounds = [];
+    this.echoRings = [];
+    this.particles = makeDust(level, 200);
+    this.camX = this.player.x;
+    this.camY = this.player.y;
+    this.charges = START_CHARGES;
+    this.chargeTimer = 0;
+    this.listenT = 0;
+    this.pingsUsed = 0;
+    this.levelTime = 0;
+    this.collected = 0;
+    this.exitOpen = false;
+    this.echoRequired = false;
+    this.echoHeard = false;
+    this.sneak = false;
+    this.blind = false;
+    this.humT = 99;
+    this.danger = 0;
+    this.shake = 0;
+    this.flash = 0;
+    this.deathT = 0;
+    this.denyCooldown = 0;
+    this.sector = 0;
+    this.state = 'playing';
+    this.ui.showGame();
+  }
+
+  openEditor() {
+    this.audio.unlock();
+    this.state = 'edit';
+    this.ui.hideScreens();
+    this.ui.hideHUD();
+    this.editor.open();
+  }
+
+  closeEditor() {
+    this.editor.close();
+    this.state = 'title';
+    this.loadDemo();
+    this.ui.showTitle(this.progress);
   }
 
   startChamber(index) {
@@ -249,7 +330,7 @@ export class Game {
     this.state = 'playing';
     this.progress.last = this.chamberIndex;
     this.saveProgress();
-    this.ui.showGame(this.chamberIndex, cfg);
+    this.ui.showGame();
   }
 
   restart() {
@@ -320,9 +401,10 @@ export class Game {
   handleGlobalKeys() {
     if (this.input.consume('KeyM')) {
       const muted = this.audio.toggleMute();
-      this.ui.toast(muted ? '静音' : '声音开启');
+      this.ui.toast(muted ? 'deny' : 'shard');
     }
-    if (this.state === 'playing' && this.input.consume('Escape')) this.pause();
+    if (this.state === 'edit' && this.input.consume('Escape')) this.closeEditor();
+    else if (this.state === 'playing' && this.input.consume('Escape')) this.pause();
     else if (this.state === 'paused' && this.input.consume('Escape')) this.resume();
     else if (this.state === 'dead' && this.input.consume('KeyR')) this.restart();
     else if (this.state === 'playing' && this.input.consume('KeyR')) this.restart();
@@ -381,13 +463,21 @@ export class Game {
     const L = this.level;
     this.levelTime += dt;
 
-    // Holding Space = creep silently. But the directional sense only comes
-    // once you have actually stopped: sound is read in stillness.
-    const creeping = this.input.down('Space');
-    const run = (this.input.down('ShiftLeft') || this.input.down('ShiftRight')) && !creeping;
+    // Shift toggles stealth: silent, but blind — no sound means no picture.
+    // Space is the only sound you make on purpose.
+    if (this.input.consume('ShiftLeft') || this.input.consume('ShiftRight')) {
+      this.sneak = !this.sneak;
+      this.audio.click(0.5);
+      if (this.sneak) this.audio.noise({ dur: 0.25, gain: 0.01, type: 'lowpass', freq: 300, send: 0.4 });
+    }
+    this.blind = this.sneak;
+    const creeping = this.sneak;
+    const run = false;
     const move = this.input.moveVector();
 
-    const motion = p.update(dt, move, { run, listen: creeping });
+    const listen = !this.sneak && (this.debugListen === true || (this.listenT > 0.26 && !p.moving));
+    this.listen = listen;
+    const motion = p.update(dt, move, { run, listen, creep: this.sneak });
     const resolved = this.resolve(p, motion.x, motion.y);
     p.x = resolved.x;
     p.y = resolved.y;
@@ -397,29 +487,30 @@ export class Game {
 
     if (p.moving) this.listenT = 0;
     else this.listenT = Math.min(1, this.listenT + dt);
-    const listen = this.debugListen === true || (creeping && this.listenT > 0.26);
-    this.listen = listen;
 
     // footsteps
-    if (p.moving) {
-      const threshold = run ? 44 : creeping ? 70 : 58;
-      if (p.stepPhase > threshold) {
+    if (p.moving && !this.sneak) {
+      if (p.stepPhase > 58) {
         p.stepPhase = 0;
-        this.audio.footstep(0, run ? 1.4 : 1);
-        const noiseRadius = creeping ? 90 : run ? 340 : 215;
-        for (const h of this.hunters) {
-          if (dist(p.x, p.y, h.x, h.y) < noiseRadius) this.alertHunter(h, p.x, p.y, 0.18);
-        }
-        for (const sk of this.skitters) {
-          if (dist(p.x, p.y, sk.x, sk.y) < noiseRadius * 0.85) sk.hear(p.x, p.y, 'step', 1.25);
-        }
+        this.audio.footstep(0, 0.85);
+        this.emitSound(p.x, p.y, { range: STEP_RANGE, kind: 'step' });
       }
     }
 
     // pinging
-    if ((this.input.consume('Mouse0') || this.input.consume('KeyJ')) && this.charges > 0) {
-      this.firePing();
+    if ((this.input.consume('Space') || this.input.consume('Mouse0') || this.input.consume('KeyJ')) && this.charges > 0) {
+      if (this.sneak) {
+        this.audio.deny();
+        if (!this.sneakHintShown) {
+          this.sneakHintShown = true;
+          this.audio.noise({ dur: 0.4, gain: 0.02, type: 'lowpass', freq: 240, send: 0.5 });
+        }
+      } else {
+        this.firePing();
+      }
     }
+
+    this.updateSounds();
 
     // charge regen
     if (this.charges < PING_MAX) {
@@ -435,21 +526,6 @@ export class Game {
     for (const ping of this.pings) {
       const age = this.now - ping.t0;
       if (age < 0 || age > ping.life) continue;
-      const R = age * ping.speed;
-      for (const h of this.hunters) {
-        if (ping.heard.has(h.id)) continue;
-        const d = dist(ping.x, ping.y, h.x, h.y);
-        if (Math.abs(d - R) < 44) {
-          ping.heard.add(h.id);
-          this.alertHunter(h, ping.x, ping.y, 0.08);
-        }
-      }
-      if (!ping.mimicsHeard) {
-        ping.mimicsHeard = true;
-        for (const sk of this.skitters) {
-          if (dist(ping.x, ping.y, sk.x, sk.y) < 600) sk.hear(ping.x, ping.y, 'ping', 1.05);
-        }
-      }
     }
     this.pings = this.pings.filter((ping) => this.now - ping.t0 < ping.life + 0.2);
 
@@ -462,12 +538,7 @@ export class Game {
         this.audio.shard();
         this.flash = 1;
         this.shake = Math.max(this.shake, 2.5);
-        for (const h of this.hunters) {
-          if (dist(sh.x, sh.y, h.x, h.y) < 330) this.alertHunter(h, sh.x, sh.y, 0.2);
-        }
-        for (const sk of this.skitters) {
-          if (dist(sh.x, sh.y, sk.x, sk.y) < 380) sk.hear(sh.x, sh.y, 'shard', 1.2);
-        }
+        this.emitSound(p.x, p.y, { range: SHARD_NOISE, kind: 'shard' });
         if (this.shards.length === 0) this.tryOpenExit(true);
       }
     }
@@ -479,7 +550,7 @@ export class Game {
     } else if (!this.exitOpen && dist(p.x, p.y, L.exit.x, L.exit.y) < 34) {
       if (this.denyCooldown <= 0) {
         this.audio.deny();
-        if (this.shards.length > 0) this.ui.toast(`还差 ${this.shards.length} 块碎片`);
+        if (this.shards.length > 0) this.ui.toast('deny');
         this.denyCooldown = 2.2;
       }
     }
@@ -532,9 +603,7 @@ export class Game {
       if (this.humT <= 0) {
         this.humT = 3.6;
         this.audio.gateHum();
-        for (const sk of this.skitters) {
-          if (dist(L.exit.x, L.exit.y, sk.x, sk.y) < 700) sk.hear(L.exit.x, L.exit.y, 'hum', 0.95);
-        }
+        this.emitSound(L.exit.x, L.exit.y, { range: 700, kind: 'hum', speed: 520 });
       }
     }
 
@@ -584,7 +653,7 @@ export class Game {
     this.exitOpen = true;
     this.audio.gateOpen();
     this.shake = Math.max(this.shake, 6);
-    if (withFanfare) this.ui.toast('出口已开启');
+    if (withFanfare) this.ui.toast('shard');
     return true;
   }
 
@@ -603,6 +672,55 @@ export class Game {
   }
 
   /** Spawn a fan of sonar rays that bounce off walls and leave light trails. */
+  /** One expanding shell of sound. Everything that hears does so when the
+   *  front actually reaches it — never by proximity alone. */
+  emitSound(x, y, { range = STEP_RANGE, kind = 'step', speed = SOUND_SPEED } = {}) {
+    this.sounds.push({ x, y, t0: this.now, speed, range, kind, hit: new Set(), hitM: new Set() });
+  }
+
+  updateSounds() {
+    const alive = [];
+    for (const snd of this.sounds) {
+      const age = this.now - snd.t0;
+      if (age < 0) { alive.push(snd); continue; }
+      const R = age * snd.speed;
+      if (R > snd.range + 40) continue;
+      for (const h of this.hunters) {
+        if (snd.hit.has(h.id)) continue;
+        if (Math.abs(dist(snd.x, snd.y, h.x, h.y) - R) < 26) {
+          snd.hit.add(h.id);
+          this.alertHunter(h, snd.x, snd.y, 0.14);
+        }
+      }
+      for (const sk of this.skitters) {
+        if (snd.hitM.has(sk.id)) continue;
+        const d = dist(snd.x, snd.y, sk.x, sk.y);
+        if (Math.abs(d - R) > 26 || d > 700) continue;
+        snd.hitM.add(sk.id);
+        sk.hear(snd.x, snd.y, snd.kind, snd.kind === 'ping' ? 1.05 : 1.35);
+      }
+      alive.push(snd);
+    }
+    this.sounds = alive.slice(-40);
+  }
+
+  /** What a ray is allowed to touch. Colour is knowledge: gold is a shard,
+   *  green is the door, red is something that hunts you. */
+  hitEntity(x, y) {
+    for (const sh of this.shards) {
+      if (dist(x, y, sh.x, sh.y) < 13) return { e: sh, kind: 'shard', tint: '255,205,110' };
+    }
+    const ex = this.level.exit;
+    if (dist(x, y, ex.x, ex.y) < 17) return { e: ex, kind: 'exit', tint: '140,240,170' };
+    for (const h of this.hunters) {
+      if (dist(x, y, h.x, h.y) < 15) return { e: h, kind: 'hunter', tint: '255,86,86' };
+    }
+    for (const sk of this.skitters) {
+      if (dist(x, y, sk.x, sk.y) < 12) return { e: sk, kind: 'skitter', tint: '255,120,120' };
+    }
+    return null;
+  }
+
   spawnRays(x, y) {
     for (let i = 0; i < RAY_COUNT; i++) {
       const a = (i / RAY_COUNT) * Math.PI * 2 + Math.random() * 0.035;
@@ -614,6 +732,7 @@ export class Game {
         age: 0,
         life: RAY_LIFE * (0.85 + Math.random() * 0.25),
         bounce: 0,
+        tint: null,
         pts: [{ x, y }],
       });
     }
@@ -636,6 +755,23 @@ export class Game {
           move -= d;
           const nx = r.x + r.dx * d;
           const ny = r.y + r.dy * d;
+          const ent = this.hitEntity(nx, ny);
+          if (ent) {
+            ent.e.seenAt = this.now;
+            r.tint = ent.tint;
+            this.contacts.push({ x: r.x, y: r.y, t: this.now, kind: ent.kind });
+            const nlen = Math.hypot(r.x - ent.e.x, r.y - ent.e.y) || 1;
+            const nxn = (r.x - ent.e.x) / nlen;
+            const nyn = (r.y - ent.e.y) / nlen;
+            const dot = r.dx * nxn + r.dy * nyn;
+            r.dx -= 2 * dot * nxn;
+            r.dy -= 2 * dot * nyn;
+            r.x += r.dx * 3;
+            r.y += r.dy * 3;
+            r.bounce++;
+            if (r.bounce >= 3) { r.age = Math.max(r.age, r.life); break; }
+            continue;
+          }
           const hitX = isSolid(L.grid, L.w, L.h, Math.floor(nx / TILE), Math.floor(r.y / TILE));
           const hitY = isSolid(L.grid, L.w, L.h, Math.floor(r.x / TILE), Math.floor(ny / TILE));
           if (hitX) r.dx *= -1;
@@ -692,12 +828,9 @@ export class Game {
     this.flash = 0.85;
     if (!this.pingHintShown) {
       this.pingHintShown = true;
-      this.ui.toast('声呐也暴露了你');
+      this.ui.toast('shard');
     }
-    // immediate ripple on the hunters' "attention" for feedback
-    for (const h of this.hunters) {
-      if (dist(p.x, p.y, h.x, h.y) < WAVE_LISTEN * 0.15) h.hear(p.x, p.y, 0.3);
-    }
+    this.emitSound(p.x, p.y, { range: WAVE_LISTEN, kind: 'ping', speed: PING_SPEED });
   }
 
   /** The shards are not silent. A pulse reaching them is answered by a bell

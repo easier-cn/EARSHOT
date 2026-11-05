@@ -124,17 +124,34 @@ async function main() {
   const x1 = await evaluate('window.__hush.player.x');
   report.moved = +(x1 - x0).toFixed(1);
 
-  // Listening needs stillness: still + Space senses, walking + Space does not.
-  await key('keyDown', 'Space', ' ', 32);
-  await sleep(550);
+  // Listening is free, but only in stillness: stand, and the dark starts to
+  // point; move, and it stops.
+  await sleep(650);
   report.listenStill = await evaluate('window.__hush.listen');
   await key('keyDown', 'KeyD', 'd', 68);
-  await sleep(400);
+  await sleep(420);
   report.listenMoving = await evaluate('window.__hush.listen');
+  await key('keyUp', 'KeyD', 'd', 68);
+  await sleep(120);
+
+  // Shift is a toggle: silent and blind, and the pulse is refused.
+  await key('keyDown', 'ShiftLeft', 'Shift', 16);
+  await key('keyUp', 'ShiftLeft', 'Shift', 16);
+  await sleep(200);
+  report.sneakOn = await evaluate('window.__hush.sneak === true && window.__hush.blind === true');
+  const cSneak = await evaluate('window.__hush.charges');
+  await key('keyDown', 'Space', ' ', 32);
+  await key('keyUp', 'Space', ' ', 32);
+  await sleep(120);
+  report.sneakRefusesPing = await evaluate('window.__hush.charges') === cSneak;
+  await key('keyDown', 'KeyD', 'd', 68);
+  await sleep(420);
   report.creepSlow = await evaluate('window.__hush.player.speed <= 60');
   await key('keyUp', 'KeyD', 'd', 68);
-  await key('keyUp', 'Space', ' ', 32);
+  await key('keyDown', 'ShiftLeft', 'Shift', 16);
+  await key('keyUp', 'ShiftLeft', 'Shift', 16);
   await sleep(150);
+  report.sneakOff = await evaluate('window.__hush.sneak === false');
 
   // Click to ping.
   const before = await evaluate('window.__hush.charges');
@@ -197,6 +214,7 @@ async function main() {
   await sleep(150);
   const complete = await evaluate(`(async () => {
     const g = window.__hush;
+    g.debugInvincible = true;
     const step = () => new Promise(r => setTimeout(r, 90));
     for (let guard = 0; guard < 20 && g.shards.length; guard++) {
       g.player.x = g.shards[0].x;
@@ -204,12 +222,20 @@ async function main() {
       await step();
     }
     const left = g.shards.length;
+    if (g.echoRequired && !g.echoHeard && g.skitters.length) {
+      const m = g.skitters[0];
+      g.player.x = m.x + 120;
+      g.player.y = m.y;
+      g.charges = 3;
+      g.firePing();
+      for (let i = 0; i < 30 && !g.exitOpen; i++) await step();
+    }
     g.player.x = g.level.exit.x;
     g.player.y = g.level.exit.y;
     await step();
     await step();
-    return { state: g.state, left, shards: g.collected, exitOpen: g.exitOpen,
-             panel: !document.getElementById('scr-clear').classList.contains('hidden') };
+    return { state: g.state, left, shards: g.collected, exitOpen: g.exitOpen, echo: !!g.echoHeard,
+             panel: ['scr-clear', 'scr-victory'].some((id) => !document.getElementById(id).classList.contains('hidden')) };
   })()`);
   report.complete = complete;
   await sleep(400);
@@ -225,6 +251,7 @@ async function main() {
   await sleep(1200);
   report.gate = await evaluate(`(async () => {
     const g = window.__hush;
+    g.debugInvincible = true;
     const step = (ms) => new Promise((r) => setTimeout(r, ms || 80));
     if (g.state !== 'playing') return { error: 'not playing: ' + g.state };
     const required = g.echoRequired;
@@ -269,7 +296,7 @@ async function main() {
     await step(3000); // the ambience glides between sectors; give it time
     const crossed = {
       sector: g.sector,
-      num: document.getElementById('hud-num').textContent,
+      num: document.getElementById('hud-num').dataset.sector,
       drone: (g.audio._drone || []).map((d) => +d.osc.frequency.value.toFixed(1)),
     };
     g.charges = 3;
@@ -307,6 +334,38 @@ async function main() {
       cleared: !!g.progress.worldCleared,
     };
   })()`);
+  // Build mode: draw a corridor, then play it.
+  await send('Page.navigate', { url: BASE + '?edit=1&static=1' });
+  await sleep(900);
+  report.editor = await evaluate(`(async () => {
+    const g = window.__hush;
+    const step = (ms) => new Promise((r) => setTimeout(r, ms || 60));
+    if (!g.editor.root) g.editor.build();
+    const e = g.editor;
+    e.open();
+    const d = e.data;
+    for (let x = 2; x <= 15; x++) d.cells[4 * d.w + x] = 0;
+    for (let x = 2; x <= 15; x++) d.cells[3 * d.w + x] = 1;
+    d.spawn = { x: 2, y: 4 };
+    d.shards = [{ x: 6, y: 4 }, { x: 9, y: 4 }];
+    d.exit = { x: 14, y: 4 };
+    d.hunters = [{ x: 20, y: 4 }];
+    e.play();
+    await step(200);
+    const opened = { state: g.state, shards: g.shards.length, total: g.totalShards, tile: g.level.tile };
+    const before = g.shards.length;
+    g.player.x = g.shards[0].x;
+    g.player.y = g.shards[0].y;
+    await step(220);
+    return {
+      ...opened,
+      picked: before - g.shards.length,
+      wallSolid: g.level.grid[3 * g.level.w + 6] === 1,
+      floorOpen: g.level.grid[4 * g.level.w + 6] === 0,
+      editorClosed: document.querySelector('.editor').classList.contains('hidden'),
+    };
+  })()`);
+
   report.errors = exceptions;
   console.log(JSON.stringify(report, null, 2));
 }

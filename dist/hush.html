@@ -660,6 +660,109 @@ kbd {
   color: var(--muted, #6b7a78);
 }
 
+/* ---- glyph interface: no words, only shapes ------------------------------ */
+.emblem { width: 128px; height: 128px; display: block; margin: 0 auto 30px; }
+.emblem .arc { fill: none; stroke: var(--ink); stroke-width: 1.3; stroke-linecap: round; }
+.emblem .a1 { opacity: 0.85; } .emblem .a2 { opacity: 0.3; } .emblem .a3 { opacity: 0.14; }
+.emblem .dot { fill: #eaf7f4; filter: drop-shadow(0 0 8px rgba(160, 245, 232, 0.8)); }
+
+.btn.primary { width: 76px; height: 76px; border-radius: 50%; display: grid; place-items: center; padding: 0; }
+.btn .ico { display: grid; place-items: center; }
+.btn .ico svg { width: 24px; height: 24px; fill: currentColor; display: block; }
+.btn.icon { width: 54px; height: 54px; border-radius: 50%; padding: 0; display: grid; place-items: center; }
+.btn.icon:hover { border-color: var(--teal); }
+.icon-row { display: flex; gap: 14px; justify-content: center; align-items: center; margin-top: 26px; }
+
+.panel-glyph { display: block; margin: 0 auto 20px; width: 62px; height: 62px; color: var(--ink); }
+.panel-glyph svg { width: 100%; height: 100%; }
+.panel-glyph .ring-broken { fill: none; stroke: var(--danger); stroke-width: 2; stroke-dasharray: 42 10 8 14; opacity: 0.9; }
+.panel-glyph .dot-red { fill: var(--danger); }
+.panel-glyph .burst { fill: none; stroke: var(--amber); stroke-width: 1.2; opacity: 0.85; }
+.panel-glyph .ring-dim { fill: none; stroke: var(--teal); stroke-width: 1; opacity: 0.4; }
+.panel-glyph .ring-dim.d2 { opacity: 0.24; } .panel-glyph .ring-dim.d3 { opacity: 0.12; }
+.panel-glyph svg .dot { fill: #eaf7f4; }
+
+.deep-glyph { display: flex; gap: 5px; justify-content: center; margin: 0 0 4px; }
+.deep-glyph i { width: 3px; height: 9px; background: rgba(255, 86, 86, 0.18); }
+.deep-glyph i.lit { background: rgba(255, 86, 86, 0.8); }
+
+.stats-glyphs { margin: 6px 0 2px; }
+.stat-row { display: flex; gap: 18px; justify-content: center; align-items: center; }
+.stat-bars { display: flex; gap: 3px; align-items: flex-end; height: 12px; }
+.stat-bars i { width: 3px; height: 100%; background: rgba(127, 227, 212, 0.14); }
+.stat-bars i.on { background: rgba(127, 227, 212, 0.85); }
+.stat-bars.amber i { background: rgba(255, 205, 110, 0.12); }
+.stat-bars.amber i.on { background: rgba(255, 205, 110, 0.9); }
+.record-ring { width: 10px; height: 10px; border-radius: 50%; border: 1px solid var(--amber); box-shadow: 0 0 10px rgba(255, 205, 110, 0.7); }
+
+.chamber-grid .cell { width: 46px; height: 46px; display: grid; place-items: center; position: relative; }
+.cell-bars { display: flex; gap: 3px; align-items: flex-end; height: 14px; }
+.cell-bars i { width: 2px; height: 62%; background: rgba(234, 247, 244, 0.6); }
+.cell-bars i:nth-child(2n) { height: 100%; }
+.cell-bars i:nth-child(3n) { height: 40%; }
+.cell.cleared .cell-bars i { background: var(--teal); }
+.cell.locked { opacity: 0.28; }
+.cell-slash { position: absolute; width: 24px; height: 1px; background: rgba(234, 247, 244, 0.5); transform: rotate(-42deg); }
+
+.nest-glyph { display: flex; gap: 3px; justify-content: center; margin: 26px 0 0; }
+.nest-glyph i { width: 2px; height: 10px; background: rgba(234, 247, 244, 0.16); }
+.nest-glyph i.done { background: rgba(127, 227, 212, 0.7); }
+.title-foot { opacity: 0.5; }
+
+.hud-left { display: flex; align-items: center; gap: 10px; }
+.hud-num { display: flex; gap: 4px; }
+.hud-num.pulse { animation: hudPulse 0.7s ease-out; }
+.sector-dot { width: 4px; height: 4px; border-radius: 50%; background: rgba(234, 247, 244, 0.16); }
+.sector-dot.lit { background: var(--teal); box-shadow: 0 0 6px rgba(127, 227, 212, 0.8); }
+.shard-bar { display: flex; gap: 2px; }
+.shard-bar i { width: 2px; height: 10px; background: rgba(255, 205, 110, 0.16); }
+.shard-bar i.on { background: rgba(255, 205, 110, 0.9); box-shadow: 0 0 6px rgba(255, 205, 110, 0.5); }
+.hud-charges { display: flex; gap: 6px; }
+.hud-charges i { width: 5px; height: 5px; border-radius: 50%; background: rgba(127, 227, 212, 0.18); }
+.hud-charges i.on { background: var(--teal); box-shadow: 0 0 8px rgba(127, 227, 212, 0.9); }
+.hud-listen svg { width: 34px; height: 34px; }
+.hud-listen path { fill: none; stroke: var(--teal); stroke-width: 1.2; opacity: 0.12; transition: opacity 0.18s; }
+.hud-listen.on path { opacity: 0.75; }
+.hud.sneaking { opacity: 0.55; }
+
+@keyframes hudPulse { 0% { transform: scale(1.6); } 100% { transform: scale(1); } }
+
+#ui::before { content: ''; position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.3s; z-index: 5; }
+#ui.intro-ring::before { opacity: 1; animation: introRing 1.4s ease-out; background: radial-gradient(circle at 50% 50%, rgba(127, 227, 212, 0.10), transparent 55%); }
+#ui.flash-amber::before { opacity: 1; background: radial-gradient(circle at 50% 60%, rgba(255, 205, 110, 0.10), transparent 60%); }
+#ui.flash-red::before { opacity: 1; background: radial-gradient(circle at 50% 60%, rgba(255, 86, 86, 0.14), transparent 60%); }
+@keyframes introRing { 0% { opacity: 0.9; } 100% { opacity: 0; } }
+.chamber-grid { grid-template-columns: repeat(8, 46px); gap: 6px; }
+.chamber-grid .cell { background: transparent; border: 1px solid rgba(234, 247, 244, 0.14); border-radius: 2px; color: inherit; padding: 0; }
+.chamber-grid .cell.cleared { border-color: rgba(127, 227, 212, 0.45); }
+.chamber-grid .cell:not(.locked):hover { border-color: rgba(127, 227, 212, 0.8); background: rgba(127, 227, 212, 0.05); }
+.hud-left { position: absolute; top: 24px; left: 28px; }
+.hud-right { position: absolute; top: 26px; right: 28px; display: flex; align-items: center; gap: 9px; }
+.hud-charges { position: absolute; left: 28px; bottom: 26px; }
+.hud-listen { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); }
+.diamond { width: 7px; height: 7px; border: 1px solid var(--amber); transform: rotate(45deg); opacity: 0.7; }
+
+/* ---- build mode ---------------------------------------------------------- */
+.start-row { display: flex; gap: 14px; align-items: center; justify-content: center; }
+.btn.build { width: 46px; height: 46px; border-radius: 50%; padding: 0; display: grid; place-items: center; opacity: 0.75; }
+.editor { position: fixed; inset: 0; background: #05080b; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; z-index: 40; }
+.editor.hidden { display: none; }
+.editor-bar { display: flex; gap: 8px; align-items: center; }
+.tool { width: 38px; height: 38px; border: 1px solid rgba(234, 247, 244, 0.18); display: grid; place-items: center; cursor: pointer; background: transparent; color: var(--ink); padding: 0; }
+.tool.on { border-color: var(--teal); box-shadow: 0 0 12px rgba(127, 227, 212, 0.25); }
+.tool svg { width: 20px; height: 20px; fill: currentColor; }
+.tool.act { border-radius: 50%; }
+.sep { width: 1px; height: 22px; background: rgba(234, 247, 244, 0.14); margin: 0 4px; }
+.sw { width: 14px; height: 14px; display: block; }
+.sw.wall { background: rgba(127, 227, 212, 0.45); border: 1px solid rgba(127, 227, 212, 0.85); }
+.sw.erase { border: 1px dashed rgba(234, 247, 244, 0.55); }
+.sw.shard { background: var(--amber); transform: rotate(45deg); width: 10px; height: 10px; }
+.sw.exit { border: 1.5px solid #8cf0aa; border-bottom: none; border-radius: 8px 8px 0 0; width: 12px; height: 12px; }
+.sw.hunter { background: rgb(255, 86, 86); border-radius: 50%; }
+.sw.skitter { background: #ff7878; width: 9px; height: 9px; transform: rotate(45deg); }
+.sw.spawn { border: 1.5px solid #eaf7f4; border-radius: 50%; }
+.editor-canvas { border: 1px solid rgba(127, 227, 212, 0.2); max-width: 94vw; max-height: 72vh; touch-action: none; }
+
 </style>
   </head>
   <body>
@@ -1336,8 +1439,8 @@ class Player {
     this.stepPhase = 0;
   }
 
-  update(dt, move, { run = false, listen = false } = {}) {
-    const maxSpeed = listen ? 52 : run ? 152 : 92;
+  update(dt, move, { run = false, listen = false, creep = false } = {}) {
+    const maxSpeed = creep ? 52 : listen ? 60 : run ? 152 : 92;
     const targetX = move.x * maxSpeed;
     const targetY = move.y * maxSpeed;
     const k = 1 - Math.exp(-(move.x || move.y ? 16 : 12) * dt);
@@ -2172,6 +2275,8 @@ const GLOW_RGB = '80, 210, 198';
 const AMBER = '255, 196, 107';
 const RED = '255, 86, 86';
 const TEAL = '127, 227, 212';
+const GOLD = '255, 205, 110';
+const GREEN = '140, 240, 170';
 
 const BUCKETS = 12;
 
@@ -2289,8 +2394,10 @@ class Renderer {
     ctx.scale(this.scale, this.scale);
 
     // ---- sonar: sparks fly out, bounce off walls, leave short comet tails ---
-    const rays = game.rays || [];
-    const contacts = game.contacts || [];
+    // Stealth is silence, and silence is blindness: nothing renders at all.
+    const vision = !game.blind;
+    const rays = vision ? game.rays || [] : [];
+    const contacts = vision ? game.contacts || [] : [];
     if (rays.length || contacts.length) {
       ctx.globalCompositeOperation = 'lighter';
       ctx.lineCap = 'round';
@@ -2299,7 +2406,11 @@ class Renderer {
         const c = contacts[i];
         const k = Math.max(0, 1 - (now - c.t) / 1.7);
         if (k <= 0.02) continue;
-        ctx.fillStyle = `rgba(150, 246, 232, ${k * 0.5})`;
+        const col = c.kind === 'shard' ? '255,205,110'
+          : c.kind === 'exit' ? '140,240,170'
+            : (c.kind === 'hunter' || c.kind === 'skitter') ? '255,86,86'
+              : '150,246,232';
+        ctx.fillStyle = `rgba(${col}, ${k * 0.55})`;
         ctx.beginPath();
         ctx.arc(c.x, c.y, 1.4 + k * 1.3, 0, Math.PI * 2);
         ctx.fill();
@@ -2327,7 +2438,7 @@ class Renderer {
             ctx.moveTo(pts[i0].x, pts[i0].y);
             for (let j = i0 + 1; j <= i1; j++) ctx.lineTo(pts[j].x, pts[j].y);
             if (b === batches - 1) ctx.lineTo(r.x, r.y);
-            ctx.strokeStyle = `rgba(150, 246, 232, ${ta})`;
+            ctx.strokeStyle = `rgba(${r.tint || '150,246,232'}, ${ta})`;
             ctx.lineWidth = 0.8 + ta * 1.6;
             ctx.stroke();
           }
@@ -2356,17 +2467,20 @@ class Renderer {
 
     // ---- shards -------------------------------------------------------------
     for (const sh of game.shards) {
-      const lit = this._pointBrightness(sh.x, sh.y, game.pings, now, level);
-      const near = Math.max(0, 1 - Math.hypot(sh.x - game.camX, sh.y - game.camY) / 90) * 0.35;
-      const a = clamp(Math.max(lit, near), 0, 1);
+      if (!vision) continue;
+      const seen = now - (sh.seenAt ?? -99);
+      const px = game.player ? game.player.x : game.camX;
+      const py = game.player ? game.player.y : game.camY;
+      const near = Math.max(0, 1 - Math.hypot(sh.x - px, sh.y - py) / 46) * 0.22;
+      const a = clamp(seen < 2.6 ? 0.35 + 0.65 * (1 - seen / 2.6) : near, 0, 1);
       if (a < 0.02) continue;
       const pulse = 0.75 + 0.25 * Math.sin(now * 2.4 + sh.id * 1.7);
       ctx.save();
       ctx.translate(sh.x, sh.y);
       ctx.rotate(Math.PI / 4);
-      ctx.fillStyle = `rgba(${AMBER}, ${0.16 * a * pulse})`;
+      ctx.fillStyle = `rgba(${GOLD}, ${0.16 * a * pulse})`;
       ctx.fillRect(-12, -12, 24, 24);
-      ctx.strokeStyle = `rgba(${AMBER}, ${0.9 * a * pulse})`;
+      ctx.strokeStyle = `rgba(${GOLD}, ${0.9 * a * pulse})`;
       ctx.lineWidth = 1.6;
       ctx.strokeRect(-6.5, -6.5, 13, 13);
       ctx.fillStyle = `rgba(255, 240, 210, ${0.9 * a * pulse})`;
@@ -2375,18 +2489,21 @@ class Renderer {
     }
 
     // ---- exit ---------------------------------------------------------------
-    if (game.exitOpen) {
-      this._drawExit(level.exit.x, level.exit.y, 0.9, AMBER, now, true);
-    } else {
-      const b = this._pointBrightness(level.exit.x, level.exit.y, game.pings, now, level);
-      this._drawExit(level.exit.x, level.exit.y, Math.max(b, 0.12), TEAL, now, false);
+    if (vision) {
+      const eSeen = now - (level.exit.seenAt ?? -99);
+      if (game.exitOpen) {
+        this._drawExit(level.exit.x, level.exit.y, 0.9, GREEN, now, true);
+      } else if (eSeen < 2.6) {
+        this._drawExit(level.exit.x, level.exit.y, 0.3 + 0.6 * (1 - eSeen / 2.6), GREEN, now, false);
+      }
     }
 
     // ---- hunters ------------------------------------------------------------
     for (const h of game.hunters) {
-      const b = this._pointBrightness(h.x, h.y, game.pings, now, level);
-      if (b < 0.035) continue;
-      const a = clamp(b * 1.8, 0.08, 1);
+      if (!vision) continue;
+      const seen = now - (h.seenAt ?? -99);
+      if (seen > 2.3) continue;
+      const a = clamp(0.35 + 0.75 * (1 - seen / 2.3), 0.1, 1);
       const wobble = 1 + 0.04 * Math.sin(now * 9 + h.id);
       ctx.save();
       ctx.translate(h.x, h.y);
@@ -2426,10 +2543,11 @@ class Renderer {
 
     // ---- skitters -----------------------------------------------------------
     for (const sk of game.skitters || []) {
-      const b = this._pointBrightness(sk.x, sk.y, game.pings, now, level);
+      if (!vision) continue;
+      const seen = now - (sk.seenAt ?? -99);
       const revealed = (sk.revealT || 0) > 0;
-      if (b < 0.045 && !revealed) continue;
-      const a = clamp(revealed ? Math.max(0.4, b * 1.9) : b * 1.9, 0.1, 1);
+      if (seen > 2.3 && !revealed) continue;
+      const a = revealed ? 0.85 : clamp(0.35 + 0.75 * (1 - seen / 2.3), 0.1, 1);
       const stride = Math.sin(sk.wobble) * 2.2;
       ctx.save();
       ctx.translate(sk.x, sk.y);
@@ -2503,31 +2621,6 @@ class Renderer {
         ctx.arc(p.x, p.y, rr, 0, Math.PI * 2);
         ctx.stroke();
         ctx.setLineDash([]);
-        // directional chevrons
-        const targets = [];
-        for (const h of game.hunters) targets.push({ x: h.x, y: h.y, color: RED, danger: true });
-        for (const s of game.shards) targets.push({ x: s.x, y: s.y, color: AMBER, danger: false });
-        targets.push({ x: level.exit.x, y: level.exit.y, color: TEAL, danger: false });
-        for (const t of targets) {
-          const dx = t.x - p.x;
-          const dy = t.y - p.y;
-          const d = Math.hypot(dx, dy);
-          if (d > 560 || d < 1) continue;
-          const a = clamp(1 - d / 560, 0, 1) * (t.danger ? 0.85 : 0.5);
-          const ang = Math.atan2(dy, dx);
-          const r = 54;
-          ctx.save();
-          ctx.translate(p.x + Math.cos(ang) * r, p.y + Math.sin(ang) * r);
-          ctx.rotate(ang);
-          ctx.fillStyle = `rgba(${t.color}, ${a})`;
-          ctx.beginPath();
-          ctx.moveTo(7, 0);
-          ctx.lineTo(-2, -3.4);
-          ctx.lineTo(-2, 3.4);
-          ctx.closePath();
-          ctx.fill();
-          ctx.restore();
-        }
       }
     }
 
@@ -2620,23 +2713,32 @@ class Renderer {
 }
 
 // ---- src/ui.js ----
+// The interface never speaks. Every message is a shape, a pulse, or a change
+// in colour — because in this game words would do the listening for you.
 
-const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'];
-
-const fmtTime = (s) => {
-  const m = Math.floor(s / 60);
-  const sec = Math.floor(s % 60);
-  return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+const ICON = {
+  play: '<svg viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z"/></svg>',
+  resume: '<svg viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z"/></svg>',
+  retry: '<svg viewBox="0 0 24 24"><path d="M12 4a8 8 0 1 1-7.4 5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 3v6h6" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
+  home: '<svg viewBox="0 0 24 24"><path d="M5 11l7-6 7 6v8H5z" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
+  next: '<svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
+  sound: '<svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 8a5 5 0 0 1 0 8" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>',
+  muted: '<svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l5 6M22 9l-5 6" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>',
+  pencil: '<svg viewBox="0 0 24 24"><path d="M4 20l4-1 11-11-3-3L5 16z" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
+  bars: '<svg viewBox="0 0 24 24"><rect x="7" y="5" width="3" height="14"/><rect x="14" y="5" width="3" height="14"/></svg>',
 };
+
+function icon(name, cls = '') {
+  return `<span class="ico ${cls}" aria-hidden="true">${ICON[name]}</span>`;
+}
 
 class UI {
   constructor(root, game) {
     this.root = root;
     this.game = game;
-    this.screens = {};
-    this.toastTimer = 0;
     this.introTimer = 0;
-    this.lastHud = '';
+    this.toastTimer = 0;
+    this.build();
   }
 
   build() {
@@ -2646,359 +2748,297 @@ class UI {
 
       <section class="screen title-screen" id="scr-title">
         <div class="title-inner">
-          <div class="eyebrow">A SONAR STEALTH GAME</div>
-          <h1 class="logo">HUSH</h1>
-          <div class="rule"></div>
-          <p class="tagline">你什么都看不见。<span>黑暗在听。</span></p>
-          <button class="btn primary" id="btn-start">进入黑暗</button>
-          <div class="nest-line" id="nest-line"></div>
-          <div class="grid-label">或回到一间旧密室</div>
-          <div class="chamber-grid" id="chamber-grid"></div>
-          <div class="hints">
-            <span><b>WASD</b> 移动</span>
-            <span><b>左键</b> 声呐</span>
-            <span><b>空格</b> 聆听</span>
-            <span><b>Shift</b> 奔跑</span>
+          <svg class="emblem" viewBox="0 0 160 160" aria-hidden="true">
+            <circle cx="80" cy="80" r="3.2" class="dot"/>
+            <path class="arc a1" d="M80 26a54 54 0 0 1 0 108"/>
+            <path class="arc a2" d="M80 12a68 68 0 0 1 0 136"/>
+            <path class="arc a3" d="M80 44a36 36 0 0 1 0 72"/>
+          </svg>
+          <div class="start-row">
+            <button class="btn primary" id="btn-start" aria-label="进入">${icon('play')}</button>
+            <button class="btn build" id="btn-edit" aria-label="造图">${icon('pencil')}</button>
           </div>
+          <div class="nest-glyph" id="nest-glyph"></div>
+          <div class="chamber-grid" id="chamber-grid"></div>
         </div>
-        <div class="title-foot">v0.3.7 · 一个关于声音的实验</div>
+        <div class="title-foot" id="title-foot"></div>
       </section>
 
       <section class="screen pause-screen hidden" id="scr-pause">
         <div class="panel">
-          <div class="panel-kicker">PAUSED</div>
-          <h2>暂停</h2>
-          <p class="panel-sub">黑暗在等你。</p>
-          <div class="hints compact">
-            <span><b>WASD</b> 移动</span>
-            <span><b>左键</b> 声呐</span>
-            <span><b>站定+空格</b> 聆听</span>
-            <span><b>Shift</b> 奔跑</span>
-          </div>
-          <div class="panel-actions">
-            <button class="btn primary" id="btn-resume">继续</button>
-            <button class="btn" id="btn-restart">重来</button>
-            <button class="btn" id="btn-pause-mute">静音</button>
-            <button class="btn ghost" id="btn-title">返回标题</button>
+          <div class="panel-glyph">${ICON.bars}</div>
+          <div class="icon-row">
+            <button class="btn icon" id="btn-resume" aria-label="继续">${icon('resume')}</button>
+            <button class="btn icon" id="btn-restart" aria-label="重来">${icon('retry')}</button>
+            <button class="btn icon" id="btn-mute" aria-label="静音">${icon('sound')}</button>
+            <button class="btn icon" id="btn-title" aria-label="标题">${icon('home')}</button>
           </div>
         </div>
       </section>
 
       <section class="screen dead-screen hidden" id="scr-dead">
         <div class="panel">
-          <div class="panel-kicker danger">YOU WERE HEARD</div>
-          <h2>你被听见了</h2>
-          <p class="panel-sub">黑暗记住了你的位置。</p>
-          <div class="panel-actions">
-            <button class="btn primary" id="btn-retry">再试一次 <kbd>R</kbd></button>
-            <button class="btn ghost" id="btn-dead-title">返回标题</button>
+          <svg class="panel-glyph broken" viewBox="0 0 100 100" aria-hidden="true">
+            <circle cx="50" cy="50" r="34" class="ring-broken"/>
+            <circle cx="50" cy="50" r="5" class="dot-red"/>
+          </svg>
+          <div class="deep-glyph" id="dead-deep"></div>
+          <div class="icon-row">
+            <button class="btn icon" id="btn-retry" aria-label="再试">${icon('retry')}</button>
+            <button class="btn icon" id="btn-dead-title" aria-label="标题">${icon('home')}</button>
           </div>
         </div>
       </section>
 
       <section class="screen clear-screen hidden" id="scr-clear">
         <div class="panel">
-          <div class="panel-kicker">CHAMBER SILENT</div>
-          <h2>密室已静</h2>
-          <div class="record" id="clear-record"></div>
-          <div class="stats" id="clear-stats"></div>
-          <div class="panel-actions">
-            <button class="btn primary" id="btn-next">下一间</button>
-            <button class="btn ghost" id="btn-clear-title">返回标题</button>
+          <svg class="panel-glyph" viewBox="0 0 100 100" aria-hidden="true">
+            <path class="burst" d="M50 8l7 26 20-18-8 27 27-6-22 19 26 8-27 6 18 21-26-9 2 27-17-22-17 22 2-27-26 9 18-21-27-6 26-8-22-19 27 6-8-27 20 18z"/>
+          </svg>
+          <div class="stats-glyphs" id="clear-stats"></div>
+          <div class="icon-row">
+            <button class="btn icon" id="btn-next" aria-label="下一间">${icon('next')}</button>
+            <button class="btn icon" id="btn-clear-title" aria-label="标题">${icon('home')}</button>
           </div>
         </div>
       </section>
 
       <section class="screen victory-screen hidden" id="scr-victory">
-        <div class="panel wide">
-          <div class="panel-kicker">ALL CHAMBERS SILENT</div>
-          <h2 class="victory-title">HUSH</h2>
-          <p class="panel-sub">所有密室都已安静。你学会了在黑暗里呼吸。</p>
-          <div class="stats" id="victory-stats"></div>
-          <div class="panel-actions">
-            <button class="btn primary" id="btn-victory-title">回到开头</button>
-          </div>
+        <div class="panel">
+          <svg class="panel-glyph" viewBox="0 0 100 100" aria-hidden="true">
+            <circle cx="50" cy="50" r="8" class="dot"/>
+            <circle cx="50" cy="50" r="20" class="ring-dim"/>
+            <circle cx="50" cy="50" r="32" class="ring-dim d2"/>
+            <circle cx="50" cy="50" r="43" class="ring-dim d3"/>
+          </svg>
+          <div class="stats-glyphs" id="victory-stats"></div>
+          <button class="btn icon" id="btn-victory-home" aria-label="标题">${icon('home')}</button>
         </div>
       </section>
 
       <div class="hud hidden" id="hud">
-        <div class="hud-top">
-          <div class="hud-chamber">
-            <span class="hud-label">密室</span>
-            <span class="hud-num" id="hud-num">I</span>
-            <span class="hud-title" id="hud-title">第一次呼吸</span>
-          </div>
-          <div class="hud-shards">
-            <span class="gem"></span>
-            <span id="hud-shard-count">0 / 1</span>
-          </div>
+        <div class="hud-left">
+          <span class="hud-num" id="hud-num" data-sector="I"></span>
+          <span class="hud-sector" id="hud-sector"></span>
         </div>
-        <div class="hud-bottom">
-          <div class="pips" id="hud-pips">
-            <i class="pip on"></i><i class="pip on"></i><i class="pip on"></i>
-          </div>
-          <div class="hud-hint">左键 声呐 &nbsp;·&nbsp; 空格 聆听 &nbsp;·&nbsp; Shift 奔跑</div>
+        <div class="hud-right">
+          <span class="diamond"></span>
+          <span class="shard-bar" id="hud-shards"></span>
+        </div>
+        <div class="hud-charges" id="hud-charges"></div>
+        <div class="hud-listen" id="hud-listen">
+          <svg viewBox="0 0 40 40" aria-hidden="true">
+            <path d="M14 20a6 6 0 0 1 12 0" class="l1"/>
+            <path d="M9 20a11 11 0 0 1 22 0" class="l2"/>
+          </svg>
         </div>
       </div>
-
-      <div class="listen-tag hidden" id="listen-tag">聆听中</div>
-      <div class="toast" id="toast"></div>
-      <div class="intro" id="intro"></div>
     `;
 
-    const $ = (id) => document.getElementById(id);
-    this.el = {
+    const $ = (id) => this.root.querySelector('#' + id);
+    this.scr = {
       title: $('scr-title'),
       pause: $('scr-pause'),
       dead: $('scr-dead'),
       clear: $('scr-clear'),
       victory: $('scr-victory'),
-      dead: $('scr-dead'),
-      clearPanel: $('scr-clear'),
-      hud: $('hud'),
-      hudNum: $('hud-num'),
-      hudTitle: $('hud-title'),
-      hudShard: $('hud-shard-count'),
-      hudPips: $('hud-pips'),
-      listenTag: $('listen-tag'),
-      toast: $('toast'),
-      intro: $('intro'),
-      start: $('btn-start'),
-      grid: $('chamber-grid'),
-      nest: $('nest-line'),
-      stats: $('clear-stats'),
-      record: $('clear-record'),
-      victoryStats: $('victory-stats'),
     };
-    this.screens = {
-      title: this.el.title,
-      pause: this.el.pause,
-      dead: this.el.dead,
-      clear: this.el.clear,
-      victory: this.el.victory,
-    };
+    this.hud = $('hud');
+    this.grid = $('chamber-grid');
+    this.nestGlyph = $('nest-glyph');
+    this.foot = $('title-foot');
+    this.hudNum = $('hud-num');
+    this.hudSector = $('hud-sector');
+    this.hudShards = $('hud-shards');
+    this.hudCharges = $('hud-charges');
+    this.hudListen = $('hud-listen');
+    this.clearStats = $('clear-stats');
+    this.victoryStats = $('victory-stats');
+    this.deadDeep = $('dead-deep');
 
-    const g = this.game;
-    const bind = (el, fn) => {
+    // Buttons blur themselves so Space never triggers twice.
+    const bind = (id, fn) => {
+      const el = $(id);
+      if (!el) return;
       el.addEventListener('click', (e) => {
         e.preventDefault();
-        e.stopPropagation();
         el.blur();
-        g.audio.unlock();
-        g.audio.click();
         fn();
       });
     };
-    bind(this.el.start, () => g.startBest());
-    bind($('btn-resume'), () => g.resume());
-    bind($('btn-restart'), () => g.restart());
-    bind($('btn-pause-mute'), () => {
-      const m = g.audio.toggleMute();
-      $('btn-pause-mute').textContent = m ? '开启声音' : '静音';
-    });
-    bind($('btn-title'), () => g.quitToTitle());
-    bind($('btn-retry'), () => g.restart());
-    bind($('btn-dead-title'), () => g.quitToTitle());
-    bind($('btn-next'), () => {
-      if (g.chamberIndex + 1 >= CHAMBERS.length) g.victory();
-      else g.next();
-    });
-    bind($('btn-clear-title'), () => g.quitToTitle());
-    bind($('btn-victory-title'), () => g.quitToTitle());
+    const g = this.game;
+    bind('btn-start', () => g.startBest());
+    bind('btn-edit', () => g.openEditor());
+    bind('btn-resume', () => g.resume());
+    bind('btn-restart', () => g.retry());
+    bind('btn-mute', () => g.toggleMute());
+    bind('btn-title', () => g.toTitle());
+    bind('btn-retry', () => g.retry());
+    bind('btn-dead-title', () => g.toTitle());
+    bind('btn-next', () => g.next());
+    bind('btn-clear-title', () => g.toTitle());
+    bind('btn-victory-home', () => g.toTitle());
+    this.muteBtn = $('btn-mute');
   }
 
-  // --------------------------------------------------------------- screens
   hideScreens() {
-    for (const el of Object.values(this.screens)) el.classList.add('hidden');
+    for (const s of Object.values(this.scr)) s.classList.add('hidden');
   }
 
   showScreen(name) {
     this.hideScreens();
-    const el = this.screens[name];
-    if (el) el.classList.remove('hidden');
+    this.scr[name].classList.remove('hidden');
   }
 
-  showTitle(progress) {
-    this.hideScreens();
+  showTitle(progress = {}) {
     this.showScreen('title');
-    this.el.hud.classList.add('hidden');
-    this.el.listenTag.classList.add('hidden');
-    const startBtn = this.el.start;
-    startBtn.textContent = progress.worldCleared ? '再次进入巢穴' : '进入黑暗';
-    const wb = progress.worldBest;
-    this.el.nest.textContent = progress.worldCleared
-      ? `巢穴已安静 · 最佳 ${fmtTime(wb.time)} · ${wb.pings} 次声呐`
-      : '一张连续的巢穴 · 16 块碎片 · 门在等一个回声';
-    this.el.grid.innerHTML = CHAMBERS.map((c, i) => {
-      const unlocked = i < progress.unlocked;
-      const cleared = progress.cleared.includes(i);
-      const best = progress.best && progress.best[i];
-      const label = !unlocked ? '未解锁' : best ? `最佳 ${fmtTime(best.time)}` : c.title;
-      return `<button class="chamber ${unlocked ? 'open' : 'locked'} ${cleared ? 'cleared' : ''}"
-        data-i="${i}" ${unlocked ? '' : 'disabled'} title="${label}">
-        <span>${ROMAN[i]}</span>${cleared ? '<i></i>' : ''}
-      </button>`;
-    }).join('');
-    this.el.grid.querySelectorAll('.chamber.open').forEach((btn) => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        btn.blur();
-        this.game.audio.unlock();
-        this.game.startChamber(Number(btn.dataset.i));
+    this.hideHUD();
+    this.grid.innerHTML = '';
+    const unlocked = progress.unlocked || 1;
+    const cleared = new Set(progress.cleared || []);
+    for (let i = 0; i < 8; i++) {
+      const cell = document.createElement('button');
+      cell.className = 'cell' + (i < unlocked ? '' : ' locked') + (cleared.has(i) ? ' cleared' : '');
+      // The chamber's number is drawn as bars, not written.
+      let bars = '<span class="cell-bars">';
+      for (let b = 0; b <= i; b++) bars += '<i></i>';
+      bars += '</span>';
+      cell.innerHTML = bars + (i < unlocked ? '' : '<span class="cell-slash"></span>');
+      cell.disabled = i >= unlocked;
+      cell.addEventListener('click', () => {
+        cell.blur();
+        this.game.start(i);
       });
-    });
-    setTimeout(() => startBtn.focus({ preventScroll: true }), 80);
+      this.grid.appendChild(cell);
+    }
+    this.nestGlyph.innerHTML = '';
+    for (let i = 0; i < 16; i++) {
+      const p = document.createElement('i');
+      if (progress.worldCleared) p.className = 'done';
+      this.nestGlyph.appendChild(p);
+    }
+    this.foot.innerHTML = progress.worldCleared ? `<span class="foot-rings">${icon('sound')}</span>` : '';
   }
 
-  showGame(index, cfg) {
+  showGame() {
     this.hideScreens();
-    this.el.hud.classList.remove('hidden');
-    this.el.hudNum.textContent = cfg.num;
-    this.el.hudTitle.textContent = cfg.title;
-    this.lastHud = '';
-    this.intro(cfg.intro);
-    this.el.listenTag.classList.add('hidden');
-    this.updateHUD({
-      chamber: index,
-      shards: cfg.shards,
-      total: cfg.shards,
-      charges: 3,
-      listen: false,
-      muted: this.game.audio.muted,
-      danger: 0,
-    });
+    this.hud.classList.remove('hidden');
   }
 
   hideHUD() {
-    this.el.hud.classList.add('hidden');
-    this.el.listenTag.classList.add('hidden');
+    this.hud.classList.add('hidden');
   }
 
   showPause() {
     this.showScreen('pause');
-    document.getElementById('btn-pause-mute').textContent = this.game.audio.muted ? '开启声音' : '静音';
+    this.syncMute();
   }
 
-  showDead({ sector = null, deepest = null } = {}) {
-    if (!this.screens.dead.classList.contains('hidden')) return;
-    this.hideHUD();
-    const panel = this.el.dead.querySelector('.panel');
-    const sub = panel.querySelector('.panel-sub');
-    if (sector != null && deepest != null && this.worldLabels) {
-      const name = this.worldLabels[sector];
-      sub.textContent = sector >= deepest
-        ? `你在${name}留下了声音。`
-        : `你在${name}停下了。最远到过${this.worldLabels[deepest]}。`;
-    } else {
-      sub.textContent = '黑暗记住了你的位置。';
-    }
+  showDead({ deepest = null } = {}) {
     this.showScreen('dead');
-  }
-
-  showClear({ chamber, time, pings, best, isRecord, last }) {
-    this.el.hud.classList.add('hidden');
-    this.showScreen('clear');
-    this.el.stats.innerHTML = `
-      <div><span>用时</span><b>${fmtTime(time)}</b></div>
-      <div><span>声呐</span><b>${pings} 次</b></div>
-      <div><span>碎片</span><b>${CHAMBERS[chamber].shards} / ${CHAMBERS[chamber].shards}</b></div>
-    `;
-    const bestTime = best ? fmtTime(best.time) : '—';
-    this.el.record.innerHTML = `
-      ${isRecord ? '<span class="record-badge">新纪录</span>' : ''}
-      <span>最佳 ${bestTime}${best ? ` · ${best.pings} 次声呐` : ''}</span>
-    `;
-    this.el.record.classList.toggle('fresh', !!isRecord);
-    document.getElementById('btn-next').textContent = last ? '完成旅程' : '下一间';
-  }
-
-  showVictory(progress = {}) {
-    this.el.hud.classList.add('hidden');
-    this.showScreen('victory');
-    const best = progress.best || {};
-    const keys = Object.keys(best);
-    let total = 0;
-    let pings = 0;
-    for (const k of keys) {
-      total += best[k].time;
-      pings += best[k].pings;
-    }
-    this.el.victoryStats.innerHTML = `
-      <div><span>密室</span><b>${keys.length} / ${CHAMBERS.length}</b></div>
-      <div><span>最佳总用时</span><b>${keys.length ? fmtTime(total) : '—'}</b></div>
-      <div><span>声呐</span><b>${pings} 次</b></div>
-    `;
-  }
-
-  /** Crossing into a new neighbourhood of the same cave. No fanfare, just a
-   *  name, the way a place tells you where you are. */
-  setSector(num, title) {
-    this.el.hudNum.textContent = num;
-    this.el.hudTitle.textContent = title;
-    this.el.hudTitle.classList.remove('pulse');
-    void this.el.hudTitle.offsetWidth;
-    this.el.hudTitle.classList.add('pulse');
-  }
-
-  showWorldVictory({ time, pings, best, isRecord, shards }) {
-    this.el.hud.classList.add('hidden');
-    this.showScreen('victory');
-    const panel = this.el.victory.querySelector('.panel');
-    panel.querySelector('.panel-kicker').textContent = 'THE NEST IS QUIET';
-    panel.querySelector('.panel-sub').textContent =
-      '整座巢都安静下来了。你走完了它，没有让它听见最后一次。';
-    this.el.victoryStats.innerHTML = `
-      <div><span>用时</span><b>${fmtTime(time)}</b></div>
-      <div><span>声呐</span><b>${pings} 次</b></div>
-      <div><span>碎片</span><b>${shards} 块</b></div>
-      <div><span>最佳</span><b>${best ? fmtTime(best.time) : '—'}</b></div>
-    `;
-    const kicker = panel.querySelector('.panel-kicker');
-    if (isRecord) kicker.innerHTML = 'THE NEST IS QUIET <span class="record-badge">新纪录</span>';
-  }
-
-  // ------------------------------------------------------------------- hud
-  updateHUD(d) {
-    const key = `${d.shards}|${d.charges}|${d.listen}|${d.muted}`;
-    if (key !== this.lastHud) {
-      this.lastHud = key;
-      this.el.hudShard.textContent = `${d.total - d.shards} / ${d.total}`;
-      const pips = this.el.hudPips.children;
-      for (let i = 0; i < pips.length; i++) {
-        pips[i].classList.toggle('on', i < d.charges);
+    this.hideHUD();
+    this.deadDeep.innerHTML = '';
+    if (deepest != null) {
+      const n = Math.min(8, deepest + 1);
+      for (let i = 0; i < 8; i++) {
+        const t = document.createElement('i');
+        if (i < n) t.className = 'lit';
+        this.deadDeep.appendChild(t);
       }
-      this.el.listenTag.classList.toggle('hidden', !d.listen);
     }
-    this.el.hud.style.setProperty('--danger', (d.danger || 0).toFixed(2));
   }
 
-  intro(text) {
-    this.el.intro.textContent = text;
-    this.el.intro.classList.remove('show');
-    void this.el.intro.offsetWidth;
-    this.el.intro.classList.add('show');
+  showClear({ time = 0, pings = 0, isRecord = false } = {}) {
+    this.showScreen('clear');
+    this.hideHUD();
+    this.clearStats.innerHTML = this._statRow(time, pings, isRecord);
+  }
+
+  showVictory() {
+    this.showScreen('victory');
+    this.hideHUD();
+    this.victoryStats.innerHTML = this._statRow(0, 0, false);
+  }
+
+  showWorldVictory({ time = 0, pings = 0, isRecord = false } = {}) {
+    this.showScreen('victory');
+    this.hideHUD();
+    this.victoryStats.innerHTML = this._statRow(time, pings, isRecord);
+  }
+
+  _statRow(time, pings, isRecord) {
+    // Time and pings as bars; the record as a small bright ring.
+    const tBars = Math.min(10, Math.max(1, Math.round(time / 30)));
+    const pBars = Math.min(10, Math.max(0, Math.round(pings / 4)));
+    let t = '<span class="stat"><span class="stat-bars">';
+    for (let i = 0; i < 10; i++) t += `<i class="${i < tBars ? 'on' : ''}"></i>`;
+    t += '</span></span>';
+    let p = '<span class="stat"><span class="stat-bars amber">';
+    for (let i = 0; i < 10; i++) p += `<i class="${i < pBars ? 'on' : ''}"></i>`;
+    p += '</span></span>';
+    const rec = isRecord ? '<span class="record-ring"></span>' : '';
+    return `<div class="stat-row">${t}${p}${rec}</div>`;
+  }
+
+  setSector(num) {
+    this.hudNum.dataset.sector = num;
+    this.hudNum.innerHTML = '';
+    const idx = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'].indexOf(num);
+    const n = idx < 0 ? 1 : idx + 1;
+    for (let i = 0; i < 8; i++) {
+      const d = document.createElement('i');
+      d.className = 'sector-dot';
+      if (i < n) d.classList.add('lit');
+      this.hudNum.appendChild(d);
+    }
+    this.hudNum.classList.remove('pulse');
+    void this.hudNum.offsetWidth;
+    this.hudNum.classList.add('pulse');
+  }
+
+  updateHUD({ shards = 0, total = 1, charges = 0, listen = false, danger = 0 } = {}) {
+    const collected = Math.max(0, total - shards);
+    const filled = total ? Math.round((collected / total) * 12) : 0;
+    let bar = '';
+    for (let i = 0; i < 12; i++) bar += `<i class="${i < filled ? 'on' : ''}"></i>`;
+    this.hudShards.innerHTML = bar;
+    let ch = '';
+    for (let i = 0; i < 3; i++) ch += `<i class="${i < charges ? 'on' : ''}"></i>`;
+    this.hudCharges.innerHTML = ch;
+    this.hudListen.classList.toggle('on', !!listen);
+    this.hud.classList.toggle('sneaking', !!this.game.sneak);
+    this.root.style.setProperty('--danger', String(danger || 0));
+    this.syncMute();
+  }
+
+  syncMute() {
+    if (!this.muteBtn) return;
+    const muted = this.game.audio && this.game.audio.muted;
+    this.muteBtn.innerHTML = icon(muted ? 'muted' : 'sound');
+  }
+
+  /** A shape where a sentence used to be: one soft ring. */
+  intro() {
+    this.root.classList.add('intro-ring');
     clearTimeout(this.introTimer);
-    this.introTimer = setTimeout(() => this.el.intro.classList.remove('show'), 5200);
+    this.introTimer = setTimeout(() => this.root.classList.remove('intro-ring'), 1400);
   }
 
-  toast(text) {
-    this.el.toast.textContent = text;
-    this.el.toast.classList.add('show');
+  /** Feedback without language: amber for a shard, red for a refusal. */
+  toast(kind = 'shard') {
+    const cls = kind === 'deny' ? 'flash-red' : 'flash-amber';
+    this.root.classList.add(cls);
     clearTimeout(this.toastTimer);
-    this.toastTimer = setTimeout(() => this.el.toast.classList.remove('show'), 1700);
+    this.toastTimer = setTimeout(() => this.root.classList.remove(cls), 420);
   }
 
-  // Clear transient overlays so they never sit on top of an end screen.
   dismiss() {
     clearTimeout(this.introTimer);
     clearTimeout(this.toastTimer);
-    this.el.intro.classList.remove('show');
-    this.el.toast.classList.remove('show');
+    this.root.classList.remove('intro-ring', 'flash-red', 'flash-amber');
   }
 
-  tick() {
-    /* reserved for future HUD animation */
-  }
+  tick() {}
 }
 
 // ---- src/game.js ----
@@ -3011,6 +3051,9 @@ const PING_LIFE = 0.9;
 const WAVE_LISTEN = 760;
 const SHARD_ECHO_RANGE = 1150;
 const SHARD_ECHO_SPEED = 1500;
+const SOUND_SPEED = 560;
+const STEP_RANGE = 215;
+const SHARD_NOISE = 330;
 const RAY_COUNT = 96;
 const RAY_SPEED = 560;
 const RAY_LIFE = 0.95;
@@ -3079,6 +3122,7 @@ class Game {
     this.titlePingTimer = 0;
 
     this.ui.build();
+    this.editor = new Editor(this);
     this.ui.showTitle(this.progress);
     this.loadDemo();
 
@@ -3144,6 +3188,9 @@ class Game {
     this.pings = [];
     this.rays = [];
     this.contacts = [];
+    this.sounds = [];
+    this.sneak = false;
+    this.blind = false;
     this.particles = makeDust(this.level);
     this.camX = this.level.size.w / 2;
     this.camY = this.level.size.h / 2;
@@ -3196,13 +3243,86 @@ class Game {
     this.denyCooldown = 0;
     this.sector = sectorOf(this.player.x, this.player.y, level);
     this.state = 'playing';
-    this.ui.showGame(0, {
-      num: CHAMBERS[this.sector].num,
-      title: CHAMBERS[this.sector].title,
-      shards: this.totalShards,
-      intro: this.progress.worldCleared ? '' : '敲一下。墙会回答——远的碎片也会，只是晚一点。',
-    });
+    this.ui.showGame();
     return true;
+  }
+
+  /** Build mode: play the map the player drew. */
+  startCustom(data) {
+    const w = data.w;
+    const h = data.h;
+    const grid = Uint8Array.from(data.cells);
+    const toWorld = (t) => ({ x: (t.x + 0.5) * TILE, y: (t.y + 0.5) * TILE });
+    const level = {
+      w, h, tile: TILE, grid,
+      size: { w: w * TILE, h: h * TILE },
+      rooms: [],
+      spawn: toWorld(data.spawn),
+      spawnTile: { ...data.spawn },
+      exit: toWorld(data.exit),
+      exitTile: { ...data.exit },
+      shards: data.shards.map((t, i) => ({ ...toWorld(t), tile: { ...t }, id: i })),
+      hunters: data.hunters.map((t) => toWorld(t)),
+      skitters: data.skitters.map((t) => toWorld(t)),
+      seed: 'custom',
+    };
+    if (!level.shards.length) {
+      // A map with nothing to gather is a map with nothing to do.
+      level.shards = [{ ...toWorld(data.exit), tile: { ...data.exit }, id: 0 }];
+      level.shards[0].x = (data.exit.x + 0.5) * TILE - TILE * 2;
+    }
+    this.audio.unlock();
+    this.worldMode = false;
+    this.level = level;
+    this.chamberIndex = 0;
+    this.totalShards = level.shards.length;
+    this.player = new Player(level.spawn.x, level.spawn.y);
+    this.hunters = level.hunters.map((hh) => new Hunter(hh.x, hh.y));
+    this.skitters = (level.skitters || []).map((s) => new Skitter(s.x, s.y));
+    this.shards = level.shards.map((s) => ({ ...s }));
+    this.pings = [];
+    this.rays = [];
+    this.contacts = [];
+    this.sounds = [];
+    this.echoRings = [];
+    this.particles = makeDust(level, 200);
+    this.camX = this.player.x;
+    this.camY = this.player.y;
+    this.charges = START_CHARGES;
+    this.chargeTimer = 0;
+    this.listenT = 0;
+    this.pingsUsed = 0;
+    this.levelTime = 0;
+    this.collected = 0;
+    this.exitOpen = false;
+    this.echoRequired = false;
+    this.echoHeard = false;
+    this.sneak = false;
+    this.blind = false;
+    this.humT = 99;
+    this.danger = 0;
+    this.shake = 0;
+    this.flash = 0;
+    this.deathT = 0;
+    this.denyCooldown = 0;
+    this.sector = 0;
+    this.state = 'playing';
+    this.ui.showGame();
+  }
+
+  openEditor() {
+    this.audio.unlock();
+    this.state = 'edit';
+    this.ui.hideScreens();
+    this.ui.hideHUD();
+    this.editor.open();
+  }
+
+  closeEditor() {
+    this.editor.close();
+    this.state = 'title';
+    this.loadDemo();
+    this.ui.showTitle(this.progress);
   }
 
   startChamber(index) {
@@ -3245,7 +3365,7 @@ class Game {
     this.state = 'playing';
     this.progress.last = this.chamberIndex;
     this.saveProgress();
-    this.ui.showGame(this.chamberIndex, cfg);
+    this.ui.showGame();
   }
 
   restart() {
@@ -3316,9 +3436,10 @@ class Game {
   handleGlobalKeys() {
     if (this.input.consume('KeyM')) {
       const muted = this.audio.toggleMute();
-      this.ui.toast(muted ? '静音' : '声音开启');
+      this.ui.toast(muted ? 'deny' : 'shard');
     }
-    if (this.state === 'playing' && this.input.consume('Escape')) this.pause();
+    if (this.state === 'edit' && this.input.consume('Escape')) this.closeEditor();
+    else if (this.state === 'playing' && this.input.consume('Escape')) this.pause();
     else if (this.state === 'paused' && this.input.consume('Escape')) this.resume();
     else if (this.state === 'dead' && this.input.consume('KeyR')) this.restart();
     else if (this.state === 'playing' && this.input.consume('KeyR')) this.restart();
@@ -3377,13 +3498,21 @@ class Game {
     const L = this.level;
     this.levelTime += dt;
 
-    // Holding Space = creep silently. But the directional sense only comes
-    // once you have actually stopped: sound is read in stillness.
-    const creeping = this.input.down('Space');
-    const run = (this.input.down('ShiftLeft') || this.input.down('ShiftRight')) && !creeping;
+    // Shift toggles stealth: silent, but blind — no sound means no picture.
+    // Space is the only sound you make on purpose.
+    if (this.input.consume('ShiftLeft') || this.input.consume('ShiftRight')) {
+      this.sneak = !this.sneak;
+      this.audio.click(0.5);
+      if (this.sneak) this.audio.noise({ dur: 0.25, gain: 0.01, type: 'lowpass', freq: 300, send: 0.4 });
+    }
+    this.blind = this.sneak;
+    const creeping = this.sneak;
+    const run = false;
     const move = this.input.moveVector();
 
-    const motion = p.update(dt, move, { run, listen: creeping });
+    const listen = !this.sneak && (this.debugListen === true || (this.listenT > 0.26 && !p.moving));
+    this.listen = listen;
+    const motion = p.update(dt, move, { run, listen, creep: this.sneak });
     const resolved = this.resolve(p, motion.x, motion.y);
     p.x = resolved.x;
     p.y = resolved.y;
@@ -3393,29 +3522,30 @@ class Game {
 
     if (p.moving) this.listenT = 0;
     else this.listenT = Math.min(1, this.listenT + dt);
-    const listen = this.debugListen === true || (creeping && this.listenT > 0.26);
-    this.listen = listen;
 
     // footsteps
-    if (p.moving) {
-      const threshold = run ? 44 : creeping ? 70 : 58;
-      if (p.stepPhase > threshold) {
+    if (p.moving && !this.sneak) {
+      if (p.stepPhase > 58) {
         p.stepPhase = 0;
-        this.audio.footstep(0, run ? 1.4 : 1);
-        const noiseRadius = creeping ? 90 : run ? 340 : 215;
-        for (const h of this.hunters) {
-          if (dist(p.x, p.y, h.x, h.y) < noiseRadius) this.alertHunter(h, p.x, p.y, 0.18);
-        }
-        for (const sk of this.skitters) {
-          if (dist(p.x, p.y, sk.x, sk.y) < noiseRadius * 0.85) sk.hear(p.x, p.y, 'step', 1.25);
-        }
+        this.audio.footstep(0, 0.85);
+        this.emitSound(p.x, p.y, { range: STEP_RANGE, kind: 'step' });
       }
     }
 
     // pinging
-    if ((this.input.consume('Mouse0') || this.input.consume('KeyJ')) && this.charges > 0) {
-      this.firePing();
+    if ((this.input.consume('Space') || this.input.consume('Mouse0') || this.input.consume('KeyJ')) && this.charges > 0) {
+      if (this.sneak) {
+        this.audio.deny();
+        if (!this.sneakHintShown) {
+          this.sneakHintShown = true;
+          this.audio.noise({ dur: 0.4, gain: 0.02, type: 'lowpass', freq: 240, send: 0.5 });
+        }
+      } else {
+        this.firePing();
+      }
     }
+
+    this.updateSounds();
 
     // charge regen
     if (this.charges < PING_MAX) {
@@ -3431,21 +3561,6 @@ class Game {
     for (const ping of this.pings) {
       const age = this.now - ping.t0;
       if (age < 0 || age > ping.life) continue;
-      const R = age * ping.speed;
-      for (const h of this.hunters) {
-        if (ping.heard.has(h.id)) continue;
-        const d = dist(ping.x, ping.y, h.x, h.y);
-        if (Math.abs(d - R) < 44) {
-          ping.heard.add(h.id);
-          this.alertHunter(h, ping.x, ping.y, 0.08);
-        }
-      }
-      if (!ping.mimicsHeard) {
-        ping.mimicsHeard = true;
-        for (const sk of this.skitters) {
-          if (dist(ping.x, ping.y, sk.x, sk.y) < 600) sk.hear(ping.x, ping.y, 'ping', 1.05);
-        }
-      }
     }
     this.pings = this.pings.filter((ping) => this.now - ping.t0 < ping.life + 0.2);
 
@@ -3458,12 +3573,7 @@ class Game {
         this.audio.shard();
         this.flash = 1;
         this.shake = Math.max(this.shake, 2.5);
-        for (const h of this.hunters) {
-          if (dist(sh.x, sh.y, h.x, h.y) < 330) this.alertHunter(h, sh.x, sh.y, 0.2);
-        }
-        for (const sk of this.skitters) {
-          if (dist(sh.x, sh.y, sk.x, sk.y) < 380) sk.hear(sh.x, sh.y, 'shard', 1.2);
-        }
+        this.emitSound(p.x, p.y, { range: SHARD_NOISE, kind: 'shard' });
         if (this.shards.length === 0) this.tryOpenExit(true);
       }
     }
@@ -3475,7 +3585,7 @@ class Game {
     } else if (!this.exitOpen && dist(p.x, p.y, L.exit.x, L.exit.y) < 34) {
       if (this.denyCooldown <= 0) {
         this.audio.deny();
-        if (this.shards.length > 0) this.ui.toast(`还差 ${this.shards.length} 块碎片`);
+        if (this.shards.length > 0) this.ui.toast('deny');
         this.denyCooldown = 2.2;
       }
     }
@@ -3528,9 +3638,7 @@ class Game {
       if (this.humT <= 0) {
         this.humT = 3.6;
         this.audio.gateHum();
-        for (const sk of this.skitters) {
-          if (dist(L.exit.x, L.exit.y, sk.x, sk.y) < 700) sk.hear(L.exit.x, L.exit.y, 'hum', 0.95);
-        }
+        this.emitSound(L.exit.x, L.exit.y, { range: 700, kind: 'hum', speed: 520 });
       }
     }
 
@@ -3580,7 +3688,7 @@ class Game {
     this.exitOpen = true;
     this.audio.gateOpen();
     this.shake = Math.max(this.shake, 6);
-    if (withFanfare) this.ui.toast('出口已开启');
+    if (withFanfare) this.ui.toast('shard');
     return true;
   }
 
@@ -3599,6 +3707,55 @@ class Game {
   }
 
   /** Spawn a fan of sonar rays that bounce off walls and leave light trails. */
+  /** One expanding shell of sound. Everything that hears does so when the
+   *  front actually reaches it — never by proximity alone. */
+  emitSound(x, y, { range = STEP_RANGE, kind = 'step', speed = SOUND_SPEED } = {}) {
+    this.sounds.push({ x, y, t0: this.now, speed, range, kind, hit: new Set(), hitM: new Set() });
+  }
+
+  updateSounds() {
+    const alive = [];
+    for (const snd of this.sounds) {
+      const age = this.now - snd.t0;
+      if (age < 0) { alive.push(snd); continue; }
+      const R = age * snd.speed;
+      if (R > snd.range + 40) continue;
+      for (const h of this.hunters) {
+        if (snd.hit.has(h.id)) continue;
+        if (Math.abs(dist(snd.x, snd.y, h.x, h.y) - R) < 26) {
+          snd.hit.add(h.id);
+          this.alertHunter(h, snd.x, snd.y, 0.14);
+        }
+      }
+      for (const sk of this.skitters) {
+        if (snd.hitM.has(sk.id)) continue;
+        const d = dist(snd.x, snd.y, sk.x, sk.y);
+        if (Math.abs(d - R) > 26 || d > 700) continue;
+        snd.hitM.add(sk.id);
+        sk.hear(snd.x, snd.y, snd.kind, snd.kind === 'ping' ? 1.05 : 1.35);
+      }
+      alive.push(snd);
+    }
+    this.sounds = alive.slice(-40);
+  }
+
+  /** What a ray is allowed to touch. Colour is knowledge: gold is a shard,
+   *  green is the door, red is something that hunts you. */
+  hitEntity(x, y) {
+    for (const sh of this.shards) {
+      if (dist(x, y, sh.x, sh.y) < 13) return { e: sh, kind: 'shard', tint: '255,205,110' };
+    }
+    const ex = this.level.exit;
+    if (dist(x, y, ex.x, ex.y) < 17) return { e: ex, kind: 'exit', tint: '140,240,170' };
+    for (const h of this.hunters) {
+      if (dist(x, y, h.x, h.y) < 15) return { e: h, kind: 'hunter', tint: '255,86,86' };
+    }
+    for (const sk of this.skitters) {
+      if (dist(x, y, sk.x, sk.y) < 12) return { e: sk, kind: 'skitter', tint: '255,120,120' };
+    }
+    return null;
+  }
+
   spawnRays(x, y) {
     for (let i = 0; i < RAY_COUNT; i++) {
       const a = (i / RAY_COUNT) * Math.PI * 2 + Math.random() * 0.035;
@@ -3610,6 +3767,7 @@ class Game {
         age: 0,
         life: RAY_LIFE * (0.85 + Math.random() * 0.25),
         bounce: 0,
+        tint: null,
         pts: [{ x, y }],
       });
     }
@@ -3632,6 +3790,23 @@ class Game {
           move -= d;
           const nx = r.x + r.dx * d;
           const ny = r.y + r.dy * d;
+          const ent = this.hitEntity(nx, ny);
+          if (ent) {
+            ent.e.seenAt = this.now;
+            r.tint = ent.tint;
+            this.contacts.push({ x: r.x, y: r.y, t: this.now, kind: ent.kind });
+            const nlen = Math.hypot(r.x - ent.e.x, r.y - ent.e.y) || 1;
+            const nxn = (r.x - ent.e.x) / nlen;
+            const nyn = (r.y - ent.e.y) / nlen;
+            const dot = r.dx * nxn + r.dy * nyn;
+            r.dx -= 2 * dot * nxn;
+            r.dy -= 2 * dot * nyn;
+            r.x += r.dx * 3;
+            r.y += r.dy * 3;
+            r.bounce++;
+            if (r.bounce >= 3) { r.age = Math.max(r.age, r.life); break; }
+            continue;
+          }
           const hitX = isSolid(L.grid, L.w, L.h, Math.floor(nx / TILE), Math.floor(r.y / TILE));
           const hitY = isSolid(L.grid, L.w, L.h, Math.floor(r.x / TILE), Math.floor(ny / TILE));
           if (hitX) r.dx *= -1;
@@ -3688,12 +3863,9 @@ class Game {
     this.flash = 0.85;
     if (!this.pingHintShown) {
       this.pingHintShown = true;
-      this.ui.toast('声呐也暴露了你');
+      this.ui.toast('shard');
     }
-    // immediate ripple on the hunters' "attention" for feedback
-    for (const h of this.hunters) {
-      if (dist(p.x, p.y, h.x, h.y) < WAVE_LISTEN * 0.15) h.hear(p.x, p.y, 0.3);
-    }
+    this.emitSound(p.x, p.y, { range: WAVE_LISTEN, kind: 'ping', speed: PING_SPEED });
   }
 
   /** The shards are not silent. A pulse reaching them is answered by a bell
@@ -3853,6 +4025,7 @@ window.addEventListener('error', (e) => {
 });
 
 const params = new URLSearchParams(location.search);
+  if (params.has('edit')) setTimeout(() => game.openEditor(), 60);
 if (params.has('static')) document.documentElement.classList.add('no-anim');
 
 const canvas = document.getElementById('game');
