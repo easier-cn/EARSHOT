@@ -54,6 +54,13 @@ if (freeze !== null) {
   );
 }
 
+// Experimental: walk the single continuous map.
+if (params.has('world')) {
+  setTimeout(() => {
+    game.startWorld(Number(params.get('world')) || 424242);
+  }, 250);
+}
+
 // Force one of the end screens for visual checks.
 const doc = params.get('doc');
 if (doc) {

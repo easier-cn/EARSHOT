@@ -969,13 +969,14 @@ function wallSegments(grid, w, h) {
 }
 
 function tryGenerate(rng, cfg) {
-  const w = GRID_W;
-  const h = GRID_H;
+  const w = cfg.w || GRID_W;
+  const h = cfg.h || GRID_H;
   const style = STYLES[cfg.style] || STYLES.halls;
+  const roomTarget = cfg.rooms || style.rooms;
   const grid = new Uint8Array(w * h).fill(1);
   const rooms = [];
 
-  for (let i = 0; i < 160 && rooms.length < style.rooms; i++) {
+  for (let i = 0; i < 800 && rooms.length < roomTarget; i++) {
     const rw = style.wMin + Math.floor(rng() * (style.wMax - style.wMin + 1));
     const rh = style.hMin + Math.floor(rng() * (style.hMax - style.hMin + 1));
     if (rw > w - 8 || rh > h - 8) continue;
@@ -1151,6 +1152,51 @@ function tryGenerate(rng, cfg) {
     segments: wallSegments(grid, w, h),
     size: { w: w * TILE, h: h * TILE },
   };
+}
+
+/**
+ * One continuous world instead of eight sealed rooms. Same generator, a much
+ * larger grid: sectors are just named neighbourhoods of the same cave system,
+ * so walking out of one is walking into the next.
+ */
+const WORLD_W = 60;
+const WORLD_H = 76;
+const WORLD_SECTORS = 8;
+
+function sectorOf(px, py, level) {
+  const cw = level.size.w / 2;
+  const ch = level.size.h / 4;
+  const col = Math.min(1, Math.floor(px / cw));
+  const row = Math.min(3, Math.floor(py / ch));
+  return row * 2 + col;
+}
+
+function sectorRect(index, level) {
+  const cw = level.size.w / 2;
+  const ch = level.size.h / 4;
+  const col = index % 2;
+  const row = Math.floor(index / 2);
+  return { x: col * cw, y: row * ch, w: cw, h: ch };
+}
+
+function generateWorld(seed) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const level = generateLevel(seed + attempt * 17, {
+      w: WORLD_W,
+      h: WORLD_H,
+      rooms: 44,
+      style: 'halls',
+      shards: 16,
+      hunters: 10,
+      skitters: 4,
+      echoGate: true,
+      shardMinDist: 8,
+    });
+    if (!level) continue;
+    if (level.rooms.length < 34) return null;
+    return level;
+  }
+  return null;
 }
 
 const MAX_ATTEMPTS = 60;
@@ -3016,6 +3062,46 @@ class Game {
     this.startChamber(idx);
   }
 
+  /** Dev/experimental: one continuous map, no chamber select. */
+  startWorld(seed = 424242) {
+    const level = generateWorld(seed);
+    if (!level) return false;
+    this.audio.unlock();
+    this.worldMode = true;
+    this.level = level;
+    this.chamberIndex = 0;
+    this.totalShards = level.shards.length;
+    this.player = new Player(level.spawn.x, level.spawn.y);
+    this.hunters = level.hunters.map((h) => new Hunter(h.x, h.y));
+    this.skitters = (level.skitters || []).map((s) => new Skitter(s.x, s.y));
+    this.shards = level.shards.map((s) => ({ ...s }));
+    this.pings = [];
+    this.rays = [];
+    this.contacts = [];
+    this.echoRings = [];
+    this.particles = makeDust(level, 260);
+    this.camX = this.player.x;
+    this.camY = this.player.y;
+    this.charges = START_CHARGES;
+    this.chargeTimer = 0;
+    this.listenT = 0;
+    this.pingsUsed = 0;
+    this.levelTime = 0;
+    this.collected = 0;
+    this.exitOpen = false;
+    this.echoRequired = true;
+    this.echoHeard = false;
+    this.humT = 2.6;
+    this.danger = 0;
+    this.shake = 0;
+    this.flash = 0;
+    this.deathT = 0;
+    this.denyCooldown = 0;
+    this.state = 'playing';
+    this.ui.showGame(0, { num: '◈', title: '低语之巢', shards: this.totalShards, intro: '' });
+    return true;
+  }
+
   startChamber(index) {
     this.audio.unlock();
     this.chamberIndex = clamp(index, 0, CHAMBERS.length - 1);
@@ -3332,7 +3418,7 @@ class Game {
     this.ui.updateHUD({
       chamber: this.chamberIndex,
       shards: this.shards.length,
-      total: CHAMBERS[this.chamberIndex].shards,
+      total: this.totalShards || CHAMBERS[this.chamberIndex].shards,
       charges: this.charges,
       listen,
       muted: this.audio.muted,
@@ -3644,6 +3730,13 @@ if (freeze !== null) {
     },
     Math.max(0, Number(freeze) || 0),
   );
+}
+
+// Experimental: walk the single continuous map.
+if (params.has('world')) {
+  setTimeout(() => {
+    game.startWorld(Number(params.get('world')) || 424242);
+  }, 250);
 }
 
 // Force one of the end screens for visual checks.

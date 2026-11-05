@@ -92,13 +92,14 @@ function wallSegments(grid, w, h) {
 }
 
 function tryGenerate(rng, cfg) {
-  const w = GRID_W;
-  const h = GRID_H;
+  const w = cfg.w || GRID_W;
+  const h = cfg.h || GRID_H;
   const style = STYLES[cfg.style] || STYLES.halls;
+  const roomTarget = cfg.rooms || style.rooms;
   const grid = new Uint8Array(w * h).fill(1);
   const rooms = [];
 
-  for (let i = 0; i < 160 && rooms.length < style.rooms; i++) {
+  for (let i = 0; i < 800 && rooms.length < roomTarget; i++) {
     const rw = style.wMin + Math.floor(rng() * (style.wMax - style.wMin + 1));
     const rh = style.hMin + Math.floor(rng() * (style.hMax - style.hMin + 1));
     if (rw > w - 8 || rh > h - 8) continue;
@@ -274,6 +275,51 @@ function tryGenerate(rng, cfg) {
     segments: wallSegments(grid, w, h),
     size: { w: w * TILE, h: h * TILE },
   };
+}
+
+/**
+ * One continuous world instead of eight sealed rooms. Same generator, a much
+ * larger grid: sectors are just named neighbourhoods of the same cave system,
+ * so walking out of one is walking into the next.
+ */
+export const WORLD_W = 60;
+export const WORLD_H = 76;
+export const WORLD_SECTORS = 8;
+
+export function sectorOf(px, py, level) {
+  const cw = level.size.w / 2;
+  const ch = level.size.h / 4;
+  const col = Math.min(1, Math.floor(px / cw));
+  const row = Math.min(3, Math.floor(py / ch));
+  return row * 2 + col;
+}
+
+export function sectorRect(index, level) {
+  const cw = level.size.w / 2;
+  const ch = level.size.h / 4;
+  const col = index % 2;
+  const row = Math.floor(index / 2);
+  return { x: col * cw, y: row * ch, w: cw, h: ch };
+}
+
+export function generateWorld(seed) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const level = generateLevel(seed + attempt * 17, {
+      w: WORLD_W,
+      h: WORLD_H,
+      rooms: 44,
+      style: 'halls',
+      shards: 16,
+      hunters: 10,
+      skitters: 4,
+      echoGate: true,
+      shardMinDist: 8,
+    });
+    if (!level) continue;
+    if (level.rooms.length < 34) return null;
+    return level;
+  }
+  return null;
 }
 
 const MAX_ATTEMPTS = 60;

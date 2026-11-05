@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { generateLevel, TILE } from '../src/levelgen.js';
+import { generateLevel, generateWorld, TILE } from '../src/levelgen.js';
 import { findPath, lineOfSight } from '../src/pathfind.js';
 import { moveCircle } from '../src/entities.js';
 import { CHAMBERS } from '../src/chambers.js';
@@ -189,4 +189,21 @@ test('creatures spawn on walkable tiles, and skitter counts match the config', (
       assert.ok(d >= 5 * TILE, `${cfg.title}: skitter too close to spawn (${d.toFixed(0)}px)`);
     }
   }
+});
+
+test('the world is one connected map: every objective is walkable from spawn', () => {
+  const lvl = generateWorld(424242);
+  assert.ok(lvl, 'world generates');
+  const seen = reachableFrom(lvl, lvl.spawnTile.x, lvl.spawnTile.y);
+  for (const sh of lvl.shards) assert.ok(seen[sh.tile.y * lvl.w + sh.tile.x], 'shard reachable');
+  assert.ok(seen[lvl.exitTile.y * lvl.w + lvl.exitTile.x], 'exit reachable');
+  for (const h of lvl.hunters) {
+    const t = { x: Math.floor(h.x / TILE), y: Math.floor(h.y / TILE) };
+    assert.ok(seen[t.y * lvl.w + t.x], 'hunter spawns in the world');
+  }
+  for (const m of lvl.skitters) {
+    const t = { x: Math.floor(m.x / TILE), y: Math.floor(m.y / TILE) };
+    assert.ok(seen[t.y * lvl.w + t.x], 'mimic spawns in the world');
+  }
+  assert.ok(lvl.rooms.length >= 34, 'the world is not a corridor with two rooms');
 });

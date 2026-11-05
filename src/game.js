@@ -1,4 +1,4 @@
-import { generateLevel, TILE } from './levelgen.js';
+import { generateLevel, generateWorld, sectorOf, TILE } from './levelgen.js';
 import { Player, Hunter, Skitter, moveCircle, isSolid } from './entities.js';
 import { Renderer } from './render.js';
 import { Input } from './input.js';
@@ -158,6 +158,46 @@ export class Game {
     if (this.state !== 'title') return;
     const idx = clamp((this.progress.unlocked || 1) - 1, 0, CHAMBERS.length - 1);
     this.startChamber(idx);
+  }
+
+  /** Dev/experimental: one continuous map, no chamber select. */
+  startWorld(seed = 424242) {
+    const level = generateWorld(seed);
+    if (!level) return false;
+    this.audio.unlock();
+    this.worldMode = true;
+    this.level = level;
+    this.chamberIndex = 0;
+    this.totalShards = level.shards.length;
+    this.player = new Player(level.spawn.x, level.spawn.y);
+    this.hunters = level.hunters.map((h) => new Hunter(h.x, h.y));
+    this.skitters = (level.skitters || []).map((s) => new Skitter(s.x, s.y));
+    this.shards = level.shards.map((s) => ({ ...s }));
+    this.pings = [];
+    this.rays = [];
+    this.contacts = [];
+    this.echoRings = [];
+    this.particles = makeDust(level, 260);
+    this.camX = this.player.x;
+    this.camY = this.player.y;
+    this.charges = START_CHARGES;
+    this.chargeTimer = 0;
+    this.listenT = 0;
+    this.pingsUsed = 0;
+    this.levelTime = 0;
+    this.collected = 0;
+    this.exitOpen = false;
+    this.echoRequired = true;
+    this.echoHeard = false;
+    this.humT = 2.6;
+    this.danger = 0;
+    this.shake = 0;
+    this.flash = 0;
+    this.deathT = 0;
+    this.denyCooldown = 0;
+    this.state = 'playing';
+    this.ui.showGame(0, { num: '◈', title: '低语之巢', shards: this.totalShards, intro: '' });
+    return true;
   }
 
   startChamber(index) {
@@ -476,7 +516,7 @@ export class Game {
     this.ui.updateHUD({
       chamber: this.chamberIndex,
       shards: this.shards.length,
-      total: CHAMBERS[this.chamberIndex].shards,
+      total: this.totalShards || CHAMBERS[this.chamberIndex].shards,
       charges: this.charges,
       listen,
       muted: this.audio.muted,

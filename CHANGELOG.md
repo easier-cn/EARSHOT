@@ -3,6 +3,15 @@
 All notable changes to HUSH. The format follows [Keep a Changelog](https://keepachangelog.com/),
 and the game follows [SemVer](https://semver.org/).
 
+## [0.3.2] - 2026-11-05
+
+### Added
+- **A single continuous map (experimental).** `generateWorld()` builds one
+  60×76-tile cave (37 rooms, 16 shards, 10 hunters, 4 mimics) instead of eight
+  sealed chambers. Walk it with `?world=1`; tests assert every shard, hunter,
+  mimic and the exit are reachable from spawn. The chamber mode is still the
+  default while the world grows its own progression and gates.
+
 ## [0.3.1] - 2026-11-05
 
 ### Added
