@@ -641,7 +641,7 @@ export class Game {
       if (this.humT <= 0) {
         this.humT = 3.6;
         this.audio.gateHum();
-        this.stepEcho(L.exit.x, L.exit.y, '140,240,170', { count: 18, speed: 260, life: 0.9 });
+        this.stepEcho(L.exit.x, L.exit.y, '140,240,170', { count: 18, speed: 260, life: 0.9, tagged: false });
       }
     }
 
@@ -745,17 +745,18 @@ export class Game {
 
   /** Every footstep is a small sonar ring. White for you and for hunters,
    *  blue for the mimic, which is neither prey nor predator. */
+  // A footstep is a small sonar burst and nothing else: no ring, no centre dot.
+  // Only the player's own bursts carry a tag; a hunter's steps are mute.
   stepEcho(x, y, tint = null, opts = {}) {
     const count = opts.count ?? 22;
     const speed = opts.speed ?? 330;
     const life = opts.life ?? 0.58;
-    this.spawnRays(x, y, { count, speed, life, tint, kind: opts.kind || 'step' });
-    this.pings.push({ x, y, t0: this.now, speed, life, small: true, tint });
-    this.contacts.push({ x, y, t: this.now, tint });
+    const tag = opts.tagged === false ? null : undefined;
+    this.spawnRays(x, y, { count, speed, life, tint, tag, kind: opts.kind || 'step' });
   }
 
-  spawnRays(x, y, { count = RAY_COUNT, speed = RAY_SPEED, life = RAY_LIFE, tint = null, kind = 'ping', tag = null } = {}) {
-    const stamp = tag || { x, y, t: this.now, kind };
+  spawnRays(x, y, { count = RAY_COUNT, speed = RAY_SPEED, life = RAY_LIFE, tint = null, kind = 'ping', tag = undefined } = {}) {
+    const stamp = tag === null ? null : tag || { x, y, t: this.now, kind };
     for (let i = 0; i < count; i++) {
       const a = (i / count) * Math.PI * 2 + Math.random() * 0.035;
       this.rays.push({
@@ -795,7 +796,7 @@ export class Game {
           const ent = this.hitEntity(nx, ny);
           if (ent) {
             ent.e.seenAt = this.now;
-            this.onRayTouch(ent.e, r.tag);
+            if (r.tag) this.onRayTouch(ent.e, r.tag);
             r.tint = ent.tint;
             r.hot = !!ent.hot;
             if (ent.hot) {

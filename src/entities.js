@@ -1,4 +1,4 @@
-import { findPath } from './pathfind.js';
+import { findPath, nearestOpen } from './pathfind.js';
 
 export function isSolid(grid, w, h, tx, ty) {
   if (tx < 0 || ty < 0 || tx >= w || ty >= h) return true;
@@ -149,8 +149,13 @@ export class Hunter {
     const L = game.level;
     const sx = Math.floor(this.x / L.tile);
     const sy = Math.floor(this.y / L.tile);
-    const tx = Math.floor(x / L.tile);
-    const ty = Math.floor(y / L.tile);
+    let tx = Math.floor(x / L.tile);
+    let ty = Math.floor(y / L.tile);
+    if (isSolid(L.grid, L.w, L.h, tx, ty)) {
+      const open = nearestOpen(L.grid, L.w, L.h, tx * L.tile, ty * L.tile);
+      tx = Math.floor(open.x / L.tile);
+      ty = Math.floor(open.y / L.tile);
+    }
     const path = findPath(L.grid, L.w, L.h, sx, sy, tx, ty);
     if (path && path.length) {
       this.path = path.map((p) => ({
@@ -221,7 +226,7 @@ export class Hunter {
           const pan = Math.max(-1, Math.min(1, rel / 380));
           game.audio.hunterStep(pan, Math.min(1, 1.15 - dist / 640));
         }
-        game.stepEcho?.(this.x, this.y, '255, 70, 70');
+        game.stepEcho?.(this.x, this.y, '255, 70, 70', { tagged: false });
       }
     }
   }
@@ -351,7 +356,7 @@ export class Skitter {
     this.stepAcc += SPEED * dt;
     if (this.stepAcc > 64) {
       this.stepAcc = 0;
-      game.stepEcho?.(this.x, this.y, '110, 180, 255');
+      game.stepEcho?.(this.x, this.y, '110, 180, 255', { tagged: false });
     }
 
     // a dry tick, only audible close by: enough to feel it, not to track it
