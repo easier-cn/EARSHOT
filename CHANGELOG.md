@@ -3,6 +3,13 @@
 All notable changes to HUSH. The format follows [Keep a Changelog](https://keepachangelog.com/),
 and the game follows [SemVer](https://semver.org/).
 
+## [0.2.1] - 2026-11-05
+
+### Added
+- `npm run build` produces `dist/hush.html`: one self-contained file with CSS
+  and all modules inlined, so the game can be opened by double-click with no
+  server and no Python. Inline module scripts are allowed under `file://`.
+
 ## [0.2.0] - 2026-11-05
 
 ### Added

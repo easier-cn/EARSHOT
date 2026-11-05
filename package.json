@@ -1,6 +1,6 @@
 {
   "name": "hush",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "description": "HUSH — a sonar stealth game played in the dark",
@@ -8,6 +8,7 @@
     "serve": "python -m http.server 8080 --bind 127.0.0.1",
     "test": "node --test tests/levelgen.test.js tests/ai.test.js",
     "playtest": "node tools/playtest.mjs",
+    "build": "node tools/build.mjs",
     "balance": "node tools/balance.mjs"
   }
 }

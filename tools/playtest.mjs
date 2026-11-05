@@ -7,7 +7,7 @@ import path from 'node:path';
 
 const EDGE = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
 const PORT = 9333;
-const BASE = 'http://127.0.0.1:8080/';
+const BASE = process.env.HUSH_BASE || 'http://127.0.0.1:8080/';
 const SHOTS = path.resolve('shots');
 fs.mkdirSync(SHOTS, { recursive: true });
 
@@ -37,7 +37,9 @@ async function connect() {
     try {
       const res = await fetch(`http://127.0.0.1:${PORT}/json/list`);
       const list = await res.json();
-      const page = list.find((t) => t.type === 'page' && t.url.includes('8080'));
+      const page = list.find(
+        (t) => t.type === 'page' && t.url !== 'about:blank' && !t.url.startsWith('devtools://'),
+      );
       if (page) return page;
     } catch {
       /* browser not up yet */

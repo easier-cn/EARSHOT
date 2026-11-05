@@ -10,6 +10,9 @@
 
 **Windows：双击 `play.cmd`** —— 它会按需拉起本地服务器，并在浏览器里打开游戏。
 
+**完全不想起服务器？** 双击 `dist\hush.html` 即可。它是一个把 CSS 与全部模块
+内联进去的单文件版本（`npm run build` 生成，约 90 KB），离线和 `file://` 下都能玩。
+
 手动启动（任意静态服务器均可）：
 
 ```bash
@@ -59,7 +62,8 @@ DESIGN.md         设计与数值
 ## 开发
 
 ```bash
-npm test            # 逻辑测试（关卡连通性、寻路、碰撞）
+npm test            # 逻辑测试（关卡连通性、寻路、碰撞、猎手 AI）
+npm run build       # 生成 dist/hush.html 单文件版
 npm run playtest    # 无头浏览器自动试玩（真实按键 + 截图）
 npm run balance     # 每个密室的最短步行路线（配速参考）
 npm run serve       # 本地服务器
