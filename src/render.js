@@ -247,11 +247,23 @@ export class Renderer {
       ctx.restore();
     }
 
+    // ---- echo rings: where a mimic answered --------------------------------
+    for (const r of game.echoRings || []) {
+      const k = (now - r.t) / 1.2;
+      if (k < 0 || k > 1) continue;
+      ctx.strokeStyle = `rgba(150, 242, 230, ${(1 - k) * 0.3})`;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(r.x, r.y, 7 + k * 54, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
     // ---- skitters -----------------------------------------------------------
     for (const sk of game.skitters || []) {
       const b = this._pointBrightness(sk.x, sk.y, game.pings, now, level);
-      if (b < 0.045) continue;
-      const a = clamp(b * 1.9, 0.1, 1);
+      const revealed = (sk.revealT || 0) > 0;
+      if (b < 0.045 && !revealed) continue;
+      const a = clamp(revealed ? Math.max(0.4, b * 1.9) : b * 1.9, 0.1, 1);
       const stride = Math.sin(sk.wobble) * 2.2;
       ctx.save();
       ctx.translate(sk.x, sk.y);

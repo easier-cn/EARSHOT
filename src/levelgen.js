@@ -231,6 +231,20 @@ function tryGenerate(rng, cfg) {
         if (d >= 6 && grid[y * w + x] === 0) skCandidates.push({ x, y });
       }
     }
+    // A door that only opens to an answered sound needs an answer nearby, or
+    // the lock is just a wall. Put the first mimic in earshot of the exit.
+    if (cfg.echoGate) {
+      const near = [];
+      for (let y = 1; y < h - 1; y++) {
+        for (let x = 1; x < w - 1; x++) {
+          if (grid[y * w + x] !== 0 || dist[y * w + x] < 0) continue;
+          const dd = Math.abs(x - exitTile.x) + Math.abs(y - exitTile.y);
+          if (dd >= 3 && dd <= 7) near.push({ x, y });
+        }
+      }
+      shuffle(near, rng);
+      if (near.length) skitterTiles.push(near[0]);
+    }
     shuffle(skCandidates, rng);
     for (const c of skCandidates) {
       if (skitterTiles.length >= cfg.skitters) break;

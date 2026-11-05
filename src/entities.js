@@ -265,12 +265,41 @@ export class Skitter {
     this.tickAcc = Math.random();
     this.face = 0;
     this.wobble = Math.random() * 6;
+    this.echoT = 0;
+    this.echoCool = 0;
+    this.echoKind = null;
+    this.echoSrc = null;
+    this.revealT = 0;
+    this.lure = null;
+  }
+
+  /** It is deaf to meaning but not to sound: anything loud enough is repeated
+   *  back a beat later, from where the mimic is standing. */
+  hear(x, y, kind = 'ping', delay = 1.2) {
+    if (this.echoT > 0 || this.echoCool > 0) return false;
+    this.echoT = delay + Math.random() * 0.3;
+    this.echoKind = kind;
+    this.echoSrc = { x, y };
+    return true;
   }
 
   _plan(game) {
     const L = game.level;
     const sx = Math.floor(this.x / L.tile);
     const sy = Math.floor(this.y / L.tile);
+    if (this.lure) {
+      const tx = Math.floor(this.lure.x / L.tile);
+      const ty = Math.floor(this.lure.y / L.tile);
+      const path = findPath(L.grid, L.w, L.h, sx, sy, tx, ty);
+      this.lure = null;
+      if (path && path.length) {
+        this.path = path.map((p) => ({
+          x: (p.x + 0.5) * L.tile,
+          y: (p.y + 0.5) * L.tile,
+        }));
+        return true;
+      }
+    }
     for (let tries = 0; tries < 16; tries++) {
       const tx = sx + Math.round((Math.random() * 2 - 1) * 9);
       const ty = sy + Math.round((Math.random() * 2 - 1) * 9);
@@ -293,6 +322,17 @@ export class Skitter {
   update(dt, game) {
     const L = game.level;
     this.wobble += dt * 6;
+    if (this.revealT > 0) this.revealT -= dt;
+    if (this.echoCool > 0) this.echoCool -= dt;
+    if (this.echoT > 0) {
+      this.echoT -= dt;
+      if (this.echoT <= 0) {
+        this.echoT = 0;
+        if (game.onEcho) game.onEcho(this, this.echoKind, this.echoSrc);
+        this.lure = this.echoSrc;
+        this.echoSrc = null;
+      }
+    }
 
     if (!this.path.length) {
       this.speed = 0;

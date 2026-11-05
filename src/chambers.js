@@ -56,9 +56,10 @@ export const CHAMBERS = [
     shards: 4,
     hunters: 3,
     skitters: 1,
+    echoGate: true,
     seed: 6619,
     style: 'warren',
-    intro: '停电了。有东西在黑暗中快速移动——它不呼吸，你得用声呐看见它。',
+    intro: '停电了。有什么东西在重复你的声音。',
   },
   {
     num: 'VII',
@@ -67,9 +68,10 @@ export const CHAMBERS = [
     shards: 4,
     hunters: 4,
     skitters: 1,
+    echoGate: true,
     seed: 7723,
     style: 'gallery',
-    intro: '走廊很长。声音会先到。也有些东西，只肯被看见。',
+    intro: '走廊很长。声音会先到。',
   },
   {
     num: 'VIII',

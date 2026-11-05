@@ -68,6 +68,16 @@ if (doc) {
       game.victory();
     } else if (doc === 'pause') {
       game.pause();
+    } else if (doc === 'echo') {
+      game.startChamber(5);
+      const m = game.skitters[0];
+      if (m) {
+        game.player.x = m.x + 120;
+        game.player.y = m.y;
+        game.charges = 3;
+        game.firePing();
+        game.debugSimulate(1.35, {});
+      }
     }
   }, 900);
 }

@@ -3,6 +3,22 @@
 All notable changes to HUSH. The format follows [Keep a Changelog](https://keepachangelog.com/),
 and the game follows [SemVer](https://semver.org/).
 
+## [0.3.1] - 2026-11-05
+
+### Added
+- **The mimic (拟声者) and the echo door.** The creature that used to only
+  click now repeats any sound it hears, about a second later, from wherever it
+  is standing — hunters turn toward the answer instead of you, and the room
+  shows a ring where it spoke. Chambers VI and VII end at a door that will not
+  open for a single sound: it wants the same sound answered from another
+  direction. No prompt, no key. Ping, hear it answer, watch the door open.
+- Echo audio: a detuned, wetter copy of the sound it repeats, panned to where
+  the mimic stands. Sealed doors hum every ~3.6s once you hold every shard, so
+  there is something for the mimic to answer.
+
+### Fixed
+- `audio.skitterTick` was referenced but never implemented.
+
 ## [0.3.0] - 2026-11-05
 
 ### Changed

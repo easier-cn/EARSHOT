@@ -232,6 +232,27 @@ export class AudioEngine {
     this.noise({ dur: 0.09, gain: 0.05 * strength, type: 'highpass', freq: 2600, send: 0.6 });
   }
 
+  /** Something out there answered your sound. Detuned, wetter, further away. */
+  echo(pan = 0, kind = 'ping') {
+    const heavy = kind === 'ping' || kind === 'hum';
+    const g = heavy ? 0.1 : 0.055;
+    this.tone({ freq: 1640, freqEnd: 600, type: 'triangle', dur: 0.22, gain: g * 0.45, pan, send: 1.5, delay: 0.02, detune: -40 });
+    this.tone({ freq: 720, freqEnd: 170, type: 'sine', dur: 1.15, gain: g, pan, send: 1.7, delay: 0.06, detune: -70 });
+    this.noise({ dur: 0.16, gain: g * 0.22, type: 'bandpass', freq: 1700, q: 3.5, pan, send: 1.3, delay: 0.04 });
+  }
+
+  /** Dry chitin clicks: the only warning a mimic gives, and only up close. */
+  skitterTick(pan = 0, loud = 1) {
+    this.noise({ dur: 0.028, gain: 0.022 * loud, type: 'highpass', freq: 3400, pan, send: 0.12 });
+    this.tone({ freq: 2100, freqEnd: 1500, type: 'square', dur: 0.018, gain: 0.005 * loud, pan, send: 0.08 });
+  }
+
+  /** A sealed door breathing: low, patient, and just audible enough to answer. */
+  gateHum() {
+    this.tone({ freq: 61, freqEnd: 57, type: 'sine', dur: 1.5, gain: 0.05, send: 1.2, delay: 0.02 });
+    this.tone({ freq: 122, freqEnd: 116, type: 'triangle', dur: 1.1, gain: 0.012, send: 1.0 });
+  }
+
   deny() {
     this.tone({ freq: 180, freqEnd: 120, type: 'square', dur: 0.12, gain: 0.05, send: 0.1 });
   }

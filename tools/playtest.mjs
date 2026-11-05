@@ -219,6 +219,33 @@ async function main() {
     report.clearShot = 'shots/cdp-clear.png';
   }
 
+  // Knowledge lock: an echo-gated door must stay shut until a mimic answers
+  // a sound next to it, and must open on its own once it hears that answer.
+  await send('Page.navigate', { url: BASE + '?c=5&static=1' });
+  await sleep(1200);
+  report.gate = await evaluate(`(async () => {
+    const g = window.__hush;
+    const step = (ms) => new Promise((r) => setTimeout(r, ms || 80));
+    if (g.state !== 'playing') return { error: 'not playing: ' + g.state };
+    const required = g.echoRequired;
+    for (let guard = 0; guard < 20 && g.shards.length; guard++) {
+      g.player.x = g.shards[0].x;
+      g.player.y = g.shards[0].y;
+      await step(60);
+    }
+    const before = { shardsLeft: g.shards.length, open: g.exitOpen, echo: g.heard };
+    const m = g.skitters[0];
+    g.player.x = m.x + 130;
+    g.player.y = m.y;
+    g.charges = 3;
+    g.firePing();
+    await step(2400);
+    return {
+      required,
+      before,
+      after: { open: g.exitOpen, echoHeard: g.echoHeard, echoes: g.echoRings.length },
+    };
+  })()`);
   report.errors = exceptions;
   console.log(JSON.stringify(report, null, 2));
 }

@@ -65,6 +65,10 @@ export class Game {
     this.levelTime = 0;
     this.collected = 0;
     this.exitOpen = false;
+    this.echoRequired = false;
+    this.echoHeard = false;
+    this.echoRings = [];
+    this.humT = 2.6;
     this.danger = 0;
     this.shake = 0;
     this.flash = 0;
@@ -183,11 +187,16 @@ export class Game {
     this.levelTime = 0;
     this.collected = 0;
     this.exitOpen = false;
+    this.echoRequired = false;
+    this.echoHeard = false;
+    this.echoRings = [];
+    this.humT = 2.6;
     this.danger = 0;
     this.shake = 0;
     this.flash = 0;
     this.deathT = 0;
     this.denyCooldown = 0;
+    this.echoRequired = !!cfg.echoGate;
     this.state = 'playing';
     this.progress.last = this.chamberIndex;
     this.saveProgress();
@@ -345,6 +354,9 @@ export class Game {
         for (const h of this.hunters) {
           if (dist(p.x, p.y, h.x, h.y) < noiseRadius) this.alertHunter(h, p.x, p.y, 0.18);
         }
+        for (const sk of this.skitters) {
+          if (dist(p.x, p.y, sk.x, sk.y) < noiseRadius * 0.85) sk.hear(p.x, p.y, 'step', 1.25);
+        }
       }
     }
 
@@ -375,6 +387,9 @@ export class Game {
           ping.heard.add(h.id);
           this.alertHunter(h, ping.x, ping.y, 0.08);
         }
+        for (const sk of this.skitters) {
+          if (dist(ping.x, ping.y, sk.x, sk.y) < 600) sk.hear(ping.x, ping.y, 'ping', 1.05);
+        }
       }
     }
     this.pings = this.pings.filter((ping) => this.now - ping.t0 < ping.life + 0.2);
@@ -391,12 +406,10 @@ export class Game {
         for (const h of this.hunters) {
           if (dist(sh.x, sh.y, h.x, h.y) < 330) this.alertHunter(h, sh.x, sh.y, 0.2);
         }
-        if (this.shards.length === 0) {
-          this.exitOpen = true;
-          this.audio.gateOpen();
-          this.shake = Math.max(this.shake, 6);
-          this.ui.toast('出口已开启');
+        for (const sk of this.skitters) {
+          if (dist(sh.x, sh.y, sk.x, sk.y) < 380) sk.hear(sh.x, sh.y, 'shard', 1.2);
         }
+        if (this.shards.length === 0) this.tryOpenExit(true);
       }
     }
 
@@ -407,7 +420,7 @@ export class Game {
     } else if (!this.exitOpen && dist(p.x, p.y, L.exit.x, L.exit.y) < 34) {
       if (this.denyCooldown <= 0) {
         this.audio.deny();
-        this.ui.toast(`还差 ${this.shards.length} 块碎片`);
+        if (this.shards.length > 0) this.ui.toast(`还差 ${this.shards.length} 块碎片`);
         this.denyCooldown = 2.2;
       }
     }
@@ -441,6 +454,20 @@ export class Game {
       : 0;
     if (this.danger > 0.4) this.danger = Math.min(1, this.danger + 0.1);
 
+    for (let i = this.echoRings.length - 1; i >= 0; i--) {
+      if (this.now - this.echoRings[i].t > 1.4) this.echoRings.splice(i, 1);
+    }
+    if (this.echoRequired && !this.echoHeard && this.shards.length === 0) {
+      this.humT -= dt;
+      if (this.humT <= 0) {
+        this.humT = 3.6;
+        this.audio.gateHum();
+        for (const sk of this.skitters) {
+          if (dist(L.exit.x, L.exit.y, sk.x, sk.y) < 700) sk.hear(L.exit.x, L.exit.y, 'hum', 0.95);
+        }
+      }
+    }
+
     this.audio.update(dt, { danger: this.danger });
     this.updateRays(dt);
     this.updateParticles(dt);
@@ -459,6 +486,38 @@ export class Game {
 
   // Every noise source goes through here, so the "it heard that" stinger stays
   // tied to the moment a hunter actually wakes up rather than to every step.
+  /** A mimic repeated something. Hunters turn toward it, the room gets a
+   *  visible ring, and a sealed door that hears an answer unlocks. */
+  onEcho(m, kind, src) {
+    m.echoCool = 2.0;
+    m.revealT = 1.8;
+    const pan = clamp((m.x - this.player.x) / 480, -1, 1) * 0.9;
+    this.audio.echo(pan, kind);
+    this.echoRings.push({ x: m.x, y: m.y, t: this.now, kind });
+    for (const h of this.hunters) {
+      if (dist(m.x, m.y, h.x, h.y) < 520) this.alertHunter(h, m.x, m.y, 0.15);
+    }
+    const byPlayer = kind === 'ping' || kind === 'step' || kind === 'shard';
+    if (this.echoRequired && !this.echoHeard && byPlayer
+      && dist(m.x, m.y, this.level.exit.x, this.level.exit.y) < 620) {
+      this.echoHeard = true;
+      this.tryOpenExit(false);
+    }
+  }
+
+  /** The exit stays shut until the door has heard a doubled sound, not just
+   *  the shards. No text explains this: the door hums, something answers. */
+  tryOpenExit(withFanfare = false) {
+    if (this.exitOpen) return false;
+    if (this.shards.length > 0) return false;
+    if (this.echoRequired && !this.echoHeard) return false;
+    this.exitOpen = true;
+    this.audio.gateOpen();
+    this.shake = Math.max(this.shake, 6);
+    if (withFanfare) this.ui.toast('出口已开启');
+    return true;
+  }
+
   alertHunter(h, x, y, delay) {
     const tracking = h.state === 'investigate';
     h.hear(x, y, delay);
