@@ -46,6 +46,12 @@ export class UI {
           <div class="panel-kicker">PAUSED</div>
           <h2>暂停</h2>
           <p class="panel-sub">黑暗在等你。</p>
+          <div class="hints compact">
+            <span><b>WASD</b> 移动</span>
+            <span><b>左键</b> 声呐</span>
+            <span><b>站定+空格</b> 聆听</span>
+            <span><b>Shift</b> 奔跑</span>
+          </div>
           <div class="panel-actions">
             <button class="btn primary" id="btn-resume">继续</button>
             <button class="btn" id="btn-restart">重来</button>

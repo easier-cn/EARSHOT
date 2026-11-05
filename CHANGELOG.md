@@ -9,6 +9,7 @@ and the game follows [SemVer](https://semver.org/).
 - `npm run build` produces `dist/hush.html`: one self-contained file with CSS
   and all modules inlined, so the game can be opened by double-click with no
   server and no Python. Inline module scripts are allowed under `file://`.
+- Pause screen lists the controls, so nobody has to remember them mid-run.
 
 ## [0.2.0] - 2026-11-05
 

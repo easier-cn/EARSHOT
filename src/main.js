@@ -66,6 +66,8 @@ if (doc) {
     } else if (doc === 'victory') {
       game.chamberIndex = 7;
       game.victory();
+    } else if (doc === 'pause') {
+      game.pause();
     }
   }, 900);
 }

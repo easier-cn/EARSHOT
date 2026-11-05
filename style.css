@@ -285,6 +285,13 @@ kbd {
   animation: fadeUp 1s 0.85s ease both;
 }
 
+.hints.compact {
+  margin: 2px 0 14px;
+  font-size: 9px;
+  gap: 4px 14px;
+  animation: none;
+}
+
 .hints b {
   font-weight: 500;
   color: rgba(127, 227, 212, 0.65);

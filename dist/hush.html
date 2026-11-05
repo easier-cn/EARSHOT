@@ -298,6 +298,13 @@ kbd {
   animation: fadeUp 1s 0.85s ease both;
 }
 
+.hints.compact {
+  margin: 2px 0 14px;
+  font-size: 9px;
+  gap: 4px 14px;
+  animation: none;
+}
+
 .hints b {
   font-weight: 500;
   color: rgba(127, 227, 212, 0.65);
@@ -2316,6 +2323,12 @@ class UI {
           <div class="panel-kicker">PAUSED</div>
           <h2>暂停</h2>
           <p class="panel-sub">黑暗在等你。</p>
+          <div class="hints compact">
+            <span><b>WASD</b> 移动</span>
+            <span><b>左键</b> 声呐</span>
+            <span><b>站定+空格</b> 聆听</span>
+            <span><b>Shift</b> 奔跑</span>
+          </div>
           <div class="panel-actions">
             <button class="btn primary" id="btn-resume">继续</button>
             <button class="btn" id="btn-restart">重来</button>
@@ -3222,6 +3235,8 @@ if (doc) {
     } else if (doc === 'victory') {
       game.chamberIndex = 7;
       game.victory();
+    } else if (doc === 'pause') {
+      game.pause();
     }
   }, 900);
 }
