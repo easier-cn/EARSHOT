@@ -4127,6 +4127,7 @@ class Game {
   /** Roguelike run: five floors, each one a room-graph floor. */
   startRun(seed = (Math.random() * 1e9) | 0) {
     this.guides = {};
+    this.rewindUsed = false;
     this.runSeed = seed;
     this.diamonds = 0;
     this.gold = 0;
@@ -4216,8 +4217,11 @@ class Game {
     this.invulnT = 0;
     this.lives = this.maxLives();
     this.starKills = 0;
-    this.counterReady = this.inv.level('counter') > 0;
-    this.stressCharges = this.inv.level('stress') ? 1 : 0;
+    this.stressUsed = false;
+    this.counterUsed = false;
+    this.stoneGranted = false;
+    this.stoneLevel = 0;
+    this.inv.stones = 0;
     this.refreshStones();
     this.ui.showGame();
     return true;
@@ -4362,13 +4366,13 @@ class Game {
       this.invulnT = Math.max(this.invulnT, 0.6);
       return;
     }
-    if (this.stressCharges > 0) {
-      this.stressCharges -= 1;
+    if (this.inv.level('stress') > 0 && !this.stressUsed) {
+      this.stressUsed = true;
       this.enterStress();
       return;
     }
-    if (this.counterReady) {
-      this.counterReady = false;
+    if (this.inv.level('counter') > 0 && !this.counterUsed) {
+      this.counterUsed = true;
       if (source && source.x != null) this.killHunter(source);
       this.invulnT = CHARMS.counter.window;
       this.flash = 1;
@@ -4381,6 +4385,9 @@ class Game {
       this.flash = 1;
       this.shake = Math.max(this.shake, 9);
       this.audio.alert(0);
+      // a new life re-arms the once-per-life charms, whatever is socketed now
+      this.stressUsed = false;
+      this.counterUsed = false;
       return;
     }
     // 时间逆流: the first lethal hit of a run is always forgiven.
@@ -4408,9 +4415,25 @@ class Game {
     this.stepEcho(this.player.x, this.player.y, '255, 210, 120', { count: 48, speed: 520, life: 1.2, tagged: false });
   }
 
+  /**
+   * Stones are a per-floor pool. Equipping twice must not refill the quiver,
+   * but a level-up hands over the difference (3 -> 5 -> 7 is +2 each time).
+   */
   refreshStones() {
     const lvl = this.inv.level('stone');
-    this.inv.stones = lvl ? CHARMS.stone.stones[lvl - 1] : 0;
+    if (lvl < 1) return;
+    const quota = CHARMS.stone.stones[lvl - 1];
+    if (!this.stoneGranted) {
+      this.stoneGranted = true;
+      this.stoneLevel = lvl;
+      this.inv.stones = quota;
+      return;
+    }
+    if (lvl > this.stoneLevel) {
+      const gain = quota - CHARMS.stone.stones[this.stoneLevel - 1];
+      this.stoneLevel = lvl;
+      this.inv.stones += gain;
+    }
   }
 
   /** Dev/experimental: one continuous map, no chamber select. */

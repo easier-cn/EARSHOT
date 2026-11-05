@@ -303,6 +303,7 @@ export class Game {
     this.stressUsed = false;
     this.counterUsed = false;
     this.stoneGranted = false;
+    this.stoneLevel = 0;
     this.inv.stones = 0;
     this.refreshStones();
     this.ui.showGame();
@@ -497,13 +498,25 @@ export class Game {
     this.stepEcho(this.player.x, this.player.y, '255, 210, 120', { count: 48, speed: 520, life: 1.2, tagged: false });
   }
 
-  /** Stones are a per-floor pool: equipping twice must not refill the quiver. */
+  /**
+   * Stones are a per-floor pool. Equipping twice must not refill the quiver,
+   * but a level-up hands over the difference (3 -> 5 -> 7 is +2 each time).
+   */
   refreshStones() {
     const lvl = this.inv.level('stone');
     if (lvl < 1) return;
-    if (this.stoneGranted) return;
-    this.stoneGranted = true;
-    this.inv.stones = CHARMS.stone.stones[lvl - 1];
+    const quota = CHARMS.stone.stones[lvl - 1];
+    if (!this.stoneGranted) {
+      this.stoneGranted = true;
+      this.stoneLevel = lvl;
+      this.inv.stones = quota;
+      return;
+    }
+    if (lvl > this.stoneLevel) {
+      const gain = quota - CHARMS.stone.stones[this.stoneLevel - 1];
+      this.stoneLevel = lvl;
+      this.inv.stones += gain;
+    }
   }
 
   /** Dev/experimental: one continuous map, no chamber select. */
