@@ -210,6 +210,7 @@ export class Game {
   /** Roguelike run: five floors, each one a room-graph floor. */
   startRun(seed = (Math.random() * 1e9) | 0) {
     this.guides = {};
+    this.rewindUsed = false;
     this.runSeed = seed;
     this.diamonds = 0;
     this.gold = 0;
@@ -299,8 +300,10 @@ export class Game {
     this.invulnT = 0;
     this.lives = this.maxLives();
     this.starKills = 0;
-    this.counterReady = this.inv.level('counter') > 0;
-    this.stressCharges = this.inv.level('stress') ? 1 : 0;
+    this.stressUsed = false;
+    this.counterUsed = false;
+    this.stoneGranted = false;
+    this.inv.stones = 0;
     this.refreshStones();
     this.ui.showGame();
     return true;
@@ -445,13 +448,13 @@ export class Game {
       this.invulnT = Math.max(this.invulnT, 0.6);
       return;
     }
-    if (this.stressCharges > 0) {
-      this.stressCharges -= 1;
+    if (this.inv.level('stress') > 0 && !this.stressUsed) {
+      this.stressUsed = true;
       this.enterStress();
       return;
     }
-    if (this.counterReady) {
-      this.counterReady = false;
+    if (this.inv.level('counter') > 0 && !this.counterUsed) {
+      this.counterUsed = true;
       if (source && source.x != null) this.killHunter(source);
       this.invulnT = CHARMS.counter.window;
       this.flash = 1;
@@ -464,6 +467,9 @@ export class Game {
       this.flash = 1;
       this.shake = Math.max(this.shake, 9);
       this.audio.alert(0);
+      // a new life re-arms the once-per-life charms, whatever is socketed now
+      this.stressUsed = false;
+      this.counterUsed = false;
       return;
     }
     // 时间逆流: the first lethal hit of a run is always forgiven.
@@ -491,9 +497,13 @@ export class Game {
     this.stepEcho(this.player.x, this.player.y, '255, 210, 120', { count: 48, speed: 520, life: 1.2, tagged: false });
   }
 
+  /** Stones are a per-floor pool: equipping twice must not refill the quiver. */
   refreshStones() {
     const lvl = this.inv.level('stone');
-    this.inv.stones = lvl ? CHARMS.stone.stones[lvl - 1] : 0;
+    if (lvl < 1) return;
+    if (this.stoneGranted) return;
+    this.stoneGranted = true;
+    this.inv.stones = CHARMS.stone.stones[lvl - 1];
   }
 
   /** Dev/experimental: one continuous map, no chamber select. */
