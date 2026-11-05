@@ -93,16 +93,25 @@ export class Game {
 
   // ---------------------------------------------------------------- progress
   loadProgress() {
-    const fallback = { unlocked: 1, cleared: [], last: 0 };
+    const fallback = { unlocked: 1, cleared: [], last: 0, best: {} };
     try {
       const raw = localStorage.getItem(SAVE_KEY);
       if (!raw) return fallback;
       const data = JSON.parse(raw);
       if (typeof data.unlocked !== 'number') return fallback;
+      const best = {};
+      if (data.best && typeof data.best === 'object') {
+        for (const [k, v] of Object.entries(data.best)) {
+          const i = Number(k);
+          if (!Number.isInteger(i) || !v || typeof v.time !== 'number') continue;
+          best[i] = { time: v.time, pings: Math.max(0, v.pings | 0) };
+        }
+      }
       return {
         unlocked: clamp(data.unlocked, 1, CHAMBERS.length),
         cleared: Array.isArray(data.cleared) ? data.cleared : [],
         last: typeof data.last === 'number' ? data.last : 0,
+        best,
       };
     } catch {
       return fallback;
@@ -204,7 +213,8 @@ export class Game {
 
   victory() {
     this.state = 'victory';
-    this.ui.showVictory();
+    this.ui.dismiss();
+    this.ui.showVictory(this.progress);
   }
 
   // ------------------------------------------------------------------- loop
@@ -464,12 +474,21 @@ export class Game {
     this.progress.cleared = [...cleared];
     this.progress.unlocked = Math.max(this.progress.unlocked, this.chamberIndex + 2);
     this.progress.last = this.chamberIndex;
+    const prev = this.progress.best[this.chamberIndex];
+    const time = Math.max(0, this.levelTime);
+    const isRecord =
+      !prev || time < prev.time || (time === prev.time && this.pingsUsed < prev.pings);
+    if (isRecord) {
+      this.progress.best[this.chamberIndex] = { time, pings: this.pingsUsed };
+    }
     this.saveProgress();
     this.ui.dismiss();
     this.ui.showClear({
       chamber: this.chamberIndex,
-      time: this.levelTime,
+      time,
       pings: this.pingsUsed,
+      best: this.progress.best[this.chamberIndex],
+      isRecord,
       last: this.chamberIndex === CHAMBERS.length - 1,
     });
   }

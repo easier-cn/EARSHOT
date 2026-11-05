@@ -394,6 +394,38 @@ kbd {
   color: rgba(255, 214, 155, 0.9);
 }
 
+.record {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 20px 0 -8px;
+  min-height: 20px;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: rgba(210, 245, 238, 0.38);
+}
+
+.record.fresh {
+  color: rgba(127, 227, 212, 0.85);
+}
+
+.record-badge {
+  padding: 2px 8px;
+  border: 1px solid rgba(255, 214, 155, 0.45);
+  color: #ffd69b;
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  animation: badge-in 0.6s ease-out both;
+}
+
+@keyframes badge-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
 /* ---------------------------------------------------------------------- hud */
 .hud {
   position: absolute;

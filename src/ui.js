@@ -71,6 +71,7 @@ export class UI {
         <div class="panel">
           <div class="panel-kicker">CHAMBER SILENT</div>
           <h2>密室已静</h2>
+          <div class="record" id="clear-record"></div>
           <div class="stats" id="clear-stats"></div>
           <div class="panel-actions">
             <button class="btn primary" id="btn-next">下一间</button>
@@ -84,6 +85,7 @@ export class UI {
           <div class="panel-kicker">ALL CHAMBERS SILENT</div>
           <h2 class="victory-title">HUSH</h2>
           <p class="panel-sub">所有密室都已安静。你学会了在黑暗里呼吸。</p>
+          <div class="stats" id="victory-stats"></div>
           <div class="panel-actions">
             <button class="btn primary" id="btn-victory-title">回到开头</button>
           </div>
@@ -133,6 +135,8 @@ export class UI {
       start: $('btn-start'),
       grid: $('chamber-grid'),
       stats: $('clear-stats'),
+      record: $('clear-record'),
+      victoryStats: $('victory-stats'),
     };
     this.screens = {
       title: this.el.title,
@@ -192,8 +196,10 @@ export class UI {
     this.el.grid.innerHTML = CHAMBERS.map((c, i) => {
       const unlocked = i < progress.unlocked;
       const cleared = progress.cleared.includes(i);
+      const best = progress.best && progress.best[i];
+      const label = !unlocked ? '未解锁' : best ? `最佳 ${fmtTime(best.time)}` : c.title;
       return `<button class="chamber ${unlocked ? 'open' : 'locked'} ${cleared ? 'cleared' : ''}"
-        data-i="${i}" ${unlocked ? '' : 'disabled'} title="${unlocked ? c.title : '未解锁'}">
+        data-i="${i}" ${unlocked ? '' : 'disabled'} title="${label}">
         <span>${ROMAN[i]}</span>${cleared ? '<i></i>' : ''}
       </button>`;
     }).join('');
@@ -243,7 +249,7 @@ export class UI {
     this.showScreen('dead');
   }
 
-  showClear({ chamber, time, pings, last }) {
+  showClear({ chamber, time, pings, best, isRecord, last }) {
     this.el.hud.classList.add('hidden');
     this.showScreen('clear');
     this.el.stats.innerHTML = `
@@ -251,12 +257,31 @@ export class UI {
       <div><span>声呐</span><b>${pings} 次</b></div>
       <div><span>碎片</span><b>${CHAMBERS[chamber].shards} / ${CHAMBERS[chamber].shards}</b></div>
     `;
+    const bestTime = best ? fmtTime(best.time) : '—';
+    this.el.record.innerHTML = `
+      ${isRecord ? '<span class="record-badge">新纪录</span>' : ''}
+      <span>最佳 ${bestTime}${best ? ` · ${best.pings} 次声呐` : ''}</span>
+    `;
+    this.el.record.classList.toggle('fresh', !!isRecord);
     document.getElementById('btn-next').textContent = last ? '完成旅程' : '下一间';
   }
 
-  showVictory() {
+  showVictory(progress = {}) {
     this.el.hud.classList.add('hidden');
     this.showScreen('victory');
+    const best = progress.best || {};
+    const keys = Object.keys(best);
+    let total = 0;
+    let pings = 0;
+    for (const k of keys) {
+      total += best[k].time;
+      pings += best[k].pings;
+    }
+    this.el.victoryStats.innerHTML = `
+      <div><span>密室</span><b>${keys.length} / ${CHAMBERS.length}</b></div>
+      <div><span>最佳总用时</span><b>${keys.length ? fmtTime(total) : '—'}</b></div>
+      <div><span>声呐</span><b>${pings} 次</b></div>
+    `;
   }
 
   // ------------------------------------------------------------------- hud
