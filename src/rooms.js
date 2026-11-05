@@ -296,6 +296,24 @@ function buildFloor(seed, depth) {
   const key = center(keyRoom);
   const exit = center(exitRoom);
 
+  // Loot: every branch end, the room the exit leaves from, and the room just
+  // before the key.
+  const loot = [];
+  const charmIds = ['sleep', 'stress', 'survive', 'stone', 'counter', 'sneakSonar', 'swift', 'home', 'rewind', 'hunt'];
+  const itemIds = ['pebbles', 'sharpStone', 'vitamin', 'totem', 'star', 'corpse', 'bugspray', 'scanner'];
+  const spots = [];
+  for (const r of rooms) if (r.kind === 'branch' || r.kind === 'exit') spots.push(center(r));
+  const mainRooms = rooms.filter((r) => r.kind !== 'branch' && r.kind !== 'exit');
+  const beforeKey = mainRooms[mainRooms.length - 2];
+  const exitMother = rooms.find((r) => r.i === exitRoom.links?.[0]);
+  if (beforeKey) spots.push(center(beforeKey));
+  if (exitMother) spots.push(center(exitMother));
+  for (let i = 0; i < spots.length; i++) {
+    const charm = i % 3 !== 2;
+    const id = charm ? charmIds[Math.floor(rnd() * charmIds.length)] : itemIds[Math.floor(rnd() * itemIds.length)];
+    loot.push({ x: spots[i].x, y: spots[i].y, kind: charm ? 'charm' : 'item', id });
+  }
+
   return {
     w: FLOOR_W,
     h: FLOOR_H,
@@ -303,6 +321,7 @@ function buildFloor(seed, depth) {
     size: { w: FLOOR_W * TILE, h: FLOOR_H * TILE },
     grid,
     rooms,
+    loot,
     branches: branches.map((b) => b.i),
     spawn,
     spawnTile: spawn.tile,

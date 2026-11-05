@@ -215,6 +215,20 @@ export class Renderer {
     }
 
     // ---- shards -------------------------------------------------------------
+    for (const l of game.loot || []) {
+      const k = Math.max(0, 1 - (now - (l.seenAt ?? -9)) / 2.2);
+      const glow = Math.max(0.16, k);
+      const col = l.kind === 'charm' ? '170,225,255' : '255,205,110';
+      ctx.strokeStyle = `rgba(${col}, ${glow * 0.8})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(l.x, l.y, 5.5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = `rgba(${col}, ${glow * 0.55})`;
+      ctx.beginPath();
+      ctx.arc(l.x, l.y, 1.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
     for (const sh of game.shards) {
       if (!vision) continue;
       const seen = now - (sh.seenAt ?? -99);
@@ -291,6 +305,19 @@ export class Renderer {
     // ---- player -------------------------------------------------------------
     if (game.player) {
       const p = game.player;
+      // Way home: a small triangle orbiting the player toward the key / exit.
+      for (const m of game.homeMarkers || []) {
+        const a = Math.atan2(m.y - p.y, m.x - p.x);
+        const mx = p.x + Math.cos(a) * 34;
+        const my = p.y + Math.sin(a) * 34;
+        ctx.fillStyle = `rgba(${m.c}, 0.85)`;
+        ctx.beginPath();
+        ctx.moveTo(mx + Math.cos(a) * 6, my + Math.sin(a) * 6);
+        ctx.lineTo(mx + Math.cos(a + 2.4) * 5, my + Math.sin(a + 2.4) * 5);
+        ctx.lineTo(mx + Math.cos(a - 2.4) * 5, my + Math.sin(a - 2.4) * 5);
+        ctx.closePath();
+        ctx.fill();
+      }
       for (const t of p.trail) {
         ctx.fillStyle = `rgba(190, 255, 246, ${(t.life / 0.55) * 0.07})`;
         ctx.beginPath();

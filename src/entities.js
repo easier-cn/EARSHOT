@@ -87,8 +87,8 @@ export class Player {
     this.stepPhase = 0;
   }
 
-  update(dt, move, { run = false, listen = false, creep = false } = {}) {
-    const maxSpeed = creep ? 52 : listen ? 60 : run ? 152 : 92;
+  update(dt, move, { run = false, listen = false, creep = false, creepMul = 0.5, mul = 1 } = {}) {
+    const maxSpeed = (creep ? Math.round(92 * creepMul) : listen ? 60 : run ? 152 : 92) * mul;
     const targetX = move.x * maxSpeed;
     const targetY = move.y * maxSpeed;
     const k = 1 - Math.exp(-(move.x || move.y ? 16 : 12) * dt);

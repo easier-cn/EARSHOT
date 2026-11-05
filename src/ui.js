@@ -1,6 +1,8 @@
 // The interface never speaks. Every message is a shape, a pulse, or a change
 // in colour — because in this game words would do the listening for you.
 
+import { ITEMS } from './loot.js';
+
 const ICON = {
   play: '<svg viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z"/></svg>',
   resume: '<svg viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z"/></svg>',
@@ -300,6 +302,72 @@ export class UI {
     this.hudNum.classList.remove('pulse');
     void this.hudNum.offsetWidth;
     this.hudNum.classList.add('pulse');
+  }
+
+  /** Tab: the six-by-four panel — workbench, pack, hotkeys, charms. No words. */
+  toggleInventory(game) {
+    if (!this.invPanel) {
+      const el = document.createElement('div');
+      el.id = 'inv-panel';
+      el.className = 'inv-panel hidden';
+      document.body.appendChild(el);
+      this.invPanel = el;
+      el.addEventListener('click', (e) => {
+        const cell = e.target.closest('.inv-cell');
+        if (!cell) return;
+        const kind = cell.dataset.kind;
+        const i = Number(cell.dataset.i);
+        const g = this.game;
+        if (kind === 'pack') {
+          const slot = g.inv.pack[i];
+          if (!slot) return;
+          const free = g.inv.hot.indexOf(null);
+          g.inv.bindHot(free < 0 ? 0 : free, i);
+          this.renderInventory(g);
+          g.audio.click(0.4);
+        } else if (kind === 'hot') {
+          g.useHotkey(i);
+          this.renderInventory(g);
+        }
+      });
+    }
+    this.invPanel.classList.toggle('hidden');
+    if (!this.invPanel.classList.contains('hidden')) this.renderInventory(game);
+  }
+
+  renderInventory(game) {
+    const inv = game.inv;
+    const cells = [];
+    const push = (kind, i, html, cls = '') => cells.push(`<div class="inv-cell ${cls}" data-kind="${kind}" data-i="${i}">${html}</div>`);
+    // row 1: 空空工工 — workbench on the right
+    push('blank', 0, '');
+    push('blank', 1, '');
+    for (let i = 0; i < 2; i++) push('work', i, inv.work[i] ? '<i class="c-charm"></i>' : '');
+    // rows 2: four empty
+    for (let i = 0; i < 4; i++) push('blank', 2 + i, '');
+    // row 3: hotkeys
+    for (let i = 0; i < 4; i++) {
+      const h = inv.hot[i];
+      push('hot', i, h ? `<i class="c-${ITEMS[h.id] && ITEMS[h.id].kind === 'throw' ? 'throw' : 'use'}"></i>` : '', h ? 'filled' : '');
+    }
+    // row 4: charms
+    for (let i = 0; i < 4; i++) {
+      const c = inv.charmAt(i);
+      const lvl = c ? inv.level(c) : 0;
+      let marks = '';
+      for (let k = 0; k < lvl; k++) marks += '<b></b>';
+      push('charm', i, c ? `<i class="c-charm"></i>${marks}` : '', c ? 'filled charm' : '');
+    }
+    // rows 5-6: pack; the last cell of row 6 mirrors the charm count
+    for (let i = 0; i < 8; i++) {
+      const s = inv.pack[i];
+      const def = s && ITEMS[s.id];
+      push('pack', i, s ? `<i class="c-${def && def.kind === 'throw' ? 'throw' : 'use'}"></i><em>${s.n}</em>` : '', s ? 'filled' : '');
+    }
+    let charmMarks = '';
+    for (let i = 0; i < inv.charms.length; i++) charmMarks += '<i class="c-charm"></i>';
+    cells.push(`<div class="inv-cell charm-count">${charmMarks}</div>`);
+    this.invPanel.innerHTML = `<div class="inv-grid">${cells.join('')}</div><div class="inv-foot"><i class="c-charm"></i><i class="c-throw"></i><i class="c-use"></i></div>`;
   }
 
   updateHUD({ shards = 0, total = 1, charges = 0, listen = false, danger = 0, depth = 0, diamonds = 0, gold = 0 } = {}) {

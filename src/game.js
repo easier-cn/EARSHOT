@@ -8,6 +8,7 @@ import { UI } from './ui.js';
 import { Editor } from './editor.js';
 import { CHAMBERS } from './chambers.js';
 import { generateFloor } from './rooms.js';
+import { CHARMS, ITEMS, Inventory, HOTKEY_ORDER } from './loot.js';
 import { clamp, dist, echoPan } from './util.js';
 
 const SAVE_KEY = 'hush.save.v1';
@@ -93,10 +94,25 @@ export class Game {
     this.diamonds = 0;
     this.gold = 0;
     this.charms = [];
+    this.inv = new Inventory();
+    this.loot = [];
+    this.throws = [];
+    this.activeItem = null;
+    this.speedT = 0;
+    this.speedMul = 1;
+    this.invulnT = 0;
+    this.stressReady = 0;
     this.denyCooldown = 0;
     this.alertCd = 0;
     this.titlePingTimer = 0;
 
+    this.msx = 0;
+    this.msy = 0;
+    canvas.addEventListener('mousemove', (e) => {
+      const r = canvas.getBoundingClientRect();
+      this.msx = e.clientX - r.left;
+      this.msy = e.clientY - r.top;
+    });
     this.ui.build();
     this.editor = new Editor(this);
     this.ui.showTitle(this.progress);
@@ -192,6 +208,7 @@ export class Game {
     this.diamonds = 0;
     this.gold = 0;
     this.charms = [];
+    this.inv = new Inventory();
     return this.startFloor(1);
   }
 
@@ -232,6 +249,13 @@ export class Game {
       });
     this.skitters = [];
     this.shards = [{ x: level.key.x, y: level.key.y, key: true, id: 0 }];
+    this.loot = (level.loot || []).map((l) => {
+      // 绝地求生 only exists for builds that can already cheat death.
+      if (l.id === 'survive' && !this.inv.level('stress') && !this.inv.level('counter')) {
+        return { ...l, id: 'stone', seenAt: -9 };
+      }
+      return { ...l, seenAt: -9 };
+    });
     this.totalShards = 1;
     this.pings = [];
     this.rays = [];
@@ -260,8 +284,128 @@ export class Game {
     this.denyCooldown = 0;
     this.sneak = false;
     this.state = 'playing';
+    this.throws = [];
+    this.activeItem = null;
+    this.speedT = 0;
+    this.speedMul = 1;
+    this.invulnT = 0;
+    this.refreshStones();
     this.ui.showGame();
     return true;
+  }
+
+  /** 1..4 map to hotkeys left-to-right; throwables arm the left mouse button. */
+  useHotkey(i) {
+    const slot = this.inv.hot[i];
+    if (!slot) {
+      this.audio.deny();
+      return;
+    }
+    const def = ITEMS[slot.id];
+    if (!def) return;
+    if (def.kind === 'throw') {
+      this.activeItem = slot.id;
+      this.audio.click(0.4);
+      return;
+    }
+    this.useItem(slot.id);
+  }
+
+  useItem(id) {
+    const p = this.player;
+    const take = (n = 1) => {
+      const idx = this.inv.pack.findIndex((s) => s && s.id === id && s.n >= n);
+      if (idx < 0) return false;
+      this.inv.pack[idx].n -= n;
+      if (this.inv.pack[idx].n <= 0) this.inv.pack[idx] = null;
+      return true;
+    };
+    if (id === 'vitamin') {
+      if (!take()) return this.audio.deny();
+      this.speedT = ITEMS.vitamin.dur;
+      this.flash = 1;
+      this.audio.shard();
+    } else if (id === 'star') {
+      if (!take()) return this.audio.deny();
+      this.invulnT = 3;
+      this.starKills = 3;
+      this.audio.gateOpen();
+      this.flash = 1;
+    } else if (id === 'totem') {
+      if (!take()) return this.audio.deny();
+      this.stressReady += 1;
+      this.audio.gateOpen();
+    } else if (id === 'scanner') {
+      if (!take()) return this.audio.deny();
+      this.scanT = 6;
+      this.audio.ping();
+    }
+  }
+
+  throwItem(id) {
+    const p = this.player;
+    const r = this.renderer;
+    const wx = this.camX + (this.msx - r.cw / 2) / r.scale;
+    const wy = this.camY + (this.msy - r.ch / 2) / r.scale;
+    const a = Math.atan2(wy - p.y, wx - p.x);
+    const def = ITEMS[id];
+    const speed = id === 'bugspray' ? 190 : 420;
+    this.throws.push({
+      x: p.x, y: p.y,
+      dx: Math.cos(a), dy: Math.sin(a),
+      speed, life: 1.6, id,
+      kills: !!def.kills, noise: def.noise || 1,
+    });
+    if (id === 'pebbles') {
+      const idx = this.inv.pack.findIndex((s) => s && s.id === 'pebbles');
+      if (idx >= 0) {
+        this.inv.pack[idx].n -= 1;
+        if (this.inv.pack[idx].n <= 0) this.inv.pack[idx] = null;
+      }
+    }
+    this.activeItem = null;
+  }
+
+  updateThrows(dt) {
+    for (let i = this.throws.length - 1; i >= 0; i--) {
+      const t = this.throws[i];
+      t.life -= dt;
+      const step = t.speed * dt;
+      let hitWall = false;
+      for (let m = 0; m < step; m += 6) {
+        const nx = t.x + t.dx * 6;
+        const ny = t.y + t.dy * 6;
+        const tx = Math.floor(nx / TILE);
+        const ty = Math.floor(ny / TILE);
+        if (tx < 0 || ty < 0 || tx >= this.level.w || ty >= this.level.h || this.level.grid[ty * this.level.w + tx]) {
+          hitWall = true;
+          break;
+        }
+        t.x = nx;
+        t.y = ny;
+        for (const h of this.hunters) {
+          if (dist(t.x, t.y, h.x, h.y) < 15) {
+            if (t.kills) this.killHunter(h);
+            hitWall = true;
+            break;
+          }
+        }
+        if (hitWall) break;
+      }
+      if (hitWall || t.life <= 0) {
+        this.stepEcho(t.x, t.y, null, { count: 30, speed: 380, life: 0.7 * (t.noise || 1), tagged: false });
+        for (const h of this.hunters) {
+          if (dist(t.x, t.y, h.x, h.y) < 620) this.alertHunter(h, t.x, t.y, 0.1);
+        }
+        this.audio.noise({ dur: 0.22, gain: 0.06, type: 'bandpass', freq: 900, send: 0.5 });
+        this.throws.splice(i, 1);
+      }
+    }
+  }
+
+  refreshStones() {
+    const lvl = this.inv.level('stone');
+    this.inv.stones = lvl ? CHARMS.stone.stones[lvl - 1] : 0;
   }
 
   /** Dev/experimental: one continuous map, no chamber select. */
@@ -517,6 +661,10 @@ export class Game {
 
   handleGlobalKeys() {
     if (this.input.consume('KeyM')) this.toggleMute();
+    if (this.input.consume('Tab')) this.ui.toggleInventory(this);
+    for (let i = 0; i < 4; i++) {
+      if (this.input.consume(`Digit${HOTKEY_ORDER[i]}`)) this.useHotkey(i);
+    }
     if (this.input.consume('Backquote')) {
       this.debugMode = !this.debugMode;
       if (!this.debugMode) this.debugFreeze = false;
@@ -614,7 +762,14 @@ export class Game {
 
     const listen = !this.sneak && (this.debugListen === true || (this.listenT > 0.26 && !p.moving));
     this.listen = listen;
-    const motion = p.update(dt, move, { run, listen, creep: this.sneak });
+    const swiftLvl = this.inv.level('swift');
+    const creepMul = this.sneak && swiftLvl ? CHARMS.swift.creep[swiftLvl - 1] : 0.5;
+    if (this.speedT > 0) {
+      this.speedT -= dt;
+      this.speedMul = 1 + 2;
+      if (this.speedT <= 0) this.speedMul = 1;
+    }
+    const motion = p.update(dt, move, { run, listen, creep: this.sneak, creepMul, mul: this.speedMul });
     const resolved = this.resolve(p, motion.x, motion.y);
     p.x = resolved.x;
     p.y = resolved.y;
@@ -635,8 +790,19 @@ export class Game {
     }
 
     // pinging
-    if ((this.input.consume('Space') || this.input.consume('Mouse0') || this.input.consume('KeyJ')) && this.charges > 0) {
-      if (this.sneak) {
+    if (this.input.consume('Mouse0') && this.activeItem) {
+      this.throwItem(this.activeItem);
+    }
+    if ((this.input.consume('Space') || this.input.consume('KeyJ')) && this.charges > 0) {
+      const sonarLvl = this.inv.level('sneakSonar');
+      if (this.sneak && sonarLvl) {
+        // 潜行声呐: a short fan that makes no tagged sound, so nothing hears it.
+        this.charges--;
+        if (this.chargeTimer <= 0) this.chargeTimer = PING_REGEN;
+        const dirs = CHARMS.sneakSonar.directions[sonarLvl - 1];
+        this.spawnRays(p.x, p.y, { count: dirs, speed: 300, life: 0.5, tag: null });
+        this.audio.click(0.3);
+      } else if (this.sneak) {
         this.audio.deny();
         if (!this.sneakHintShown) {
           this.sneakHintShown = true;
@@ -677,6 +843,26 @@ export class Game {
         this.stepEcho(p.x, p.y, null, { count: 34, speed: 380, life: 0.7 });
         if (sh.key) this.hasKey = true;
         if (this.shards.length === 0) this.tryOpenExit(true);
+      }
+    }
+
+    // loot: charms and items sit at the end of side branches
+    for (let i = this.loot.length - 1; i >= 0; i--) {
+      const it = this.loot[i];
+      if (dist(p.x, p.y, it.x, it.y) < 24) {
+        const def = it.kind === 'charm' ? CHARMS[it.id] : ITEMS[it.id];
+        const res = it.kind === 'charm' ? this.inv.addCharm(it.id) : (this.inv.addItem(it.id) ? 'added' : 'full');
+        if (res === 'full') {
+          this.audio.deny();
+          this.ui.toast('deny');
+          continue;
+        }
+        this.loot.splice(i, 1);
+        this.audio.shard();
+        this.flash = 1;
+        this.refreshStones();
+        this.ui.toast('shard');
+        this.stepEcho(p.x, p.y, '255, 205, 110', { count: 26, speed: 360, life: 0.6 });
       }
     }
 
@@ -744,6 +930,8 @@ export class Game {
       }
     }
 
+    this.updateThrows(dt);
+    if (this.invulnT > 0) this.invulnT = Math.max(0, this.invulnT - dt);
     this.audio.update(dt, { danger: this.danger });
     this.updateRays(dt);
     this.updateParticles(dt);
@@ -760,7 +948,15 @@ export class Game {
       danger: this.danger,
       diamonds: this.diamonds,
       gold: this.gold,
+      charms: this.inv.charms.length,
     });
+    this.homeMarkers = [];
+    const homeLvl = this.inv.level('home');
+    if (homeLvl) {
+      const r = CHARMS.home.range[homeLvl - 1];
+      if (dist(p.x, p.y, L.key.x, L.key.y) < r) this.homeMarkers.push({ x: L.key.x, y: L.key.y, c: '150,220,255', s: 'key' });
+      if (dist(p.x, p.y, L.exit.x, L.exit.y) < r) this.homeMarkers.push({ x: L.exit.x, y: L.exit.y, c: '255,205,110', s: 'exit' });
+    }
   }
 
   // Every noise source goes through here, so the "it heard that" stinger stays
@@ -970,7 +1166,9 @@ export class Game {
       heard: new Set(),
     });
     this.pingsUsed++;
-    this.spawnRays(p.x, p.y);
+    const quietLvl = this.inv.level('sleep');
+    const quiet = quietLvl && Math.random() < CHARMS.sleep.quiet[quietLvl - 1];
+    this.spawnRays(p.x, p.y, quiet ? { tag: null } : {});
     this.audio.ping();
     this.echoShards(p.x, p.y);
     this.shake = Math.max(this.shake, 2.4);

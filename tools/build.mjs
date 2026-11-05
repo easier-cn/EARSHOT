@@ -19,6 +19,7 @@ const MODULES = [
   'src/input.js',
   'src/audio.js',
   'src/chambers.js',
+  'src/loot.js',
   'src/render.js',
   'src/ui.js',
   'src/game.js',
