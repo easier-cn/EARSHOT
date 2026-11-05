@@ -3,7 +3,12 @@
 All notable changes to HUSH. The format follows [Keep a Changelog](https://keepachangelog.com/),
 and the game follows [SemVer](https://semver.org/).
 
-## [Unreleased]
+## [0.2.0] - 2026-11-05
+
+### Added
+- Four room-shape presets (`halls`, `cavern`, `warren`, `gallery`) assigned per
+  chamber, so the eight rooms differ in topology, not just shard count. The
+  generator falls back to `halls` if a tight preset starves.
 
 ### Changed
 - Listening now requires standing still: holding Space while walking only muffles

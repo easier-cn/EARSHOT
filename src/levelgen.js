@@ -5,6 +5,15 @@ export const TILE = 32;
 export const GRID_W = 42;
 export const GRID_H = 26;
 
+// Room-shape presets. Each chamber picks one, so the eight rooms feel like
+// different places instead of eight shuffles of the same generator.
+const STYLES = {
+  halls: { rooms: 12, wMin: 5, wMax: 9, hMin: 4, hMax: 7, gap: 2, pillars: 0.75, loops: 3 },
+  cavern: { rooms: 9, wMin: 8, wMax: 12, hMin: 6, hMax: 9, gap: 2, pillars: 0.35, loops: 2 },
+  warren: { rooms: 16, wMin: 4, wMax: 6, hMin: 4, hMax: 5, gap: 1, pillars: 0.9, loops: 4 },
+  gallery: { rooms: 12, wMin: 10, wMax: 16, hMin: 3, hMax: 4, gap: 2, pillars: 0.25, loops: 2 },
+};
+
 const DIRS4 = [
   [1, 0],
   [-1, 0],
@@ -85,12 +94,13 @@ function wallSegments(grid, w, h) {
 function tryGenerate(rng, cfg) {
   const w = GRID_W;
   const h = GRID_H;
+  const style = STYLES[cfg.style] || STYLES.halls;
   const grid = new Uint8Array(w * h).fill(1);
   const rooms = [];
 
-  for (let i = 0; i < 120 && rooms.length < 12; i++) {
-    const rw = 5 + Math.floor(rng() * 5);
-    const rh = 4 + Math.floor(rng() * 4);
+  for (let i = 0; i < 160 && rooms.length < style.rooms; i++) {
+    const rw = style.wMin + Math.floor(rng() * (style.wMax - style.wMin + 1));
+    const rh = style.hMin + Math.floor(rng() * (style.hMax - style.hMin + 1));
     if (rw > w - 8 || rh > h - 8) continue;
     const r = {
       x: 2 + Math.floor(rng() * (w - rw - 4)),
@@ -98,7 +108,7 @@ function tryGenerate(rng, cfg) {
       w: rw,
       h: rh,
     };
-    if (rooms.some((o) => overlaps(r, o, 2))) continue;
+    if (rooms.some((o) => overlaps(r, o, style.gap))) continue;
     rooms.push(r);
   }
   if (rooms.length < 5) return null;
@@ -106,7 +116,7 @@ function tryGenerate(rng, cfg) {
   // carve rooms, then sprinkle pillars in the larger ones
   for (const r of rooms) {
     carveRect(grid, w, h, r);
-    if (r.w >= 7 && r.h >= 6 && rng() < 0.75) {
+    if (r.w >= 7 && r.h >= 6 && rng() < style.pillars) {
       const pillars = 1 + (rng() < 0.4 ? 1 : 0);
       for (let p = 0; p < pillars; p++) {
         const px = r.x + 1 + Math.floor(rng() * (r.w - 2));
@@ -136,7 +146,7 @@ function tryGenerate(rng, cfg) {
     edges.push(best);
   }
   // extra loops so the level is not a pure tree
-  for (let extra = 0; extra < 3; extra++) {
+  for (let extra = 0; extra < style.loops; extra++) {
     const a = Math.floor(rng() * rooms.length);
     let b = Math.floor(rng() * rooms.length);
     if (a === b) b = (b + 1) % rooms.length;
@@ -231,12 +241,18 @@ function tryGenerate(rng, cfg) {
 const MAX_ATTEMPTS = 60;
 
 export function generateLevel(seed, cfg) {
+  const style = STYLES[cfg.style] ? cfg.style : 'halls';
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    const level = tryGenerate(mulberry32((seed + attempt * 7919) >>> 0), cfg);
+    const level = tryGenerate(mulberry32((seed + attempt * 7919) >>> 0), { ...cfg, style });
     if (level) {
       level.seed = seed;
+      level.style = style;
       return level;
     }
+  }
+  if (style !== 'halls') {
+    // a tight preset can occasionally starve; fall back to the roomier default
+    return generateLevel(seed, { ...cfg, style: 'halls' });
   }
   throw new Error('level generation failed for seed ' + seed);
 }

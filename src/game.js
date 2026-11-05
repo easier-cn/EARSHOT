@@ -130,7 +130,7 @@ export class Game {
   // ------------------------------------------------------------------- setup
   loadDemo() {
     const cfg = CHAMBERS[CHAMBERS.length - 1];
-    this.level = generateLevel(777, { shards: 5, hunters: 5 });
+    this.level = generateLevel(777, { shards: 5, hunters: 5, style: cfg.style });
     this.player = null;
     this.hunters = [];
     this.shards = this.level.shards.map((s) => ({ ...s }));
@@ -153,7 +153,7 @@ export class Game {
     this.audio.unlock();
     this.chamberIndex = clamp(index, 0, CHAMBERS.length - 1);
     const cfg = CHAMBERS[this.chamberIndex];
-    this.level = generateLevel(cfg.seed, { shards: cfg.shards, hunters: cfg.hunters });
+    this.level = generateLevel(cfg.seed, { shards: cfg.shards, hunters: cfg.hunters, style: cfg.style });
     this.player = new Player(this.level.spawn.x, this.level.spawn.y);
     this.hunters = this.level.hunters.map((h) => new Hunter(h.x, h.y));
     this.shards = this.level.shards.map((s) => ({ ...s }));

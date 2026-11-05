@@ -31,7 +31,11 @@ function reachableFrom(lvl, sx, sy) {
 
 for (const cfg of CHAMBERS) {
   test(`chamber ${cfg.num} (${cfg.en}) is a connected, valid level`, () => {
-    const lvl = generateLevel(cfg.seed, { shards: cfg.shards, hunters: cfg.hunters });
+    const lvl = generateLevel(cfg.seed, {
+      shards: cfg.shards,
+      hunters: cfg.hunters,
+      style: cfg.style,
+    });
     assert.equal(lvl.segments.length > 40, true, 'has wall segments');
     assert.equal(lvl.rooms.length >= 5, true, 'has rooms');
     assert.equal(lvl.shards.length, cfg.shards, 'spawns the requested shards');
@@ -55,6 +59,22 @@ for (const cfg of CHAMBERS) {
     }
   });
 }
+
+test('every room style generates a connected level', () => {
+  for (const style of ['halls', 'cavern', 'warren', 'gallery']) {
+    for (const seed of [101, 202, 303]) {
+      const lvl = generateLevel(seed, { shards: 3, hunters: 2, style });
+      assert.equal(lvl.style === style || lvl.style === 'halls', true, `${style} seeds`);
+      const seen = reachableFrom(lvl, lvl.spawnTile.x, lvl.spawnTile.y);
+      assert.equal(seen[lvl.exitTile.y * lvl.w + lvl.exitTile.x], 1, `${style} exit reachable`);
+      for (const shard of lvl.shards) {
+        const tx = Math.floor(shard.x / TILE);
+        const ty = Math.floor(shard.y / TILE);
+        assert.equal(seen[ty * lvl.w + tx], 1, `${style} shard reachable`);
+      }
+    }
+  }
+});
 
 test('level generation is deterministic per seed', () => {
   const a = generateLevel(4409, { shards: 3, hunters: 2 });

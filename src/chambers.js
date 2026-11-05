@@ -6,6 +6,7 @@ export const CHAMBERS = [
     shards: 1,
     hunters: 0,
     seed: 1201,
+    style: 'halls',
     intro: '先学会听。左键发出声呐；停下后按住空格，听见方向。',
   },
   {
@@ -15,6 +16,7 @@ export const CHAMBERS = [
     shards: 2,
     hunters: 1,
     seed: 2207,
+    style: 'halls',
     intro: '黑暗里有什么东西。它看不见，但它听得见。',
   },
   {
@@ -24,6 +26,7 @@ export const CHAMBERS = [
     shards: 2,
     hunters: 2,
     seed: 3313,
+    style: 'warren',
     intro: '两声回响，两个倾听者。跑步很响。',
   },
   {
@@ -33,6 +36,7 @@ export const CHAMBERS = [
     shards: 3,
     hunters: 2,
     seed: 4409,
+    style: 'cavern',
     intro: '碎片在水下发出微光。它们也知道你在哪。',
   },
   {
@@ -42,6 +46,7 @@ export const CHAMBERS = [
     shards: 3,
     hunters: 3,
     seed: 5519,
+    style: 'halls',
     intro: '三声脚步，三种心跳。别让它们合拍。',
   },
   {
@@ -51,6 +56,7 @@ export const CHAMBERS = [
     shards: 4,
     hunters: 3,
     seed: 6619,
+    style: 'warren',
     intro: '你只有三次呼吸的时间。',
   },
   {
@@ -60,6 +66,7 @@ export const CHAMBERS = [
     shards: 4,
     hunters: 4,
     seed: 7723,
+    style: 'gallery',
     intro: '走廊很长。声音会先到。',
   },
   {
@@ -69,6 +76,7 @@ export const CHAMBERS = [
     shards: 5,
     hunters: 5,
     seed: 8831,
+    style: 'cavern',
     intro: '最后一块碎片。最后一片安静。',
   },
 ];

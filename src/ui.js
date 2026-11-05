@@ -38,7 +38,7 @@ export class UI {
             <span><b>Shift</b> 奔跑</span>
           </div>
         </div>
-        <div class="title-foot">v0.1 · 一个关于声音的实验</div>
+        <div class="title-foot">v0.2 · 一个关于声音的实验</div>
       </section>
 
       <section class="screen pause-screen hidden" id="scr-pause">
