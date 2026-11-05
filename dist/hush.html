@@ -878,7 +878,6 @@ function nearestOpen(grid, w, h, x, y) {
 
 // ---- src/levelgen.js ----
 
-
 const TILE = 32;
 const GRID_W = 42;
 const GRID_H = 26;
@@ -1098,11 +1097,34 @@ function tryGenerate(rng, cfg) {
   }
   if (hunterTiles.length < cfg.hunters) return null;
 
+  // skitters: they never hunt, so "far from the player" matters less than
+  // "somewhere you will have to pass". 6+ tiles out, away from shards.
+  const skitterTiles = [];
+  if (cfg.skitters) {
+    const skCandidates = [];
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        const d = dist[y * w + x];
+        if (d >= 6 && grid[y * w + x] === 0) skCandidates.push({ x, y });
+      }
+    }
+    shuffle(skCandidates, rng);
+    for (const c of skCandidates) {
+      if (skitterTiles.length >= cfg.skitters) break;
+      if (shardTiles.some((s) => Math.hypot(s.x - c.x, s.y - c.y) < 3)) continue;
+      if (hunterTiles.some((s) => Math.hypot(s.x - c.x, s.y - c.y) < 2)) continue;
+      if (skitterTiles.some((s) => Math.hypot(s.x - c.x, s.y - c.y) < 6)) continue;
+      skitterTiles.push(c);
+    }
+    if (skitterTiles.length < cfg.skitters) return null;
+  }
+
   const toWorld = (t) => ({ x: (t.x + 0.5) * TILE, y: (t.y + 0.5) * TILE });
 
   return {
     w,
     h,
+    tile: TILE,
     grid,
     rooms,
     spawn: toWorld(spawnTile),
@@ -1111,6 +1133,7 @@ function tryGenerate(rng, cfg) {
     exitTile,
     shards: shardTiles.map((t, i) => ({ ...toWorld(t), id: i, tile: t })),
     hunters: hunterTiles.map((t) => toWorld(t)),
+    skitters: skitterTiles.map((t) => toWorld(t)),
     segments: wallSegments(grid, w, h),
     size: { w: w * TILE, h: h * TILE },
   };
@@ -1380,6 +1403,99 @@ class Hunter {
           const pan = Math.max(-1, Math.min(1, rel / 380));
           game.audio.hunterStep(pan, Math.min(1, 1.15 - dist / 640));
         }
+      }
+    }
+  }
+}
+
+let skitterId = 0;
+
+// The hunter listens. The skitter does not. It is deaf, fast and predictable:
+// the only way to know where it is, is to look -- which costs a ping, and a
+// ping can wake a hunter. That trade is the whole point of the thing.
+class Skitter {
+  constructor(x, y) {
+    this.id = skitterId++;
+    this.x = x;
+    this.y = y;
+    this.r = 8;
+    this.path = [];
+    this.rest = 0.3 + Math.random() * 1.2;
+    this.speed = 0;
+    this.tickAcc = Math.random();
+    this.face = 0;
+    this.wobble = Math.random() * 6;
+  }
+
+  _plan(game) {
+    const L = game.level;
+    const sx = Math.floor(this.x / L.tile);
+    const sy = Math.floor(this.y / L.tile);
+    for (let tries = 0; tries < 16; tries++) {
+      const tx = sx + Math.round((Math.random() * 2 - 1) * 9);
+      const ty = sy + Math.round((Math.random() * 2 - 1) * 9);
+      if (tx < 1 || ty < 1 || tx >= L.w - 1 || ty >= L.h - 1) continue;
+      if (L.grid[ty * L.w + tx] !== 0) continue;
+      if (Math.abs(tx - sx) + Math.abs(ty - sy) < 5) continue;
+      const path = findPath(L.grid, L.w, L.h, sx, sy, tx, ty);
+      if (path && path.length) {
+        this.path = path.map((p) => ({
+          x: (p.x + 0.5) * L.tile,
+          y: (p.y + 0.5) * L.tile,
+        }));
+        return true;
+      }
+    }
+    this.rest = 0.4;
+    return false;
+  }
+
+  update(dt, game) {
+    const L = game.level;
+    this.wobble += dt * 6;
+
+    if (!this.path.length) {
+      this.speed = 0;
+      this.rest -= dt;
+      if (this.rest <= 0) this._plan(game);
+      return;
+    }
+
+    const wp = this.path[0];
+    if (Math.hypot(wp.x - this.x, wp.y - this.y) < 7) {
+      this.path.shift();
+      if (!this.path.length) this.rest = 0.35 + Math.random() * 0.9;
+      return;
+    }
+
+    const SPEED = 118;
+    const d = Math.hypot(wp.x - this.x, wp.y - this.y) || 1;
+    this.face = Math.atan2(wp.y - this.y, wp.x - this.x);
+    const step = moveCircle(
+      L.grid,
+      L.w,
+      L.h,
+      L.tile,
+      this.x,
+      this.y,
+      this.r,
+      ((wp.x - this.x) / d) * SPEED * dt,
+      ((wp.y - this.y) / d) * SPEED * dt,
+    );
+    this.x = step.x;
+    this.y = step.y;
+    this.speed = SPEED;
+
+    // a dry tick, only audible close by: enough to feel it, not to track it
+    this.tickAcc += dt;
+    if (this.tickAcc > 0.85) {
+      this.tickAcc = 0;
+      const dx = this.x - game.player.x;
+      const dy = this.y - game.player.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < 260 && game.audio) {
+        const pan = Math.max(-1, Math.min(1, dx / 300));
+        game.audio.skitterTick(pan, Math.max(0, 1 - dist / 300));
       }
     }
   }
@@ -1849,9 +1965,10 @@ const CHAMBERS = [
     en: 'BLACKOUT',
     shards: 4,
     hunters: 3,
+    skitters: 1,
     seed: 6619,
     style: 'warren',
-    intro: '你只有三次呼吸的时间。',
+    intro: '停电了。有东西在黑暗中快速移动——它不呼吸，你得用声呐看见它。',
   },
   {
     num: 'VII',
@@ -1859,9 +1976,10 @@ const CHAMBERS = [
     en: 'THE LONG HALL',
     shards: 4,
     hunters: 4,
+    skitters: 1,
     seed: 7723,
     style: 'gallery',
-    intro: '走廊很长。声音会先到。',
+    intro: '走廊很长。声音会先到。也有些东西，只肯被看见。',
   },
   {
     num: 'VIII',
@@ -1869,6 +1987,7 @@ const CHAMBERS = [
     en: 'HUSH',
     shards: 5,
     hunters: 5,
+    skitters: 2,
     seed: 8831,
     style: 'cavern',
     intro: '最后一块碎片。最后一片安静。',
@@ -1876,7 +1995,6 @@ const CHAMBERS = [
 ];
 
 // ---- src/render.js ----
-
 
 const WALL_RGB = '150, 238, 226';
 const GLOW_RGB = '80, 210, 198';
@@ -2123,6 +2241,45 @@ class Renderer {
       ctx.beginPath();
       ctx.arc(-4, -4, 1.7, 0, Math.PI * 2);
       ctx.arc(4, -4, 1.7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // ---- skitters -----------------------------------------------------------
+    for (const sk of game.skitters || []) {
+      const b = this._pointBrightness(sk.x, sk.y, game.pings, now, level);
+      if (b < 0.045) continue;
+      const a = clamp(b * 1.9, 0.1, 1);
+      const stride = Math.sin(sk.wobble) * 2.2;
+      ctx.save();
+      ctx.translate(sk.x, sk.y);
+      ctx.rotate(sk.face);
+      ctx.strokeStyle = `rgba(${RED}, ${a * 0.9})`;
+      ctx.lineWidth = 1.4;
+      // four legs, two forward two back, scissoring
+      ctx.beginPath();
+      for (const side of [-1, 1]) {
+        ctx.moveTo(-2, side * 3);
+        ctx.lineTo(-9 - stride, side * 9);
+        ctx.moveTo(3, side * 3);
+        ctx.lineTo(9 + stride, side * 9);
+      }
+      ctx.stroke();
+      // a thin carapace with a hot core
+      ctx.fillStyle = `rgba(8, 10, 12, ${0.85 * a})`;
+      ctx.beginPath();
+      ctx.moveTo(11, 0);
+      ctx.lineTo(3, 6);
+      ctx.lineTo(-9, 4);
+      ctx.lineTo(-9, -4);
+      ctx.lineTo(3, -6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = `rgba(${RED}, ${a})`;
+      ctx.stroke();
+      ctx.fillStyle = `rgba(255, 220, 210, ${a})`;
+      ctx.beginPath();
+      ctx.arc(2, 0, 2.1, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     }
@@ -2664,6 +2821,7 @@ class Game {
     this.level = null;
     this.player = null;
     this.hunters = [];
+    this.skitters = [];
     this.shards = [];
     this.particles = [];
     this.pings = [];
@@ -2767,9 +2925,15 @@ class Game {
     this.audio.unlock();
     this.chamberIndex = clamp(index, 0, CHAMBERS.length - 1);
     const cfg = CHAMBERS[this.chamberIndex];
-    this.level = generateLevel(cfg.seed, { shards: cfg.shards, hunters: cfg.hunters, style: cfg.style });
+    this.level = generateLevel(cfg.seed, {
+      shards: cfg.shards,
+      hunters: cfg.hunters,
+      skitters: cfg.skitters || 0,
+      style: cfg.style,
+    }) || generateLevel(cfg.seed, { shards: cfg.shards, hunters: cfg.hunters, style: 'halls' });
     this.player = new Player(this.level.spawn.x, this.level.spawn.y);
     this.hunters = this.level.hunters.map((h) => new Hunter(h.x, h.y));
+    this.skitters = (this.level.skitters || []).map((s) => new Skitter(s.x, s.y));
     this.shards = this.level.shards.map((s) => ({ ...s }));
     this.pings = [];
     this.particles = makeDust(this.level);
@@ -3008,6 +3172,16 @@ class Game {
     }
     this.denyCooldown -= dt;
     this.alertCd -= dt;
+
+    // skitters: deaf, fast, silent until they are close. No sound can warn
+    // you early, so contact is the only rule that matters.
+    for (const sk of this.skitters) {
+      sk.update(dt, this);
+      if (dist(p.x, p.y, sk.x, sk.y) < p.r + sk.r - 1) {
+        this.die();
+        return;
+      }
+    }
 
     // hunters
     let nearest = Infinity;

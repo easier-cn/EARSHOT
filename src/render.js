@@ -250,6 +250,45 @@ export class Renderer {
       ctx.restore();
     }
 
+    // ---- skitters -----------------------------------------------------------
+    for (const sk of game.skitters || []) {
+      const b = this._pointBrightness(sk.x, sk.y, game.pings, now, level);
+      if (b < 0.045) continue;
+      const a = clamp(b * 1.9, 0.1, 1);
+      const stride = Math.sin(sk.wobble) * 2.2;
+      ctx.save();
+      ctx.translate(sk.x, sk.y);
+      ctx.rotate(sk.face);
+      ctx.strokeStyle = `rgba(${RED}, ${a * 0.9})`;
+      ctx.lineWidth = 1.4;
+      // four legs, two forward two back, scissoring
+      ctx.beginPath();
+      for (const side of [-1, 1]) {
+        ctx.moveTo(-2, side * 3);
+        ctx.lineTo(-9 - stride, side * 9);
+        ctx.moveTo(3, side * 3);
+        ctx.lineTo(9 + stride, side * 9);
+      }
+      ctx.stroke();
+      // a thin carapace with a hot core
+      ctx.fillStyle = `rgba(8, 10, 12, ${0.85 * a})`;
+      ctx.beginPath();
+      ctx.moveTo(11, 0);
+      ctx.lineTo(3, 6);
+      ctx.lineTo(-9, 4);
+      ctx.lineTo(-9, -4);
+      ctx.lineTo(3, -6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = `rgba(${RED}, ${a})`;
+      ctx.stroke();
+      ctx.fillStyle = `rgba(255, 220, 210, ${a})`;
+      ctx.beginPath();
+      ctx.arc(2, 0, 2.1, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
     // ---- player -------------------------------------------------------------
     if (game.player) {
       const p = game.player;

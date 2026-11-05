@@ -152,3 +152,41 @@ test('moveCircle cannot pass through a wall', () => {
   }
   assert.equal(tested, 5, 'exercised the collision test');
 });
+
+test('every level carries the tile size the game reads', () => {
+  // Regression: entities divide positions by level.tile. When the field was
+  // missing, every coordinate became NaN -- hunters stopped moving and walls
+  // stopped blocking -- while all unit tests still passed because they passed
+  // TILE explicitly. Assert the field itself, then exercise it.
+  for (const cfg of CHAMBERS) {
+    const lvl = generateLevel(cfg.seed, cfg);
+    assert.equal(lvl.tile, TILE, `${cfg.title}: level.tile`);
+
+    let checked = 0;
+    for (let ty = 1; ty < lvl.h - 1 && checked < 3; ty++) {
+      for (let tx = 1; tx < lvl.w - 1 && checked < 3; tx++) {
+        if (walkable(lvl, tx, ty) || !walkable(lvl, tx - 1, ty)) continue;
+        const start = { x: (tx - 0.5) * lvl.tile, y: (ty + 0.5) * lvl.tile };
+        const moved = moveCircle(lvl.grid, lvl.w, lvl.h, lvl.tile, start.x, start.y, 9, lvl.tile * 2, 0);
+        assert.ok(moved.x <= tx * lvl.tile - 9, `${cfg.title}: blocked at ${tx},${ty}`);
+        checked++;
+      }
+    }
+    assert.ok(checked > 0, `${cfg.title}: no wall to test against`);
+  }
+});
+
+test('creatures spawn on walkable tiles, and skitter counts match the config', () => {
+  for (const cfg of CHAMBERS) {
+    const lvl = generateLevel(cfg.seed, cfg);
+    for (const h of lvl.hunters) {
+      assert.ok(walkable(lvl, Math.floor(h.x / TILE), Math.floor(h.y / TILE)), `${cfg.title}: hunter on a wall`);
+    }
+    assert.equal(lvl.skitters.length, cfg.skitters || 0, `${cfg.title}: skitter count`);
+    for (const s of lvl.skitters) {
+      assert.ok(walkable(lvl, Math.floor(s.x / TILE), Math.floor(s.y / TILE)), `${cfg.title}: skitter on a wall`);
+      const d = Math.hypot(s.x - lvl.spawn.x, s.y - lvl.spawn.y);
+      assert.ok(d >= 5 * TILE, `${cfg.title}: skitter too close to spawn (${d.toFixed(0)}px)`);
+    }
+  }
+});

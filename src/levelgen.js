@@ -220,11 +220,34 @@ function tryGenerate(rng, cfg) {
   }
   if (hunterTiles.length < cfg.hunters) return null;
 
+  // skitters: they never hunt, so "far from the player" matters less than
+  // "somewhere you will have to pass". 6+ tiles out, away from shards.
+  const skitterTiles = [];
+  if (cfg.skitters) {
+    const skCandidates = [];
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        const d = dist[y * w + x];
+        if (d >= 6 && grid[y * w + x] === 0) skCandidates.push({ x, y });
+      }
+    }
+    shuffle(skCandidates, rng);
+    for (const c of skCandidates) {
+      if (skitterTiles.length >= cfg.skitters) break;
+      if (shardTiles.some((s) => Math.hypot(s.x - c.x, s.y - c.y) < 3)) continue;
+      if (hunterTiles.some((s) => Math.hypot(s.x - c.x, s.y - c.y) < 2)) continue;
+      if (skitterTiles.some((s) => Math.hypot(s.x - c.x, s.y - c.y) < 6)) continue;
+      skitterTiles.push(c);
+    }
+    if (skitterTiles.length < cfg.skitters) return null;
+  }
+
   const toWorld = (t) => ({ x: (t.x + 0.5) * TILE, y: (t.y + 0.5) * TILE });
 
   return {
     w,
     h,
+    tile: TILE,
     grid,
     rooms,
     spawn: toWorld(spawnTile),
@@ -233,6 +256,7 @@ function tryGenerate(rng, cfg) {
     exitTile,
     shards: shardTiles.map((t, i) => ({ ...toWorld(t), id: i, tile: t })),
     hunters: hunterTiles.map((t) => toWorld(t)),
+    skitters: skitterTiles.map((t) => toWorld(t)),
     segments: wallSegments(grid, w, h),
     size: { w: w * TILE, h: h * TILE },
   };

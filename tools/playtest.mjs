@@ -159,6 +159,28 @@ async function main() {
     report.screenshot = 'shots/cdp-play.png';
   }
 
+  // Physics regression checks: walls must stop the player, hunters must move.
+  report.wallBlocks = await evaluate(`(() => {
+    const h = window.__hush, L = h.level, p = h.player;
+    let wall = null;
+    for (let ty = 0; ty < L.h && !wall; ty++) {
+      for (let tx = 0; tx < L.w; tx++) if (L.grid[ty * L.w + tx]) { wall = { tx, ty }; break; }
+    }
+    for (let i = 0; i < 80; i++) {
+      const r = h.resolve(p, (wall.tx + 0.5) * L.tile - p.x, (wall.ty + 0.5) * L.tile - p.y);
+      p.x = r.x; p.y = r.y;
+    }
+    const fx = Math.floor(p.x / L.tile), fy = Math.floor(p.y / L.tile);
+    return !L.grid[fy * L.w + fx];
+  })()`);
+  report.huntersMove = await evaluate(`(async () => {
+    const h = window.__hush;
+    if (!h.hunters.length) return true;
+    const before = h.hunters.map((x) => [x.x, x.y]);
+    await new Promise((r) => setTimeout(r, 1800));
+    return h.hunters.some((x, i) => Math.hypot(x.x - before[i][0], x.y - before[i][1]) > 20);
+  })()`);
+
   // Escape pauses.
   await key('keyDown', 'Escape', 'Escape', 27);
   await key('keyUp', 'Escape', 'Escape', 27);

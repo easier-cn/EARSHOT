@@ -247,3 +247,96 @@ export class Hunter {
     }
   }
 }
+
+let skitterId = 0;
+
+// The hunter listens. The skitter does not. It is deaf, fast and predictable:
+// the only way to know where it is, is to look -- which costs a ping, and a
+// ping can wake a hunter. That trade is the whole point of the thing.
+export class Skitter {
+  constructor(x, y) {
+    this.id = skitterId++;
+    this.x = x;
+    this.y = y;
+    this.r = 8;
+    this.path = [];
+    this.rest = 0.3 + Math.random() * 1.2;
+    this.speed = 0;
+    this.tickAcc = Math.random();
+    this.face = 0;
+    this.wobble = Math.random() * 6;
+  }
+
+  _plan(game) {
+    const L = game.level;
+    const sx = Math.floor(this.x / L.tile);
+    const sy = Math.floor(this.y / L.tile);
+    for (let tries = 0; tries < 16; tries++) {
+      const tx = sx + Math.round((Math.random() * 2 - 1) * 9);
+      const ty = sy + Math.round((Math.random() * 2 - 1) * 9);
+      if (tx < 1 || ty < 1 || tx >= L.w - 1 || ty >= L.h - 1) continue;
+      if (L.grid[ty * L.w + tx] !== 0) continue;
+      if (Math.abs(tx - sx) + Math.abs(ty - sy) < 5) continue;
+      const path = findPath(L.grid, L.w, L.h, sx, sy, tx, ty);
+      if (path && path.length) {
+        this.path = path.map((p) => ({
+          x: (p.x + 0.5) * L.tile,
+          y: (p.y + 0.5) * L.tile,
+        }));
+        return true;
+      }
+    }
+    this.rest = 0.4;
+    return false;
+  }
+
+  update(dt, game) {
+    const L = game.level;
+    this.wobble += dt * 6;
+
+    if (!this.path.length) {
+      this.speed = 0;
+      this.rest -= dt;
+      if (this.rest <= 0) this._plan(game);
+      return;
+    }
+
+    const wp = this.path[0];
+    if (Math.hypot(wp.x - this.x, wp.y - this.y) < 7) {
+      this.path.shift();
+      if (!this.path.length) this.rest = 0.35 + Math.random() * 0.9;
+      return;
+    }
+
+    const SPEED = 118;
+    const d = Math.hypot(wp.x - this.x, wp.y - this.y) || 1;
+    this.face = Math.atan2(wp.y - this.y, wp.x - this.x);
+    const step = moveCircle(
+      L.grid,
+      L.w,
+      L.h,
+      L.tile,
+      this.x,
+      this.y,
+      this.r,
+      ((wp.x - this.x) / d) * SPEED * dt,
+      ((wp.y - this.y) / d) * SPEED * dt,
+    );
+    this.x = step.x;
+    this.y = step.y;
+    this.speed = SPEED;
+
+    // a dry tick, only audible close by: enough to feel it, not to track it
+    this.tickAcc += dt;
+    if (this.tickAcc > 0.85) {
+      this.tickAcc = 0;
+      const dx = this.x - game.player.x;
+      const dy = this.y - game.player.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < 260 && game.audio) {
+        const pan = Math.max(-1, Math.min(1, dx / 300));
+        game.audio.skitterTick(pan, Math.max(0, 1 - dist / 300));
+      }
+    }
+  }
+}

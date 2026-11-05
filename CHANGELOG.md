@@ -3,6 +3,17 @@
 All notable changes to HUSH. The format follows [Keep a Changelog](https://keepachangelog.com/),
 and the game follows [SemVer](https://semver.org/).
 
+## [0.2.4] - 2026-11-05
+
+### Fixed
+- **Walls did not block movement and hunters never moved.** `generateLevel`
+  never returned its tile size, so every position was divided by `undefined`;
+  coordinates became NaN, the collision sweep ran over an empty range, and A*
+  was handed NaN tiles. Unit tests missed it because they passed `TILE`
+  explicitly. Levels now carry `tile`, plus regression tests that exercise
+  `level.tile` itself and a playtest that pushes the player into a wall and
+  checks that hunters actually move.
+
 ## [0.2.3] - 2026-11-05
 
 ### Added

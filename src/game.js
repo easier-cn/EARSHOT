@@ -1,5 +1,5 @@
 import { generateLevel, TILE } from './levelgen.js';
-import { Player, Hunter, moveCircle } from './entities.js';
+import { Player, Hunter, Skitter, moveCircle } from './entities.js';
 import { Renderer } from './render.js';
 import { Input } from './input.js';
 import { AudioEngine } from './audio.js';
@@ -51,6 +51,7 @@ export class Game {
     this.level = null;
     this.player = null;
     this.hunters = [];
+    this.skitters = [];
     this.shards = [];
     this.particles = [];
     this.pings = [];
@@ -154,9 +155,15 @@ export class Game {
     this.audio.unlock();
     this.chamberIndex = clamp(index, 0, CHAMBERS.length - 1);
     const cfg = CHAMBERS[this.chamberIndex];
-    this.level = generateLevel(cfg.seed, { shards: cfg.shards, hunters: cfg.hunters, style: cfg.style });
+    this.level = generateLevel(cfg.seed, {
+      shards: cfg.shards,
+      hunters: cfg.hunters,
+      skitters: cfg.skitters || 0,
+      style: cfg.style,
+    }) || generateLevel(cfg.seed, { shards: cfg.shards, hunters: cfg.hunters, style: 'halls' });
     this.player = new Player(this.level.spawn.x, this.level.spawn.y);
     this.hunters = this.level.hunters.map((h) => new Hunter(h.x, h.y));
+    this.skitters = (this.level.skitters || []).map((s) => new Skitter(s.x, s.y));
     this.shards = this.level.shards.map((s) => ({ ...s }));
     this.pings = [];
     this.particles = makeDust(this.level);
@@ -395,6 +402,16 @@ export class Game {
     }
     this.denyCooldown -= dt;
     this.alertCd -= dt;
+
+    // skitters: deaf, fast, silent until they are close. No sound can warn
+    // you early, so contact is the only rule that matters.
+    for (const sk of this.skitters) {
+      sk.update(dt, this);
+      if (dist(p.x, p.y, sk.x, sk.y) < p.r + sk.r - 1) {
+        this.die();
+        return;
+      }
+    }
 
     // hunters
     let nearest = Infinity;
