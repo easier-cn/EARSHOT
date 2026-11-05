@@ -3,6 +3,15 @@
 All notable changes to HUSH. The format follows [Keep a Changelog](https://keepachangelog.com/),
 and the game follows [SemVer](https://semver.org/).
 
+## [0.3.0] - 2026-11-05
+
+### Changed
+- **Sonar is no longer a wall outline.** Each pulse now throws 96 sparks that
+  travel outward, reflect off walls (up to three bounces) and leave short comet
+  tails; every impact leaves a contact glow that lingers for ~1.7s. The room
+  you are standing in is drawn by where the sound *hit*, not by a shader that
+  knows the map. Faint contact memory is the only thing you keep between pulses.
+
 ## [0.2.4] - 2026-11-05
 
 ### Fixed

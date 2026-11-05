@@ -1,5 +1,5 @@
 import { generateLevel, TILE } from './levelgen.js';
-import { Player, Hunter, Skitter, moveCircle } from './entities.js';
+import { Player, Hunter, Skitter, moveCircle, isSolid } from './entities.js';
 import { Renderer } from './render.js';
 import { Input } from './input.js';
 import { AudioEngine } from './audio.js';
@@ -13,6 +13,9 @@ const PING_REGEN = 2.4;
 const PING_SPEED = 720;
 const PING_LIFE = 0.9;
 const WAVE_LISTEN = 760;
+const RAY_COUNT = 96;
+const RAY_SPEED = 560;
+const RAY_LIFE = 0.95;
 const START_CHARGES = 3;
 
 function makeDust(level, count = 130) {
@@ -137,6 +140,8 @@ export class Game {
     this.hunters = [];
     this.shards = this.level.shards.map((s) => ({ ...s }));
     this.pings = [];
+    this.rays = [];
+    this.contacts = [];
     this.particles = makeDust(this.level);
     this.camX = this.level.size.w / 2;
     this.camY = this.level.size.h / 2;
@@ -166,6 +171,8 @@ export class Game {
     this.skitters = (this.level.skitters || []).map((s) => new Skitter(s.x, s.y));
     this.shards = this.level.shards.map((s) => ({ ...s }));
     this.pings = [];
+    this.rays = [];
+    this.contacts = [];
     this.particles = makeDust(this.level);
     this.camX = this.player.x;
     this.camY = this.player.y;
@@ -280,8 +287,10 @@ export class Game {
         life: PING_LIFE,
         heard: new Set(),
       });
+      this.spawnRays((r.x + r.w / 2) * TILE, (r.y + r.h / 2) * TILE);
     }
     this.pings = this.pings.filter((p) => this.now - p.t0 < p.life + 0.15);
+    this.updateRays(dt);
     this.updateParticles(dt);
     this.shake = Math.max(0, this.shake - dt * 20);
     this.danger = 0;
@@ -290,12 +299,14 @@ export class Game {
   updateDead(dt) {
     this.deathT += dt;
     this.shake = Math.max(0, this.shake - dt * 26);
+    this.updateRays(dt);
     this.updateParticles(dt);
     this.pings = this.pings.filter((p) => this.now - p.t0 < p.life + 0.2);
     if (this.deathT > 0.75) this.ui.showDead();
   }
 
   updateIdle(dt) {
+    this.updateRays(dt);
     this.updateParticles(dt);
     this.shake = Math.max(0, this.shake - dt * 30);
   }
@@ -431,6 +442,7 @@ export class Game {
     if (this.danger > 0.4) this.danger = Math.min(1, this.danger + 0.1);
 
     this.audio.update(dt, { danger: this.danger });
+    this.updateRays(dt);
     this.updateParticles(dt);
     this.shake = Math.max(0, this.shake - dt * 24);
     this.flash = Math.max(0, this.flash - dt * 3.4);
@@ -461,6 +473,72 @@ export class Game {
     return moveCircle(L.grid, L.w, L.h, L.tile, entity.x, entity.y, entity.r, dx, dy);
   }
 
+  /** Spawn a fan of sonar rays that bounce off walls and leave light trails. */
+  spawnRays(x, y) {
+    for (let i = 0; i < RAY_COUNT; i++) {
+      const a = (i / RAY_COUNT) * Math.PI * 2 + Math.random() * 0.035;
+      this.rays.push({
+        x,
+        y,
+        dx: Math.cos(a),
+        dy: Math.sin(a),
+        age: 0,
+        life: RAY_LIFE * (0.85 + Math.random() * 0.25),
+        bounce: 0,
+        pts: [{ x, y }],
+      });
+    }
+    while (this.rays.length > RAY_COUNT * 4) this.rays.shift();
+  }
+
+  /** Advance every ray, reflecting off walls and pruning dead trails. */
+  updateRays(dt) {
+    const L = this.level;
+    if (!L) return;
+    const alive = [];
+    for (let i = 0; i < this.rays.length; i++) {
+      const r = this.rays[i];
+      r.age += dt;
+      if (r.age > r.life + 1.5) continue;
+      if (r.age <= r.life) {
+        let move = RAY_SPEED * dt;
+        while (move > 0.001) {
+          const d = Math.min(6, move);
+          move -= d;
+          const nx = r.x + r.dx * d;
+          const ny = r.y + r.dy * d;
+          const hitX = isSolid(L.grid, L.w, L.h, Math.floor(nx / TILE), Math.floor(r.y / TILE));
+          const hitY = isSolid(L.grid, L.w, L.h, Math.floor(r.x / TILE), Math.floor(ny / TILE));
+          if (hitX) r.dx *= -1;
+          if (hitY) r.dy *= -1;
+          if (hitX || hitY) {
+            r.bounce++;
+            this.contacts.push({ x: r.x, y: r.y, t: this.now });
+          }
+          r.x = hitX ? r.x : nx;
+          r.y = hitY ? r.y : ny;
+          const last = r.pts[r.pts.length - 1];
+          if (Math.abs(r.x - last.x) + Math.abs(r.y - last.y) >= 5) {
+            r.pts.push({ x: r.x, y: r.y });
+            if (r.pts.length > 14) r.pts.shift();
+          }
+          if (r.bounce >= 3) {
+            r.age = Math.max(r.age, r.life);
+            break;
+          }
+        }
+      }
+      alive.push(r);
+    }
+    this.rays = alive;
+    if (this.contacts.length > 40) {
+      let cut = 0;
+      while (cut < this.contacts.length && this.now - this.contacts[cut].t > 1.9) cut++;
+      if (cut) this.contacts.splice(0, cut);
+      if (this.contacts.length > 600) this.contacts.splice(0, this.contacts.length - 600);
+    }
+  }
+
   firePing() {
     if (this.charges < 1) {
       this.audio.deny();
@@ -478,6 +556,7 @@ export class Game {
       heard: new Set(),
     });
     this.pingsUsed++;
+    this.spawnRays(p.x, p.y);
     this.audio.ping();
     this.shake = Math.max(this.shake, 2.4);
     this.flash = 0.85;
@@ -499,6 +578,8 @@ export class Game {
     this.shake = 18;
     this.flash = 0;
     this.pings = [];
+    this.rays = [];
+    this.contacts = [];
     this.audio.death();
     this.ui.dismiss();
     this.ui.hideHUD();
@@ -572,6 +653,7 @@ export class Game {
           life: PING_LIFE,
           heard: new Set(),
         });
+        this.spawnRays(this.player.x, this.player.y);
       }
       this.now += dt;
       this.update(dt);
@@ -586,6 +668,8 @@ export class Game {
         life: PING_LIFE,
         heard: new Set(),
       });
+      this.spawnRays(this.player.x, this.player.y);
+      if (wave > 0) this.updateRays(wave);
     }
     this.frozen = true;
   }

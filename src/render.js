@@ -122,61 +122,58 @@ export class Renderer {
     ctx.translate(this.cw / 2 - cx * this.scale + sx, this.ch / 2 - cy * this.scale + sy);
     ctx.scale(this.scale, this.scale);
 
-    // ---- walls: permanent memory, live wavefronts and fading afterglow ------
-    const mem = level.segments;
-    for (let i = 0; i < BUCKETS; i++) this.buckets[i].length = 0;
-    let memCount = 0;
-    ctx.beginPath();
-    for (let i = 0; i < mem.length; i++) {
-      const s = mem[i];
-      if (s.seenAt === undefined) continue;
-      ctx.moveTo(s.x1, s.y1);
-      ctx.lineTo(s.x2, s.y2);
-      memCount++;
-    }
-    if (memCount) {
-      ctx.strokeStyle = `rgba(${WALL_RGB}, 0.05)`;
-      ctx.lineWidth = 1.1;
-      ctx.stroke();
-    }
-
-    for (let i = 0; i < mem.length; i++) {
-      const s = mem[i];
-      const live = this._segBrightness(s, game.pings, now);
-      if (live > 0.02) {
-        s.seenAt = now;
-        s.seenB = Math.min(1, Math.max(s.seenB || 0, live));
+    // ---- sonar: sparks fly out, bounce off walls, leave short comet tails ---
+    const rays = game.rays || [];
+    const contacts = game.contacts || [];
+    if (rays.length || contacts.length) {
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      for (let i = 0; i < contacts.length; i++) {
+        const c = contacts[i];
+        const k = Math.max(0, 1 - (now - c.t) / 1.7);
+        if (k <= 0.02) continue;
+        ctx.fillStyle = `rgba(150, 246, 232, ${k * 0.5})`;
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, 1.4 + k * 1.3, 0, Math.PI * 2);
+        ctx.fill();
       }
-      const after = s.seenAt === undefined
-        ? 0
-        : 0.62 * (s.seenB || 0) * Math.exp(-(now - s.seenAt) / 1.15);
-      const v = Math.max(live, after);
-      if (v > 0.015) {
-        const bi = Math.min(BUCKETS - 1, Math.floor(v * BUCKETS));
-        this.buckets[bi].push(s);
+      for (let i = 0; i < rays.length; i++) {
+        const r = rays[i];
+        if (!r.pts || r.pts.length < 2) continue;
+        const fade = r.age <= r.life ? 1 : Math.max(0, 1 - (r.age - r.life) / 1.2);
+        if (fade <= 0.02) continue;
+        const head = Math.min(1, r.age / r.life);
+        const a = (0.5 - head * 0.3) * fade;
+        if (a <= 0.02) continue;
+        const pts = r.pts;
+        const n = pts.length;
+        const start = Math.max(0, n - 10);
+        const segs = n - 1 - start;
+        if (segs > 0) {
+          const batches = 3;
+          for (let b = 0; b < batches; b++) {
+            const i0 = start + Math.floor((segs * b) / batches);
+            const i1 = start + Math.max(1, Math.floor((segs * (b + 1)) / batches));
+            if (i1 <= i0) continue;
+            const ta = a * Math.pow((b + 1) / batches, 1.6);
+            ctx.beginPath();
+            ctx.moveTo(pts[i0].x, pts[i0].y);
+            for (let j = i0 + 1; j <= i1; j++) ctx.lineTo(pts[j].x, pts[j].y);
+            if (b === batches - 1) ctx.lineTo(r.x, r.y);
+            ctx.strokeStyle = `rgba(150, 246, 232, ${ta})`;
+            ctx.lineWidth = 0.8 + ta * 1.6;
+            ctx.stroke();
+          }
+        }
+        if (r.age <= r.life) {
+          ctx.fillStyle = `rgba(226, 255, 250, ${Math.min(0.9, a * 1.5)})`;
+          ctx.beginPath();
+          ctx.arc(r.x, r.y, 1.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
-    }
-    ctx.lineCap = 'round';
-    for (let i = 1; i < BUCKETS; i++) {
-      const list = this.buckets[i];
-      if (!list.length) continue;
-      const a = i / (BUCKETS - 1);
-      ctx.beginPath();
-      for (let j = 0; j < list.length; j++) {
-        const s = list[j];
-        ctx.moveTo(s.x1, s.y1);
-        ctx.lineTo(s.x2, s.y2);
-      }
-      if (a > 0.45) {
-        ctx.globalCompositeOperation = 'lighter';
-        ctx.strokeStyle = `rgba(${GLOW_RGB}, ${0.06 * (i - 5)})`;
-        ctx.lineWidth = 9;
-        ctx.stroke();
-        ctx.globalCompositeOperation = 'source-over';
-      }
-      ctx.strokeStyle = `rgba(${WALL_RGB}, ${0.26 + a * 0.74})`;
-      ctx.lineWidth = 1.3 + a * 1.8;
-      ctx.stroke();
+      ctx.globalCompositeOperation = 'source-over';
     }
 
     // ---- particles ----------------------------------------------------------
