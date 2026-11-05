@@ -499,8 +499,7 @@ export class Game {
         p.stepPhase = 0;
         this.audio.footstep(0, 0.85);
         this.emitSound(p.x, p.y, { range: STEP_RANGE, kind: 'step' });
-        this.spawnRays(p.x, p.y, { count: 22, speed: 330, life: 0.5 });
-        this.pings.push({ x: p.x, y: p.y, t0: this.now, speed: 330, life: 0.5, small: true });
+        this.stepEcho(p.x, p.y);
       }
     }
 
@@ -728,9 +727,10 @@ export class Game {
     return null;
   }
 
-  /** A creature's own step still makes a (smaller, cooler) splash of light. */
-  hunterSpark(x, y, count = 16) {
-    this.spawnRays(x, y, { count, speed: 300, life: 0.5 });
+  /** The same small sonar a player's step makes — footsteps are identical for everyone. */
+  stepEcho(x, y) {
+    this.spawnRays(x, y, { count: 22, speed: 330, life: 0.5 });
+    this.pings.push({ x, y, t0: this.now, speed: 330, life: 0.5, small: true });
     this.contacts.push({ x, y, t: this.now });
   }
 

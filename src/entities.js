@@ -152,6 +152,8 @@ export class Hunter {
     return false;
   }
 
+  // A hunter has no will of its own. It stands still until a sound front
+  // touches it, walks to exactly that point, and stops again.
   update(dt, game) {
     const L = game.level;
 
@@ -161,60 +163,31 @@ export class Hunter {
         const sound = this.pending;
         this.pending = null;
         this.state = 'investigate';
-        this.searchT = 0;
         this._plan(game, sound.x, sound.y);
+        if (!this.path.length) this.state = 'idle';
       }
     }
-
-    if (this.state === 'search') {
-      this.searchT -= dt;
-      this.face += Math.sin(game.now * 4 + this.id) * dt * 1.4;
-      if (this.searchT <= 0) {
-        this.state = 'wander';
-        this.path = [];
-      }
-    }
-
-    if (this.state === 'wander' && this.path.length === 0) {
-      this.wanderCooldown -= dt;
-      if (this.wanderCooldown <= 0) {
-        this.wanderCooldown = 2 + Math.random() * 3;
-        // pick a random open tile within a short radius
-        const tx0 = Math.floor(this.x / L.tile);
-        const ty0 = Math.floor(this.y / L.tile);
-        for (let tries = 0; tries < 12; tries++) {
-          const tx = tx0 + Math.round((Math.random() * 2 - 1) * 7);
-          const ty = ty0 + Math.round((Math.random() * 2 - 1) * 7);
-          if (tx < 1 || ty < 1 || tx >= L.w - 1 || ty >= L.h - 1) continue;
-          if (L.grid[ty * L.w + tx] !== 0) continue;
-          if (this._plan(game, (tx + 0.5) * L.tile, (ty + 0.5) * L.tile)) break;
-        }
-      }
-    }
-
-    const targetSpeed =
-      this.state === 'investigate' ? 126 : this.state === 'search' ? 20 : 46;
 
     let tx = this.x;
     let ty = this.y;
-    let arrived = true;
+    let arrived = this.path.length === 0;
     if (this.path.length) {
       const wp = this.path[0];
       tx = wp.x;
       ty = wp.y;
-      arrived = false;
       if (Math.hypot(wp.x - this.x, wp.y - this.y) < 7) {
         this.path.shift();
         if (!this.path.length) arrived = true;
       }
     }
 
+    const speed = 126;
     let dx = 0;
     let dy = 0;
     if (!arrived) {
       const d = Math.hypot(tx - this.x, ty - this.y) || 1;
-      dx = ((tx - this.x) / d) * targetSpeed;
-      dy = ((ty - this.y) / d) * targetSpeed;
+      dx = ((tx - this.x) / d) * speed;
+      dy = ((ty - this.y) / d) * speed;
       this.face = Math.atan2(dy, dx);
     }
     this.speed = Math.hypot(dx, dy);
@@ -223,17 +196,8 @@ export class Hunter {
     this.x = step.x;
     this.y = step.y;
 
-    if (this.state === 'investigate' && this.path.length === 0) {
-      this.state = 'search';
-      this.searchT = 2.2 + Math.random() * 1.4;
-      if (game.audio) {
-        const pan = Math.max(-1, Math.min(1, (this.x - game.player.x) / 420));
-        game.audio.hunterStep(pan, 0.5);
-        game.hunterSpark?.(this.x, this.y, 14);
-      }
-    }
+    if (arrived && this.state === 'investigate') this.state = 'idle';
 
-    // footsteps
     if (this.speed > 5) {
       this.stepAcc += this.speed * dt;
       if (this.stepAcc > 58) {
@@ -243,7 +207,7 @@ export class Hunter {
         if (dist < 620) {
           const pan = Math.max(-1, Math.min(1, rel / 380));
           game.audio.hunterStep(pan, Math.min(1, 1.15 - dist / 640));
-          game.hunterSpark?.(this.x, this.y, 18);
+          game.stepEcho?.(this.x, this.y);
         }
       }
     }

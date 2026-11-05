@@ -190,12 +190,23 @@ async function main() {
     const fx = Math.floor(p.x / L.tile), fy = Math.floor(p.y / L.tile);
     return !L.grid[fy * L.w + fx];
   })()`);
+  // Hunters are statues until a sound front reaches them; then they walk to it.
+  report.huntersIdle = await evaluate(`(async () => {
+    const h = window.__hush;
+    if (!h.hunters.length) return true;
+    h.hunters.forEach((x) => { x.pending = null; x.path = []; });
+    const before = h.hunters.map((x) => [x.x, x.y]);
+    await new Promise((r) => setTimeout(r, 900));
+    return h.hunters.every((x, i) => Math.hypot(x.x - before[i][0], x.y - before[i][1]) < 1);
+  })()`);
   report.huntersMove = await evaluate(`(async () => {
     const h = window.__hush;
     if (!h.hunters.length) return true;
-    const before = h.hunters.map((x) => [x.x, x.y]);
-    await new Promise((r) => setTimeout(r, 1800));
-    return h.hunters.some((x, i) => Math.hypot(x.x - before[i][0], x.y - before[i][1]) > 20);
+    const target = h.hunters[0];
+    target.hear(h.player.x, h.player.y, 0.02);
+    const before = [target.x, target.y];
+    await new Promise((r) => setTimeout(r, 1500));
+    return Math.hypot(target.x - before[0], target.y - before[1]) > 12;
   })()`);
 
   // Escape pauses.
