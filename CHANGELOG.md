@@ -3,6 +3,17 @@
 All notable changes to HUSH. The format follows [Keep a Changelog](https://keepachangelog.com/),
 and the game follows [SemVer](https://semver.org/).
 
+## [0.3.6] - 2026-11-05
+
+### Fixed
+- Shard echo panning used a fixed 420px divisor, so anything more than ~420px
+  to the side collapsed to hard-left/hard-right and gave no bearing at all.
+  Pan is now `dx / (0.9·d + 60)`: a real direction cue at every distance.
+
+### Added
+- The death panel remembers how deep into the nest you got, and names the
+  sector you stopped in.
+
 ## [0.3.5] - 2026-11-05
 
 ### Added

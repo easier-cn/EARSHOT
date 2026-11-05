@@ -5,7 +5,7 @@ import { Input } from './input.js';
 import { AudioEngine } from './audio.js';
 import { UI } from './ui.js';
 import { CHAMBERS } from './chambers.js';
-import { clamp, dist } from './util.js';
+import { clamp, dist, echoPan } from './util.js';
 
 const SAVE_KEY = 'hush.save.v1';
 const PING_MAX = 3;
@@ -360,7 +360,14 @@ export class Game {
     this.updateRays(dt);
     this.updateParticles(dt);
     this.pings = this.pings.filter((p) => this.now - p.t0 < p.life + 0.2);
-    if (this.deathT > 0.75) this.ui.showDead();
+    if (this.deathT > 0.75) {
+      if (this.worldMode) {
+        this.ui.worldLabels = CHAMBERS.map((c) => c.title);
+        this.ui.showDead({ sector: this.sector, deepest: this.maxSector ?? 0 });
+      } else {
+        this.ui.showDead();
+      }
+    }
   }
 
   updateIdle(dt) {
@@ -505,6 +512,7 @@ export class Game {
       const sec = sectorOf(p.x, p.y, L);
       if (sec !== this.sector) {
         this.sector = sec;
+        this.maxSector = Math.max(this.maxSector ?? 0, sec);
         const cfg = CHAMBERS[sec];
         this.ui.setSector(cfg.num, cfg.title);
         this.audio.setSector(sec);
@@ -702,7 +710,7 @@ export class Game {
       if (d > SHARD_ECHO_RANGE) continue;
       const delay = d / SHARD_ECHO_SPEED;
       const gain = 0.05 * (1 - d / SHARD_ECHO_RANGE) ** 1.4 + 0.006;
-      const pan = clamp((sh.x - px) / 420, -1, 1);
+      const pan = echoPan(sh.x - px, sh.y - py);
       this.audio.shardEcho(pan, gain, delay);
       reached.push({ id: sh.id, d: Math.round(d), delay: +delay.toFixed(3) });
     }

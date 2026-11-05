@@ -5,6 +5,7 @@ import { generateLevel, generateWorld, TILE } from '../src/levelgen.js';
 import { findPath, lineOfSight } from '../src/pathfind.js';
 import { moveCircle } from '../src/entities.js';
 import { CHAMBERS } from '../src/chambers.js';
+import { echoPan } from '../src/util.js';
 
 const walkable = (lvl, tx, ty) =>
   tx >= 0 && ty >= 0 && tx < lvl.w && ty < lvl.h && lvl.grid[ty * lvl.w + tx] === 0;
@@ -206,4 +207,13 @@ test('the world is one connected map: every objective is walkable from spawn', (
     assert.ok(seen[t.y * lvl.w + t.x], 'mimic spawns in the world');
   }
   assert.ok(lvl.rooms.length >= 34, 'the world is not a corridor with two rooms');
+});
+
+test('shard echoes separate left from right even far away', () => {
+  assert.ok(Math.abs(echoPan(0, 500)) < 1e-9, 'dead ahead is centred');
+  const near = echoPan(60, 60);
+  const far = echoPan(600, 400);
+  assert.ok(near > 0.4 && far > 0.6, 'right stays right: ' + near + ' / ' + far);
+  assert.ok(far < 0.999, 'far sounds must not saturate: ' + far);
+  assert.ok(echoPan(-600, 400) < -0.6, 'mirror works');
 });

@@ -131,6 +131,7 @@ export class UI {
       dead: $('scr-dead'),
       clear: $('scr-clear'),
       victory: $('scr-victory'),
+      dead: $('scr-dead'),
       clearPanel: $('scr-clear'),
       hud: $('hud'),
       hudNum: $('hud-num'),
@@ -251,9 +252,19 @@ export class UI {
     document.getElementById('btn-pause-mute').textContent = this.game.audio.muted ? '开启声音' : '静音';
   }
 
-  showDead() {
+  showDead({ sector = null, deepest = null } = {}) {
     if (!this.screens.dead.classList.contains('hidden')) return;
     this.hideHUD();
+    const panel = this.el.dead.querySelector('.panel');
+    const sub = panel.querySelector('.panel-sub');
+    if (sector != null && deepest != null && this.worldLabels) {
+      const name = this.worldLabels[sector];
+      sub.textContent = sector >= deepest
+        ? `你在${name}留下了声音。`
+        : `你在${name}停下了。最远到过${this.worldLabels[deepest]}。`;
+    } else {
+      sub.textContent = '黑暗记住了你的位置。';
+    }
     this.showScreen('dead');
   }
 

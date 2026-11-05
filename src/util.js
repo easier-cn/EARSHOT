@@ -55,3 +55,11 @@ export function angleDelta(a, b) {
 export function nowSec() {
   return performance.now() / 1000;
 }
+
+/** Stereo position for a sound at (dx, dy) relative to the listener, normalised
+ *  by distance so that far-off sounds still separate left from right instead of
+ *  saturating at hard-left/hard-right. */
+export function echoPan(dx, dy) {
+  const d = Math.hypot(dx, dy);
+  return clamp(dx / (d * 0.9 + 60), -1, 1);
+}

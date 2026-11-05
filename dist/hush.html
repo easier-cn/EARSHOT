@@ -718,6 +718,14 @@ function nowSec() {
   return performance.now() / 1000;
 }
 
+/** Stereo position for a sound at (dx, dy) relative to the listener, normalised
+ *  by distance so that far-off sounds still separate left from right instead of
+ *  saturating at hard-left/hard-right. */
+function echoPan(dx, dy) {
+  const d = Math.hypot(dx, dy);
+  return clamp(dx / (d * 0.9 + 60), -1, 1);
+}
+
 // ---- src/pathfind.js ----
 /**
  * Grid pathfinding + line of sight helpers.
@@ -2737,6 +2745,7 @@ class UI {
       dead: $('scr-dead'),
       clear: $('scr-clear'),
       victory: $('scr-victory'),
+      dead: $('scr-dead'),
       clearPanel: $('scr-clear'),
       hud: $('hud'),
       hudNum: $('hud-num'),
@@ -2857,9 +2866,19 @@ class UI {
     document.getElementById('btn-pause-mute').textContent = this.game.audio.muted ? '开启声音' : '静音';
   }
 
-  showDead() {
+  showDead({ sector = null, deepest = null } = {}) {
     if (!this.screens.dead.classList.contains('hidden')) return;
     this.hideHUD();
+    const panel = this.el.dead.querySelector('.panel');
+    const sub = panel.querySelector('.panel-sub');
+    if (sector != null && deepest != null && this.worldLabels) {
+      const name = this.worldLabels[sector];
+      sub.textContent = sector >= deepest
+        ? `你在${name}留下了声音。`
+        : `你在${name}停下了。最远到过${this.worldLabels[deepest]}。`;
+    } else {
+      sub.textContent = '黑暗记住了你的位置。';
+    }
     this.showScreen('dead');
   }
 
@@ -3324,7 +3343,14 @@ class Game {
     this.updateRays(dt);
     this.updateParticles(dt);
     this.pings = this.pings.filter((p) => this.now - p.t0 < p.life + 0.2);
-    if (this.deathT > 0.75) this.ui.showDead();
+    if (this.deathT > 0.75) {
+      if (this.worldMode) {
+        this.ui.worldLabels = CHAMBERS.map((c) => c.title);
+        this.ui.showDead({ sector: this.sector, deepest: this.maxSector ?? 0 });
+      } else {
+        this.ui.showDead();
+      }
+    }
   }
 
   updateIdle(dt) {
@@ -3469,6 +3495,7 @@ class Game {
       const sec = sectorOf(p.x, p.y, L);
       if (sec !== this.sector) {
         this.sector = sec;
+        this.maxSector = Math.max(this.maxSector ?? 0, sec);
         const cfg = CHAMBERS[sec];
         this.ui.setSector(cfg.num, cfg.title);
         this.audio.setSector(sec);
@@ -3666,7 +3693,7 @@ class Game {
       if (d > SHARD_ECHO_RANGE) continue;
       const delay = d / SHARD_ECHO_SPEED;
       const gain = 0.05 * (1 - d / SHARD_ECHO_RANGE) ** 1.4 + 0.006;
-      const pan = clamp((sh.x - px) / 420, -1, 1);
+      const pan = echoPan(sh.x - px, sh.y - py);
       this.audio.shardEcho(pan, gain, delay);
       reached.push({ id: sh.id, d: Math.round(d), delay: +delay.toFixed(3) });
     }
