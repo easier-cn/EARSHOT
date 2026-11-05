@@ -56,6 +56,7 @@ export class Game {
     this.pings = [];
     this.charges = START_CHARGES;
     this.chargeTimer = 0;
+    this.listenT = 0;
     this.pingsUsed = 0;
     this.levelTime = 0;
     this.collected = 0;
@@ -162,6 +163,7 @@ export class Game {
     this.camY = this.player.y;
     this.charges = START_CHARGES;
     this.chargeTimer = 0;
+    this.listenT = 0;
     this.pingsUsed = 0;
     this.levelTime = 0;
     this.collected = 0;
@@ -295,11 +297,13 @@ export class Game {
     const L = this.level;
     this.levelTime += dt;
 
-    const listen = this.input.down('Space') || this.debugListen === true;
-    const run = (this.input.down('ShiftLeft') || this.input.down('ShiftRight')) && !listen;
+    // Holding Space = creep silently. But the directional sense only comes
+    // once you have actually stopped: sound is read in stillness.
+    const creeping = this.input.down('Space');
+    const run = (this.input.down('ShiftLeft') || this.input.down('ShiftRight')) && !creeping;
     const move = this.input.moveVector();
 
-    const motion = p.update(dt, move, { run, listen });
+    const motion = p.update(dt, move, { run, listen: creeping });
     const resolved = this.resolve(p, motion.x, motion.y);
     p.x = resolved.x;
     p.y = resolved.y;
@@ -307,13 +311,18 @@ export class Game {
     this.camX += (p.x - this.camX) * k;
     this.camY += (p.y - this.camY) * k;
 
+    if (p.moving) this.listenT = 0;
+    else this.listenT = Math.min(1, this.listenT + dt);
+    const listen = this.debugListen === true || (creeping && this.listenT > 0.26);
+    this.listen = listen;
+
     // footsteps
     if (p.moving) {
-      const threshold = run ? 44 : listen ? 70 : 58;
+      const threshold = run ? 44 : creeping ? 70 : 58;
       if (p.stepPhase > threshold) {
         p.stepPhase = 0;
         this.audio.footstep(0, run ? 1.4 : 1);
-        const noiseRadius = listen ? 90 : run ? 340 : 215;
+        const noiseRadius = creeping ? 90 : run ? 340 : 215;
         for (const h of this.hunters) {
           if (dist(p.x, p.y, h.x, h.y) < noiseRadius) h.hear(p.x, p.y, 0.18);
         }
@@ -321,7 +330,7 @@ export class Game {
     }
 
     // pinging
-    if ((this.input.consume('Mouse0') || this.input.consume('KeyJ')) && !listen) {
+    if ((this.input.consume('Mouse0') || this.input.consume('KeyJ')) && this.charges > 0) {
       this.firePing();
     }
 

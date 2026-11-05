@@ -116,6 +116,18 @@ async function main() {
   const x1 = await evaluate('window.__hush.player.x');
   report.moved = +(x1 - x0).toFixed(1);
 
+  // Listening needs stillness: still + Space senses, walking + Space does not.
+  await key('keyDown', 'Space', ' ', 32);
+  await sleep(550);
+  report.listenStill = await evaluate('window.__hush.listen');
+  await key('keyDown', 'KeyD', 'd', 68);
+  await sleep(400);
+  report.listenMoving = await evaluate('window.__hush.listen');
+  report.creepSlow = await evaluate('window.__hush.player.speed <= 60');
+  await key('keyUp', 'KeyD', 'd', 68);
+  await key('keyUp', 'Space', ' ', 32);
+  await sleep(150);
+
   // Click to ping.
   const before = await evaluate('window.__hush.charges');
   await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: 700, y: 400, button: 'left', clickCount: 1 });

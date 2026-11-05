@@ -5,6 +5,14 @@ and the game follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Listening now requires standing still: holding Space while walking only muffles
+  your steps, the directional sense fades in after ~0.26s of stillness. This
+  removes the "silent walk with perfect awareness" dominant strategy.
+
+### Fixed
+- Directional chevrons never rendered in normal play (`game.listen` was never set).
+
 ### Added
 - `npm run balance` — reports the shortest walking route through every chamber
   (lower bound on level length, used for pacing).

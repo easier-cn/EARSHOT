@@ -6,7 +6,7 @@ export const CHAMBERS = [
     shards: 1,
     hunters: 0,
     seed: 1201,
-    intro: '先学会听。左键发出声呐，按住空格聆听。',
+    intro: '先学会听。左键发出声呐；停下后按住空格，听见方向。',
   },
   {
     num: 'II',
