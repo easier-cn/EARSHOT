@@ -3,6 +3,13 @@
 All notable changes to HUSH. The format follows [Keep a Changelog](https://keepachangelog.com/),
 and the game follows [SemVer](https://semver.org/).
 
+## [0.3.5] - 2026-11-05
+
+### Added
+- Each sector of the nest sits on a different note of the same drone chord;
+  crossing into it detunes the ambience over ~2 seconds instead of cutting.
+  Verified in the playtest by reading the live oscillator frequencies.
+
 ## [0.3.4] - 2026-11-05
 
 ### Added

@@ -507,6 +507,7 @@ export class Game {
         this.sector = sec;
         const cfg = CHAMBERS[sec];
         this.ui.setSector(cfg.num, cfg.title);
+        this.audio.setSector(sec);
       }
     }
 

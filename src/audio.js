@@ -188,6 +188,7 @@ export class AudioEngine {
     lp.frequency.value = 220;
     droneGain.connect(lp);
     lp.connect(this.dry);
+    this._drone = [];
     for (const [f, det] of [
       [55, -6],
       [82.4, 7],
@@ -202,6 +203,7 @@ export class AudioEngine {
       o.connect(g);
       g.connect(droneGain);
       o.start();
+      this._drone.push({ osc: o, base: f });
     }
     // Wind.
     const wind = ctx.createBufferSource();
@@ -224,6 +226,16 @@ export class AudioEngine {
     lfo.connect(lfoGain);
     lfoGain.connect(wg.gain);
     lfo.start();
+  }
+
+  /** Each part of the cave sits on a different note of the same chord. Crossing
+   *  into it is a slow detune, not a cut. */
+  setSector(n) {
+    if (!this._drone || !this.ctx) return;
+    const ratios = [1, 1.0595, 0.9439, 1.1225, 0.8909, 1.1892, 1.0293, 0.8409];
+    const r = ratios[((n % 8) + 8) % 8];
+    const t = this.ctx.currentTime;
+    for (const d of this._drone) d.osc.frequency.setTargetAtTime(d.base * r, t, 2.2);
   }
 
   ping(strength = 1) {

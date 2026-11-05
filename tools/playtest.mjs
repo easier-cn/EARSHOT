@@ -250,6 +250,10 @@ async function main() {
   // shards still gate the exit, and the echo door still needs an answer.
   await send('Page.navigate', { url: BASE + '?world=1&static=1' });
   await sleep(1500);
+  // A real gesture: the audio clock only runs once the page has been touched.
+  await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'q', code: 'KeyQ', windowsVirtualKeyCode: 81 });
+  await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'q', code: 'KeyQ', windowsVirtualKeyCode: 81 });
+  await sleep(500);
   report.world = await evaluate(`(async () => {
     const g = window.__hush;
     const step = (ms) => new Promise((r) => setTimeout(r, ms || 60));
@@ -262,7 +266,12 @@ async function main() {
     g.player.x = cw * 0.5;
     g.player.y = ch * 3.5;
     await step(150);
-    const crossed = { sector: g.sector, num: document.getElementById('hud-num').textContent };
+    await step(3000); // the ambience glides between sectors; give it time
+    const crossed = {
+      sector: g.sector,
+      num: document.getElementById('hud-num').textContent,
+      drone: (g.audio._drone || []).map((d) => +d.osc.frequency.value.toFixed(1)),
+    };
     g.charges = 3;
     g.firePing();
     await step(120);
