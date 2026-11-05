@@ -353,7 +353,7 @@ export class Hunter {
       if (this.burstT <= 0 && phase < 3.2) { this.burstT = 0.13; this._burst(game, '255, 150, 90', 7); }
       if (!this.pulseDone && phase >= 3.2) {
         this.pulseDone = true;
-        game.emitShock?.(this.x, this.y, this);
+        game.butcherSweep?.(this.x, this.y, this);
       }
       return;
     }

@@ -522,42 +522,37 @@ export class Game {
     return 126 * (1 + 0.07 * (depth - 1));
   }
 
-  /** The butcher's long sweep: a slow ring that reveals and shares a target. */
-  emitShock(x, y, owner) {
-    if (!this.shocks) this.shocks = [];
-    this.shocks.push({ x, y, r: 0, max: 560, speed: 520, owner, hit: new Set() });
+  /** The butcher's long sweep: a burst of long sound lines that reveal and share a target. */
+  butcherSweep(x, y, owner) {
+    owner.sweepHit = false;
+    this.spawnRays(x, y, { count: 64, speed: 560, life: 1.05, tint: '255, 140, 80', tag: null, sweep: owner });
     this.audio.echo(clamp((x - this.player.x) / 480, -1, 1), 'ping');
-    this.flash = Math.max(this.flash, 0.35);
+    this.flash = Math.max(this.flash, 0.3);
   }
 
-  updateShocks(dt) {
-    if (!this.shocks || !this.shocks.length) return;
+  /** A sweep line touching the player starts the pounce; touching a hunter shares the target. */
+  sweepCheck(r, nx, ny) {
+    const o = r.sweep;
     const p = this.player;
-    for (const s of this.shocks) {
-      const prev = s.r;
-      s.r += s.speed * dt;
-      const dp = dist(p.x, p.y, s.x, s.y);
-      if (!s.hit.has('p') && dp >= prev - 16 && dp <= s.r + 16) {
-        s.hit.add('p');
-        if (s.owner && s.owner.type === 'butcher') {
-          s.owner.target = { x: p.x, y: p.y };
-          s.owner.pounce = { x: p.x, y: p.y };
-          s.owner.dashT = 0.7;
-          this.flash = 1;
-          this.shake = Math.max(this.shake, 7);
-          this.audio.alert(0);
-        }
-      }
-      for (const h of this.hunters) {
-        if (h === s.owner || s.hit.has(h.id)) continue;
-        const dh = dist(h.x, h.y, s.x, s.y);
-        if (dh >= prev - 16 && dh <= s.r + 16) {
-          s.hit.add(h.id);
-          if (s.owner && s.owner.target) h.pending = { x: s.owner.target.x, y: s.owner.target.y, t: 0.15 };
-        }
+    if (!o || !p) return;
+    if (!o.sweepHit && dist2(nx, ny, p.x, p.y) < 18 * 18) {
+      o.sweepHit = true;
+      o.target = { x: p.x, y: p.y };
+      o.pounce = { x: p.x, y: p.y };
+      o.dashT = 0.7;
+      this.flash = Math.max(this.flash, 1);
+      this.shake = Math.max(this.shake, 7);
+      this.audio.alert(0);
+    }
+    if (!o.target) return;
+    o.shared = o.shared || new Set();
+    for (const h of this.hunters) {
+      if (h === o || o.shared.has(h.id)) continue;
+      if (dist2(nx, ny, h.x, h.y) < 14 * 14) {
+        o.shared.add(h.id);
+        h.pending = { x: o.target.x, y: o.target.y, t: 0.15 };
       }
     }
-    this.shocks = this.shocks.filter((s) => s.r < s.max);
   }
 
   refreshStones() {
@@ -1129,7 +1124,6 @@ export class Game {
     if (this.invulnT > 0) this.invulnT = Math.max(0, this.invulnT - dt);
     this.audio.update(dt, { danger: this.danger });
     this.updateRays(dt);
-    this.updateShocks(dt);
     this.updateParticles(dt);
     this.shake = Math.max(0, this.shake - dt * 24);
     this.flash = Math.max(0, this.flash - dt * 3.4);
@@ -1257,7 +1251,7 @@ export class Game {
     this.spawnRays(x, y, { count, speed, life, tint, tag, kind: opts.kind || 'step' });
   }
 
-  spawnRays(x, y, { count = RAY_COUNT, speed = RAY_SPEED, life = RAY_LIFE, tint = null, kind = 'ping', tag = undefined } = {}) {
+  spawnRays(x, y, { count = RAY_COUNT, speed = RAY_SPEED, life = RAY_LIFE, tint = null, kind = 'ping', tag = undefined, sweep = null } = {}) {
     const stamp = tag === null ? null : tag || { x, y, t: this.now, kind };
     for (let i = 0; i < count; i++) {
       const a = (i / count) * Math.PI * 2 + Math.random() * 0.035;
@@ -1273,6 +1267,7 @@ export class Game {
         hot: false,
         tint,
         tag: stamp,
+        sweep,
         pts: [{ x, y }],
       });
     }
@@ -1330,6 +1325,7 @@ export class Game {
           }
           r.x = hitX ? r.x : nx;
           r.y = hitY ? r.y : ny;
+          if (r.sweep) this.sweepCheck(r, nx, ny);
           const last = r.pts[r.pts.length - 1];
           if (Math.abs(r.x - last.x) + Math.abs(r.y - last.y) >= 5) {
             r.pts.push({ x: r.x, y: r.y });

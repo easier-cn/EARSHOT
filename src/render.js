@@ -274,21 +274,6 @@ export class Renderer {
       ctx.stroke();
     }
 
-    // ---- the butcher's long sweep ------------------------------------------
-    for (const s of game.shocks || []) {
-      const k = Math.max(0, 1 - s.r / s.max);
-      ctx.strokeStyle = `rgba(255, 150, 92, ${0.3 + k * 0.55})`;
-      ctx.lineWidth = 2.8 - k * 1.4;
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.strokeStyle = `rgba(255, 96, 62, ${0.16 + k * 0.3})`;
-      ctx.lineWidth = 10;
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, Math.max(1, s.r - 9), 0, Math.PI * 2);
-      ctx.stroke();
-    }
-
     // ---- debug view (only when ~ was pressed) -------------------------------
     if (game.debugMode) {
       ctx.save();
