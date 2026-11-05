@@ -639,3 +639,10 @@ kbd {
   text-transform: uppercase;
   color: var(--ink-dim, #55605f);
 }
+
+.nest-line {
+  margin: 14px 0 2px;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--muted, #6b7a78);
+}

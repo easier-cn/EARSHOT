@@ -653,6 +653,13 @@ kbd {
   color: var(--ink-dim, #55605f);
 }
 
+.nest-line {
+  margin: 14px 0 2px;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--muted, #6b7a78);
+}
+
 </style>
   </head>
   <body>
@@ -2644,6 +2651,7 @@ class UI {
           <div class="rule"></div>
           <p class="tagline">你什么都看不见。<span>黑暗在听。</span></p>
           <button class="btn primary" id="btn-start">进入黑暗</button>
+          <div class="nest-line" id="nest-line"></div>
           <div class="grid-label">或回到一间旧密室</div>
           <div class="chamber-grid" id="chamber-grid"></div>
           <div class="hints">
@@ -2653,7 +2661,7 @@ class UI {
             <span><b>Shift</b> 奔跑</span>
           </div>
         </div>
-        <div class="title-foot">v0.3.2 · 一个关于声音的实验</div>
+        <div class="title-foot">v0.3.7 · 一个关于声音的实验</div>
       </section>
 
       <section class="screen pause-screen hidden" id="scr-pause">
@@ -2757,6 +2765,7 @@ class UI {
       intro: $('intro'),
       start: $('btn-start'),
       grid: $('chamber-grid'),
+      nest: $('nest-line'),
       stats: $('clear-stats'),
       record: $('clear-record'),
       victoryStats: $('victory-stats'),
@@ -2815,7 +2824,11 @@ class UI {
     this.el.hud.classList.add('hidden');
     this.el.listenTag.classList.add('hidden');
     const startBtn = this.el.start;
-    startBtn.textContent = progress.unlocked > 1 ? `继续 · 密室 ${ROMAN[progress.unlocked - 1]}` : '进入黑暗';
+    startBtn.textContent = progress.worldCleared ? '再次进入巢穴' : '进入黑暗';
+    const wb = progress.worldBest;
+    this.el.nest.textContent = progress.worldCleared
+      ? `巢穴已安静 · 最佳 ${fmtTime(wb.time)} · ${wb.pings} 次声呐`
+      : '一张连续的巢穴 · 16 块碎片 · 门在等一个回声';
     this.el.grid.innerHTML = CHAMBERS.map((c, i) => {
       const unlocked = i < progress.unlocked;
       const cleared = progress.cleared.includes(i);

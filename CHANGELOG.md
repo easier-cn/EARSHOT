@@ -3,6 +3,13 @@
 All notable changes to HUSH. The format follows [Keep a Changelog](https://keepachangelog.com/),
 and the game follows [SemVer](https://semver.org/).
 
+## [0.3.7] - 2026-11-05
+
+### Added
+- The title now states what the nest is before you enter it (one continuous
+  cave, 16 shards, a door waiting for an answer), and after a clear it becomes
+  a record line: best time and sonar count.
+
 ## [0.3.6] - 2026-11-05
 
 ### Fixed
