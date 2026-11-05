@@ -749,3 +749,10 @@ kbd {
 .sw.skitter { background: #ff7878; width: 9px; height: 9px; transform: rotate(45deg); }
 .sw.spawn { border: 1.5px solid #eaf7f4; border-radius: 50%; }
 .editor-canvas { border: 1px solid rgba(127, 227, 212, 0.2); max-width: 94vw; max-height: 72vh; touch-action: none; }
+.depth-pips { display: flex; gap: 8px; justify-content: center; margin: 0 0 18px; }
+.depth-pips i { width: 6px; height: 6px; border: 1px solid rgba(127, 227, 212, 0.35); transform: rotate(45deg); }
+.depth-pips i.on { background: var(--teal); border-color: var(--teal); box-shadow: 0 0 8px rgba(127, 227, 212, 0.6); }
+.hud-loot { position: absolute; top: 52px; right: 28px; display: flex; gap: 6px; align-items: center; }
+.hud-loot i.dmd { width: 7px; height: 7px; background: rgba(140, 220, 255, 0.85); transform: rotate(45deg); box-shadow: 0 0 6px rgba(120, 210, 255, 0.5); }
+.gold-pile { display: flex; gap: 3px; margin-left: 6px; }
+.gold-pile i.gld { width: 3px; height: 9px; background: rgba(255, 205, 110, 0.75); }

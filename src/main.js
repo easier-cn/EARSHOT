@@ -102,6 +102,17 @@ if (freeze !== null) {
 }
 
 // Experimental: walk the single continuous map.
+if (params.has('run')) {
+  setTimeout(() => {
+    game.startRun(Number(params.get('run')) || 12345);
+    if (params.has('sim') && !params.has('run')) {
+      game.debugSimulate(Number(params.get('sim')) || 1, {
+        every: Number(params.get('every')) || 0.9,
+        wave: params.has('wave') ? Number(params.get('wave')) : 0.45,
+      });
+    }
+  }, 700);
+}
 if (params.has('world')) {
   setTimeout(() => {
     game.startWorld(Number(params.get('world')) || 424242);

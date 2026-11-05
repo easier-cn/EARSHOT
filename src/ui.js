@@ -110,6 +110,7 @@ export class UI {
           <span class="diamond"></span>
           <span class="shard-bar" id="hud-shards"></span>
         </div>
+        <div class="hud-loot" id="hud-loot"></div>
         <div class="hud-charges" id="hud-charges"></div>
         <div class="hud-listen" id="hud-listen">
           <svg viewBox="0 0 40 40" aria-hidden="true">
@@ -136,6 +137,7 @@ export class UI {
     this.hudSector = $('hud-sector');
     this.hudShards = $('hud-shards');
     this.hudCharges = $('hud-charges');
+    this.hudLoot = $('hud-loot');
     this.hudListen = $('hud-listen');
     this.clearStats = $('clear-stats');
     this.victoryStats = $('victory-stats');
@@ -251,6 +253,25 @@ export class UI {
     this.victoryStats.innerHTML = this._statRow(time, pings, isRecord);
   }
 
+  /** Floor cleared: show how deep the run is as pips, not a sentence. */
+  showFloorClear({ depth = 1, max = 5, time = 0 } = {}) {
+    this.showScreen('clear');
+    this.hideHUD();
+    let pips = '<span class="depth-pips">';
+    for (let i = 0; i < max; i++) pips += `<i class="${i < depth ? 'on' : ''}"></i>`;
+    pips += '</span>';
+    this.clearStats.innerHTML = pips + this._statRow(time, 0, false);
+  }
+
+  showRunVictory({ time = 0, best = 0, depth = 5 } = {}) {
+    this.showScreen('victory');
+    this.hideHUD();
+    let pips = '<span class="depth-pips">';
+    for (let i = 0; i < depth; i++) pips += '<i class="on"></i>';
+    pips += '</span>';
+    this.victoryStats.innerHTML = pips + this._statRow(time, 0, best === time);
+  }
+
   _statRow(time, pings, isRecord) {
     // Time and pings as bars; the record as a small bright ring.
     const tBars = Math.min(10, Math.max(1, Math.round(time / 30)));
@@ -281,7 +302,26 @@ export class UI {
     this.hudNum.classList.add('pulse');
   }
 
-  updateHUD({ shards = 0, total = 1, charges = 0, listen = false, danger = 0 } = {}) {
+  updateHUD({ shards = 0, total = 1, charges = 0, listen = false, danger = 0, depth = 0, diamonds = 0, gold = 0 } = {}) {
+    if (this.hudLoot) {
+      const d = Math.min(8, diamonds);
+      let dh = '';
+      for (let i = 0; i < d; i++) dh += '<i class="dmd"></i>';
+      let gh = '<span class="gold-pile">';
+      const bars = Math.min(6, Math.floor(gold / 10)) + (gold % 10 ? 1 : 0);
+      for (let i = 0; i < bars; i++) gh += '<i class="gld"></i>';
+      gh += '</span>';
+      this.hudLoot.innerHTML = dh + gh;
+    }
+    if (depth > 0) {
+      this.hudNum.innerHTML = '';
+      for (let i = 0; i < 5; i++) {
+        const d = document.createElement('i');
+        d.className = 'sector-dot';
+        if (i < depth) d.classList.add('lit');
+        this.hudNum.appendChild(d);
+      }
+    }
     const collected = Math.max(0, total - shards);
     const filled = total ? Math.round((collected / total) * 12) : 0;
     let bar = '';

@@ -6,7 +6,7 @@
   "description": "HUSH — a sonar stealth game played in the dark",
   "scripts": {
     "serve": "python -m http.server 8080 --bind 127.0.0.1",
-    "test": "node --test tests/levelgen.test.js tests/ai.test.js",
+    "test": "node --test tests/levelgen.test.js tests/ai.test.js tests/rooms.test.js",
     "playtest": "node tools/playtest.mjs",
     "build": "node tools/build.mjs",
     "balance": "node tools/balance.mjs",

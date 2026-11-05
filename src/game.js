@@ -7,9 +7,11 @@ import { AudioEngine } from './audio.js';
 import { UI } from './ui.js';
 import { Editor } from './editor.js';
 import { CHAMBERS } from './chambers.js';
+import { generateFloor } from './rooms.js';
 import { clamp, dist, echoPan } from './util.js';
 
 const SAVE_KEY = 'hush.save.v1';
+const FLOORS = 5;
 const PING_MAX = 3;
 const PING_REGEN = 2.4;
 const PING_SPEED = 720;
@@ -84,6 +86,13 @@ export class Game {
     this.camX = 0;
     this.camY = 0;
     this.chamberIndex = 0;
+    this.floorMode = false;
+    this.depth = 1;
+    this.runSeed = 0;
+    this.hasKey = false;
+    this.diamonds = 0;
+    this.gold = 0;
+    this.charms = [];
     this.denyCooldown = 0;
     this.alertCd = 0;
     this.titlePingTimer = 0;
@@ -171,9 +180,88 @@ export class Game {
 
   startBest() {
     if (this.state !== 'title') return;
+    if (this.startRun()) return;
     if (this.startWorld()) return;
     const idx = clamp((this.progress.unlocked || 1) - 1, 0, CHAMBERS.length - 1);
     this.startChamber(idx);
+  }
+
+  /** Roguelike run: five floors, each one a room-graph floor. */
+  startRun(seed = (Math.random() * 1e9) | 0) {
+    this.runSeed = seed;
+    this.diamonds = 0;
+    this.gold = 0;
+    this.charms = [];
+    return this.startFloor(1);
+  }
+
+  /** Killing a hunter pays 2 diamonds and 10 gold. 亡命猎屠 multiplies this. */
+  killHunter(h) {
+    const i = this.hunters.indexOf(h);
+    if (i < 0) return false;
+    this.hunters.splice(i, 1);
+    const lvl = this.charmLevel ? this.charmLevel('hunt') : 0;
+    const mult = lvl ? 2 ** lvl : 1;
+    this.diamonds += 2 * mult;
+    this.gold += 10 * mult;
+    this.flash = 1;
+    this.shake = Math.max(this.shake, 5);
+    this.audio.shard();
+    this.stepEcho(h.x, h.y, '255, 200, 120', { count: 40, speed: 420, life: 0.8 });
+    return true;
+  }
+
+  startFloor(depth) {
+    this.depth = clamp(depth, 1, FLOORS);
+    const level = generateFloor(this.runSeed + this.depth * 7919, this.depth - 1);
+    this.floorMode = true;
+    this.worldMode = false;
+    this.customData = null;
+    this.audio.unlock();
+    this.level = level;
+    this.chamberIndex = 0;
+    this.player = new Player(level.spawn.x, level.spawn.y);
+    const n = Math.min(6, 1 + this.depth);
+    this.hunters = level.rooms
+      .filter((r) => r.kind !== 'start')
+      .slice(0, n)
+      .map((r) => {
+        const t = r.x + 2 + ((r.w - 4) >> 1);
+        const u = r.y + 2 + ((r.h - 4) >> 1);
+        return new Hunter((t + 0.5) * TILE, (u + 0.5) * TILE);
+      });
+    this.skitters = [];
+    this.shards = [{ x: level.key.x, y: level.key.y, key: true, id: 0 }];
+    this.totalShards = 1;
+    this.pings = [];
+    this.rays = [];
+    this.contacts = [];
+    this.echoRings = [];
+    this.particles = makeDust(level, 220);
+    this.camX = this.player.x;
+    this.camY = this.player.y;
+    this.charges = START_CHARGES;
+    this.chargeTimer = 0;
+    this.listenT = 0;
+    this.pingsUsed = 0;
+    this.levelTime = 0;
+    this.collected = 0;
+    this.exitOpen = false;
+    this.hasKey = false;
+    this.diamonds = this.diamonds || 0;
+    this.gold = this.gold || 0;
+    this.echoRequired = false;
+    this.echoHeard = false;
+    this.humT = 99;
+    this.danger = 0;
+    this.shake = 0;
+    this.flash = 0;
+    this.deathT = 0;
+    this.denyCooldown = 0;
+    this.sneak = false;
+    this.state = 'playing';
+    this.ui.showGame();
+    return true;
   }
 
   /** Dev/experimental: one continuous map, no chamber select. */
@@ -344,6 +432,11 @@ export class Game {
 
   restart() {
     if (this.state !== 'playing' && this.state !== 'dead' && this.state !== 'paused') return;
+    if (this.floorMode) {
+      this.startRun();
+      if (this.state !== 'playing') this.state = 'playing';
+      return;
+    }
     // Same room, same seed — a retry must not quietly hand you a new map.
     if (this.worldMode) this.startWorld(this.worldSeed ?? 424242);
     else if (this.customData) this.startCustom(this.customData);
@@ -379,6 +472,11 @@ export class Game {
   }
 
   next() {
+    if (this.floorMode) {
+      if (this.depth < FLOORS) this.startFloor(this.depth + 1);
+      else this.victory();
+      return;
+    }
     if (this.chamberIndex + 1 < CHAMBERS.length) {
       this.startChamber(this.chamberIndex + 1);
     } else {
@@ -577,6 +675,7 @@ export class Game {
         this.flash = 1;
         this.shake = Math.max(this.shake, 2.5);
         this.stepEcho(p.x, p.y, null, { count: 34, speed: 380, life: 0.7 });
+        if (sh.key) this.hasKey = true;
         if (this.shards.length === 0) this.tryOpenExit(true);
       }
     }
@@ -653,11 +752,14 @@ export class Game {
     this.ui.updateHUD({
       chamber: this.chamberIndex,
       shards: this.shards.length,
-      total: this.totalShards || CHAMBERS[this.chamberIndex].shards,
+      total: this.totalShards || (this.floorMode ? 1 : CHAMBERS[this.chamberIndex].shards),
+      depth: this.floorMode ? this.depth : 0,
       charges: this.charges,
       listen,
       muted: this.audio.muted,
       danger: this.danger,
+      diamonds: this.diamonds,
+      gold: this.gold,
     });
   }
 
@@ -915,6 +1017,24 @@ export class Game {
 
   complete() {
     if (this.state !== 'playing') return;
+    if (this.floorMode) {
+      this.audio.gateOpen();
+      this.state = 'complete';
+      if (this.depth < FLOORS) {
+        this.ui.dismiss();
+        this.ui.showFloorClear({ depth: this.depth, max: FLOORS, time: this.levelTime, open: true });
+      } else {
+        this.progress.floorCleared = (this.progress.floorCleared || 0) + 1;
+        this.progress.bestRun = this.progress.bestRun || null;
+        const t = this.levelTime;
+        if (!this.progress.bestRun || t < this.progress.bestRun) this.progress.bestRun = t;
+        this.saveProgress();
+        this.state = 'victory';
+        this.ui.dismiss();
+        this.ui.showRunVictory({ time: t, best: this.progress.bestRun, depth: FLOORS });
+      }
+      return;
+    }
     if (this.worldMode) {
       const time = Math.max(0, this.levelTime);
       const prev = this.progress.worldBest;
@@ -986,6 +1106,7 @@ export class Game {
   // Deterministic capture: step the world forward without relying on rAF,
   // then leave one ping mid-flight so the sonar shell is visible.
   debugSimulate(seconds, opts = {}) {
+    if (!this.player || !this.level) return;
     this.debugMove = opts.move || null;
     const dt = 1 / 60;
     const steps = Math.max(1, Math.round(seconds / dt));
