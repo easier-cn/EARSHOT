@@ -53,3 +53,19 @@ if (freeze !== null) {
     Math.max(0, Number(freeze) || 0),
   );
 }
+
+// Force one of the end screens for visual checks.
+const doc = params.get('doc');
+if (doc) {
+  setTimeout(() => {
+    if (doc === 'dead') {
+      game.die();
+      game.ui.showDead();
+    } else if (doc === 'clear') {
+      game.complete();
+    } else if (doc === 'victory') {
+      game.chamberIndex = 7;
+      game.victory();
+    }
+  }, 900);
+}

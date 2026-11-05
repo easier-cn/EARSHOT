@@ -141,6 +141,35 @@ async function main() {
     `!document.getElementById('scr-pause').classList.contains('hidden')`,
   );
 
+  // Resume, then teleport through every shard and the exit to exercise the
+  // completion flow end to end.
+  await key('keyDown', 'Escape', 'Escape', 27);
+  await key('keyUp', 'Escape', 'Escape', 27);
+  await sleep(150);
+  const complete = await evaluate(`(async () => {
+    const g = window.__hush;
+    const step = () => new Promise(r => setTimeout(r, 90));
+    for (let guard = 0; guard < 20 && g.shards.length; guard++) {
+      g.player.x = g.shards[0].x;
+      g.player.y = g.shards[0].y;
+      await step();
+    }
+    const left = g.shards.length;
+    g.player.x = g.level.exit.x;
+    g.player.y = g.level.exit.y;
+    await step();
+    await step();
+    return { state: g.state, left, shards: g.collected, exitOpen: g.exitOpen,
+             panel: !document.getElementById('scr-clear').classList.contains('hidden') };
+  })()`);
+  report.complete = complete;
+  await sleep(400);
+  const clearShot = await send('Page.captureScreenshot', { format: 'png' });
+  if (clearShot.result?.data) {
+    fs.writeFileSync(path.join(SHOTS, 'cdp-clear.png'), Buffer.from(clearShot.result.data, 'base64'));
+    report.clearShot = 'shots/cdp-clear.png';
+  }
+
   console.log(JSON.stringify(report, null, 2));
 }
 

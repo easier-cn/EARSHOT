@@ -428,6 +428,10 @@ export class Game {
     this.audio.ping();
     this.shake = Math.max(this.shake, 2.4);
     this.flash = 0.85;
+    if (!this.pingHintShown) {
+      this.pingHintShown = true;
+      this.ui.toast('声呐也暴露了你');
+    }
     // immediate ripple on the hunters' "attention" for feedback
     for (const h of this.hunters) {
       if (dist(p.x, p.y, h.x, h.y) < WAVE_LISTEN * 0.15) h.hear(p.x, p.y, 0.3);
@@ -443,6 +447,7 @@ export class Game {
     this.flash = 0;
     this.pings = [];
     this.audio.death();
+    this.ui.dismiss();
     this.ui.hideHUD();
   }
 
@@ -456,6 +461,7 @@ export class Game {
     this.progress.unlocked = Math.max(this.progress.unlocked, this.chamberIndex + 2);
     this.progress.last = this.chamberIndex;
     this.saveProgress();
+    this.ui.dismiss();
     this.ui.showClear({
       chamber: this.chamberIndex,
       time: this.levelTime,

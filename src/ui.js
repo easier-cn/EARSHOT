@@ -239,6 +239,7 @@ export class UI {
 
   showDead() {
     if (!this.screens.dead.classList.contains('hidden')) return;
+    this.hideHUD();
     this.showScreen('dead');
   }
 
@@ -287,6 +288,14 @@ export class UI {
     this.el.toast.classList.add('show');
     clearTimeout(this.toastTimer);
     this.toastTimer = setTimeout(() => this.el.toast.classList.remove('show'), 1700);
+  }
+
+  // Clear transient overlays so they never sit on top of an end screen.
+  dismiss() {
+    clearTimeout(this.introTimer);
+    clearTimeout(this.toastTimer);
+    this.el.intro.classList.remove('show');
+    this.el.toast.classList.remove('show');
   }
 
   tick() {
