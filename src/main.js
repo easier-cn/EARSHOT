@@ -19,6 +19,13 @@ const canvas = document.getElementById('game');
 const game = new Game(canvas, document.getElementById('ui'));
 window.__hush = game;
 if (params.has('edit')) setTimeout(() => game.openEditor(), 60);
+if (params.has('blue')) {
+  setTimeout(() => {
+    game.startChamber(0);
+    game.stepEcho(game.player.x + 70, game.player.y, '110, 180, 255');
+    game.debugSimulate(0.24, {});
+  }, 900);
+}
 
 // Debug / screenshot helpers. None of this is reachable from the UI.
 const chamber = params.get('c');
@@ -93,6 +100,7 @@ if (doc) {
         game.player.x = m.x + 120;
         game.player.y = m.y;
         game.charges = 3;
+        if (m._plan) m._plan(game);
         game.firePing();
         game.debugSimulate(1.35, {});
       }

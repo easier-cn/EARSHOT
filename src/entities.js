@@ -120,7 +120,7 @@ export class Hunter {
     this.x = x;
     this.y = y;
     this.r = 11;
-    this.state = 'wander';
+    this.state = 'idle';
     this.path = [];
     this.searchT = 0;
     this.pending = null;
@@ -207,8 +207,8 @@ export class Hunter {
         if (dist < 620) {
           const pan = Math.max(-1, Math.min(1, rel / 380));
           game.audio.hunterStep(pan, Math.min(1, 1.15 - dist / 640));
-          game.stepEcho?.(this.x, this.y);
         }
+        game.stepEcho?.(this.x, this.y);
       }
     }
   }
@@ -288,6 +288,7 @@ export class Skitter {
   update(dt, game) {
     const L = game.level;
     this.wobble += dt * 6;
+    this.stepAcc = (this.stepAcc || 0);
     if (this.revealT > 0) this.revealT -= dt;
     if (this.echoCool > 0) this.echoCool -= dt;
     if (this.echoT > 0) {
@@ -331,6 +332,13 @@ export class Skitter {
     this.x = step.x;
     this.y = step.y;
     this.speed = SPEED;
+
+    // neutral things still make sound: a blue thread through the dark
+    this.stepAcc += SPEED * dt;
+    if (this.stepAcc > 64) {
+      this.stepAcc = 0;
+      game.stepEcho?.(this.x, this.y, '110, 180, 255');
+    }
 
     // a dry tick, only audible close by: enough to feel it, not to track it
     this.tickAcc += dt;

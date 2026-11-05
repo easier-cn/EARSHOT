@@ -1,4 +1,5 @@
 import { generateLevel, generateWorld, sectorOf, TILE } from './levelgen.js';
+import { lineOfSight } from './pathfind.js';
 import { Player, Hunter, Skitter, moveCircle, isSolid } from './entities.js';
 import { Renderer } from './render.js';
 import { Input } from './input.js';
@@ -13,7 +14,8 @@ const PING_MAX = 3;
 const PING_REGEN = 2.4;
 const PING_SPEED = 720;
 const PING_LIFE = 0.9;
-const WAVE_LISTEN = 760;
+const WAVE_LISTEN = 620;
+const THROUGH_WALL = 0.6;
 const SHARD_ECHO_RANGE = 1150;
 const SHARD_ECHO_SPEED = 1500;
 const SOUND_SPEED = 560;
@@ -684,6 +686,15 @@ export class Game {
     this.sounds.push({ x, y, t0: this.now, speed, range, kind, hit: new Set(), hitM: new Set() });
   }
 
+  /** Walls eat sound. A listener behind a wall only hears half as far. */
+  _hears(snd, x, y) {
+    const d = dist(snd.x, snd.y, x, y);
+    if (d > snd.range) return false;
+    const L = this.level;
+    const through = lineOfSight(L.grid, L.w, L.h, snd.x, snd.y, x, y, L.tile);
+    return through || d <= snd.range * THROUGH_WALL;
+  }
+
   updateSounds() {
     const alive = [];
     for (const snd of this.sounds) {
@@ -693,15 +704,16 @@ export class Game {
       if (R > snd.range + 40) continue;
       for (const h of this.hunters) {
         if (snd.hit.has(h.id)) continue;
-        if (Math.abs(dist(snd.x, snd.y, h.x, h.y) - R) < 26) {
-          snd.hit.add(h.id);
-          this.alertHunter(h, snd.x, snd.y, 0.14);
-        }
+        if (Math.abs(dist(snd.x, snd.y, h.x, h.y) - R) >= 26) continue;
+        if (!this._hears(snd, h.x, h.y)) continue;
+        snd.hit.add(h.id);
+        this.alertHunter(h, snd.x, snd.y, 0.14);
       }
       for (const sk of this.skitters) {
         if (snd.hitM.has(sk.id)) continue;
         const d = dist(snd.x, snd.y, sk.x, sk.y);
-        if (Math.abs(d - R) > 26 || d > 700) continue;
+        if (Math.abs(d - R) > 26) continue;
+        if (!this._hears(snd, sk.x, sk.y)) continue;
         snd.hitM.add(sk.id);
         sk.hear(snd.x, snd.y, snd.kind, snd.kind === 'ping' ? 1.05 : 1.35);
       }
@@ -727,14 +739,15 @@ export class Game {
     return null;
   }
 
-  /** The same small sonar a player's step makes — footsteps are identical for everyone. */
-  stepEcho(x, y) {
-    this.spawnRays(x, y, { count: 22, speed: 330, life: 0.5 });
-    this.pings.push({ x, y, t0: this.now, speed: 330, life: 0.5, small: true });
-    this.contacts.push({ x, y, t: this.now });
+  /** Every footstep is a small sonar ring. White for you and for hunters,
+   *  blue for the mimic, which is neither prey nor predator. */
+  stepEcho(x, y, tint = null) {
+    this.spawnRays(x, y, { count: 22, speed: 330, life: 0.5, tint });
+    this.pings.push({ x, y, t0: this.now, speed: 330, life: 0.5, small: true, tint });
+    this.contacts.push({ x, y, t: this.now, tint });
   }
 
-  spawnRays(x, y, { count = RAY_COUNT, speed = RAY_SPEED, life = RAY_LIFE } = {}) {
+  spawnRays(x, y, { count = RAY_COUNT, speed = RAY_SPEED, life = RAY_LIFE, tint = null } = {}) {
     for (let i = 0; i < count; i++) {
       const a = (i / count) * Math.PI * 2 + Math.random() * 0.035;
       this.rays.push({
@@ -746,7 +759,8 @@ export class Game {
         speed,
         life: life * (0.85 + Math.random() * 0.25),
         bounce: 0,
-        tint: null,
+        hot: false,
+        tint,
         pts: [{ x, y }],
       });
     }

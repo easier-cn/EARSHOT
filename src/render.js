@@ -138,9 +138,9 @@ export class Renderer {
         if (c.kind === 'hunter' || c.kind === 'skitter') continue;
         const k = Math.max(0, 1 - (now - c.t) / 1.7);
         if (k <= 0.02) continue;
-        const col = c.kind === 'shard' ? '255,205,110'
+        const col = c.tint || (c.kind === 'shard' ? '255,205,110'
           : c.kind === 'exit' ? '140,240,170'
-            : '236,252,250';
+            : '236,252,250');
         ctx.fillStyle = `rgba(${col}, ${k * 0.5})`;
         ctx.beginPath();
         ctx.arc(c.x, c.y, 1.4 + k * 1.3, 0, Math.PI * 2);
@@ -310,7 +310,7 @@ export class Renderer {
       if (age < 0 || age > p.life) continue;
       const R = age * p.speed;
       const fade = (1 - age / p.life) * (p.small ? 0.45 : 1);
-      ctx.strokeStyle = `rgba(${TEAL}, ${fade * 0.2})`;
+      ctx.strokeStyle = `rgba(${p.tint || TEAL}, ${fade * 0.2})`;
       ctx.lineWidth = 1.4;
       ctx.beginPath();
       ctx.arc(p.x, p.y, R, 0, Math.PI * 2);
