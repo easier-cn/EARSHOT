@@ -1,9 +1,8 @@
 # HUSH
 
-> 接手开发请看 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)：目录结构、工具链、踩过的坑、下一步计划。
-
-
 > 你什么都看不见。黑暗在听。
+>
+> 接手开发请看 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)：目录结构、工具链、踩过的坑、下一步计划。
 
 一款用**声呐**当眼睛的极简潜行游戏。发一次脉冲，墙壁的轮廓在黑暗中亮起一瞬——同时，猎手听见了你。
 
