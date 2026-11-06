@@ -288,6 +288,28 @@ export class Renderer {
     // ---- exit ---------------------------------------------------------------
     if (vision) {
       const eSeen = now - (level.exit.seenAt ?? -99);
+      if (game.scanT > 0 && game.level) {
+        const pulse = 0.5 + 0.5 * Math.sin(now * 4);
+        const marks = [];
+        if (game.mapMode) {
+          if (game.mapKey) marks.push({ x: game.mapKey.x, y: game.mapKey.y, col: '255,205,110' });
+          for (const e of game.mapExits || []) marks.push({ x: e.x, y: e.y, col: '140,240,170' });
+        } else {
+          if (game.level.key) marks.push({ x: game.level.key.x, y: game.level.key.y, col: '255,205,110' });
+          if (game.level.exit) marks.push({ x: game.level.exit.x, y: game.level.exit.y, col: '140,240,170' });
+        }
+        for (const m of marks) {
+          ctx.strokeStyle = `rgba(${m.col}, ${0.35 + pulse * 0.45})`;
+          ctx.lineWidth = 1.4;
+          ctx.beginPath();
+          ctx.arc(m.x, m.y, 12 + pulse * 6, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(m.x, m.y, 3, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(${m.col}, 0.9)`;
+          ctx.fill();
+        }
+      }
       if (game.exitOpen) {
         this._drawExit(level.exit.x, level.exit.y, 0.9, GREEN, now, true);
       } else if (eSeen < 2.6) {

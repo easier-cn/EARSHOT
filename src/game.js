@@ -472,19 +472,24 @@ export class Game {
       this.speedT = ITEMS.vitamin.dur;
       this.flash = 1;
       this.audio.shard();
+      this.ui.feed('维他命：脚下生风');
     } else if (id === 'star') {
       if (!take()) return this.audio.deny();
       this.invulnT = 3;
       this.starKills = 3;
       this.audio.gateOpen();
       this.flash = 1;
+      this.ui.feed('无敌星：撞上你的会死');
     } else if (id === 'totem') {
       if (!take()) return this.audio.deny();
       this.stressCharges += 1;
       this.audio.gateOpen();
+      this.ui.feed('不死图腾：多一条命');
     } else if (id === 'scanner') {
       if (!take()) return this.audio.deny();
       this.scanT = 6;
+      this.audio.gateOpen();
+      this.ui.feed('扫描仪：钥匙与门的位置亮了');
       this.audio.ping();
     }
   }

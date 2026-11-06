@@ -528,7 +528,7 @@ export class UI {
       const o = inv.hot[i];
       const t = this.cellTip(o);
       const tip = o ? `data-tip="${t.tip.replace(/"/g, '&quot;')}" data-title="${t.title.replace(/"/g, '&quot;')}"` : '';
-      cells.push(`<div class="inv-cell hot${o ? ' filled' : ''}" data-kind="hot" data-i="${i}" ${tip}>${this.cellBody(o)}<b class="key">${['1', '2', '4', '3'][i]}</b></div>`);
+      cells.push(`<div class="inv-cell hot${o ? ' filled' : ''}" data-kind="hot" data-i="${i}" ${tip}>${this.cellBody(o)}<b class="key">${['1', '2', '3', '4'][i]}</b></div>`);
     }
     cells.push('<div class="inv-cut hot"><span>快捷键</span></div>');
     for (let i = 0; i < 4; i++) push('charm', i, inv.charms[i], 'charm');
@@ -633,10 +633,10 @@ export class UI {
   updateHUD({ shards = 0, total = 1, charges = 0, listen = false, danger = 0, depth = 0, diamonds = 0, gold = 0, hot = null, active = null } = {}) {
     if (this.hudHot && hot) {
       this.hudHot.innerHTML = hot.map((s, i) => {
-        if (!s) return `<div class="hud-slot empty"><b>${['1', '2', '4', '3'][i]}</b></div>`;
+        if (!s) return `<div class="hud-slot empty"><b>${['1', '2', '3', '4'][i]}</b></div>`;
         const count = s.kind === 'item' ? s.n : s.lvl;
         const on = active && active === s.id ? ' on' : '';
-        return `<div class="hud-slot${on}"><b>${['1', '2', '4', '3'][i]}</b>${this.glyph(s.kind, s.id)}<i>${count}</i></div>`;
+        return `<div class="hud-slot${on}"><b>${['1', '2', '3', '4'][i]}</b>${this.glyph(s.kind, s.id)}<i>${count}</i></div>`;
       }).join('');
     }
     if (this.hudLoot) {
