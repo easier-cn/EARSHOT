@@ -90,46 +90,52 @@ function splitRooms(rnd, box, depth, rooms) {
  */
 export function buildRoomMap(seed) {
   const rnd = mulberry32(seed);
-  const w = 72;
-  const h = 48;
+  const w = 76;
+  const h = 52;
   const grid = new Uint8Array(w * h);
   fill(grid, w, 0, 0, w - 1, h - 1, 1);
   fill(grid, w, 1, 1, w - 2, h - 2, 0);
 
-  // Split the interior into rooms; keep every split wall so we can cut doors.
+  // --- 1. walls first: recursively split the big rectangle -----------------
   const boxes = [];
   const walls = [];
   const walk = (x, y, ww, hh, depth) => {
-    const canV = ww >= 19;
-    const canH = hh >= 15;
+    const canV = ww >= 15;
+    const canH = hh >= 13;
     if (depth <= 0 || (!canV && !canH)) {
       boxes.push({ x, y, w: ww, h: hh });
       return;
     }
-    const vertical = canV && (!canH || ww > hh || (ww === hh && rnd() < 0.5));
+    const vertical = canV && (!canH || ww > hh * 1.08 || (Math.abs(ww - hh) <= 2 && rnd() < 0.5));
     if (vertical) {
-      const cut = ri(rnd, 9, ww - 10);
-      walls.push({ x: x + cut, y, len: hh, axis: 'v', lo: x, hi: x + cut + 1 });
+      const lo = Math.max(8, Math.round(ww * 0.34));
+      const hi = Math.max(lo, Math.min(ww - 9, Math.round(ww * 0.66)));
+      const cut = ri(rnd, lo, hi);
+      walls.push({ x: x + cut, y, len: hh, axis: 'v' });
+      for (let dy = 0; dy < hh; dy++) grid[at(w, x + cut, y + dy)] = 1;
       walk(x, y, cut, hh, depth - 1);
       walk(x + cut + 1, y, ww - cut - 1, hh, depth - 1);
     } else {
-      const cut = ri(rnd, 7, hh - 8);
-      walls.push({ x, y: y + cut, len: ww, axis: 'h', lo: y, hi: y + cut + 1 });
+      const lo = Math.max(7, Math.round(hh * 0.34));
+      const hi = Math.max(lo, Math.min(hh - 8, Math.round(hh * 0.66)));
+      const cut = ri(rnd, lo, hi);
+      walls.push({ x, y: y + cut, len: ww, axis: 'h' });
+      for (let dx = 0; dx < ww; dx++) grid[at(w, x + dx, y + cut)] = 1;
       walk(x, y, ww, cut, depth - 1);
       walk(x, y + cut + 1, ww, hh - cut - 1, depth - 1);
     }
   };
-  walk(1, 1, w - 2, h - 2, 4);
+  walk(1, 1, w - 2, h - 2, 6);
 
-  // Cut doorways through every split wall: two tiles wide, with a one-tile
-  // margin so doors never merge with the outer wall.
+  // --- 2. then punch doorways so the wall network is one open space ---------
   for (const wl of walls) {
     if (wl.axis === 'v') {
       const y0 = wl.y + 2;
       const y1 = wl.y + wl.len - 3;
       if (y1 <= y0) continue;
       const atY = ri(rnd, y0, y1);
-      for (let dy = 0; dy < 2; dy++) {
+      const wide = rnd() < 0.25 ? 3 : 2;
+      for (let dy = 0; dy < wide && atY + dy <= y1; dy++) {
         fill(grid, w, wl.x, atY + dy, wl.x, atY + dy, 0);
       }
     } else {
@@ -137,9 +143,91 @@ export function buildRoomMap(seed) {
       const x1 = wl.x + wl.len - 3;
       if (x1 <= x0) continue;
       const atX = ri(rnd, x0, x1);
-      for (let dx = 0; dx < 2; dx++) {
+      const wide = rnd() < 0.25 ? 3 : 2;
+      for (let dx = 0; dx < wide && atX + dx <= x1; dx++) {
         fill(grid, w, atX + dx, wl.y, atX + dx, wl.y, 0);
       }
+    }
+  }
+
+  const isFloor = (x, y) => x > 0 && y > 0 && x < w - 1 && y < h - 1 && grid[at(w, x, y)] === 0;
+
+  // --- 3. furnishing: internal wall stubs, never allowed to seal a room -----
+  const connected = () => {
+    let first = -1;
+    for (let i = 0; i < w * h; i++) if (grid[i] === 0) { first = i; break; }
+    if (first < 0) return false;
+    const seen = new Uint8Array(w * h);
+    const q = [first];
+    seen[first] = 1;
+    let n = 0;
+    while (q.length) {
+      const i = q.pop();
+      n++;
+      const x = i % w;
+      const y = (i / w) | 0;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 1 || ny < 1 || nx >= w - 1 || ny >= h - 1) continue;
+        const j = ny * w + nx;
+        if (seen[j] || grid[j] !== 0) continue;
+        seen[j] = 1;
+        q.push(j);
+      }
+    }
+    let total = 0;
+    for (let i = 0; i < w * h; i++) if (grid[i] === 0) total++;
+    return n === total;
+  };
+
+  const decor = (box) => {
+    const tiles = [];
+    const kind = ri(rnd, 0, 3);
+    const innerX0 = box.x + 2;
+    const innerX1 = box.x + box.w - 3;
+    const innerY0 = box.y + 2;
+    const innerY1 = box.y + box.h - 3;
+    if (innerX1 - innerX0 < 2 || innerY1 - innerY0 < 2) return tiles;
+    if (kind === 0 && box.w >= 11 && box.h >= 9) {
+      // a stub hanging off one wall, leaving room on both sides
+      const fromTop = rnd() < 0.5;
+      const len = ri(rnd, 3, Math.max(3, Math.min(6, (box.h >> 1) - 1)));
+      const x = ri(rnd, innerX0 + 1, innerX1 - 1);
+      for (let i = 0; i < len; i++) tiles.push([x, fromTop ? box.y + 1 + i : box.y + box.h - 2 - i]);
+    } else if (kind === 1 && box.w >= 12) {
+      // a free-standing partition with a gap at both ends
+      const y = ri(rnd, innerY0, innerY1);
+      const len = ri(rnd, 4, Math.max(4, Math.min(9, box.w - 7)));
+      const x0 = ri(rnd, innerX0, innerX1 - len);
+      for (let i = 0; i < len; i++) tiles.push([x0 + i, y]);
+    } else if (kind === 2) {
+      // short pillars
+      for (let i = 0, n = ri(rnd, 2, 4); i < n; i++) {
+        tiles.push([ri(rnd, innerX0, innerX1), ri(rnd, innerY0, innerY1)]);
+      }
+    } else {
+      // an L corner inside the room
+      const x = ri(rnd, innerX0 + 1, innerX1 - 3);
+      const y = ri(rnd, innerY0 + 1, innerY1 - 3);
+      for (let i = 0; i < 3; i++) { tiles.push([x + i, y]); tiles.push([x, y + i]); }
+    }
+    return tiles;
+  };
+
+  const snapshot = new Uint8Array(w * h);
+  for (const box of boxes) {
+    const passes = rnd() < 0.35 ? 2 : rnd() < 0.85 ? 1 : 0;
+    for (let pass = 0; pass < passes; pass++) {
+      snapshot.set(grid);
+      const tiles = decor(box);
+      let touched = false;
+      for (const [x, y] of tiles) {
+        if (!isFloor(x, y)) continue;
+        grid[at(w, x, y)] = 1;
+        touched = true;
+      }
+      if (!touched || !connected()) grid.set(snapshot);
     }
   }
 
@@ -153,6 +241,19 @@ export function buildRoomMap(seed) {
   });
   const keyC = centerOf(keyBox);
 
+  // keep the important tiles clean, whatever the furnishing did
+  const clearAround = (c, r) => {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        const x = c.x + dx;
+        const y = c.y + dy;
+        if (x > 0 && y > 0 && x < w - 1 && y < h - 1) grid[at(w, x, y)] = 0;
+      }
+    }
+  };
+  clearAround(spawnC, 1);
+  clearAround(keyC, 1);
+
   // Three far corners: the maze exit goes into one of them at random.
   const corners = [
     { x: 2, y: h - 3 },
@@ -161,24 +262,21 @@ export function buildRoomMap(seed) {
   ];
   const pickCorner = corners[ri(rnd, 0, 2)];
   const mazeTile = { x: pickCorner.x, y: pickCorner.y };
-  // carve the actual doorway on the outer wall next to that corner
   const mazeDoor = { x: 1, y: mazeTile.y };
   fill(grid, w, mazeDoor.x, mazeDoor.y, mazeDoor.x, mazeDoor.y, 0);
+  clearAround(mazeTile, 1);
 
-  // Castle door: middle of the right side. Meadow: middle of the bottom side,
-  // and that stretch of wall absorbs sound instead of reflecting it.
   const castleDoor = { x: w - 2, y: h >> 1 };
   const meadowDoor = { x: w >> 1, y: h - 2 };
   fill(grid, w, castleDoor.x, castleDoor.y, castleDoor.x, castleDoor.y, 0);
   fill(grid, w, meadowDoor.x, meadowDoor.y, meadowDoor.x, meadowDoor.y, 0);
+  clearAround({ x: castleDoor.x - 1, y: castleDoor.y }, 1);
+  clearAround({ x: meadowDoor.x, y: meadowDoor.y - 1 }, 1);
 
   const absorb = [];
-  for (let dy = -1; dy <= 1; dy++) {
-    for (let dx = -1; dx <= 1; dx++) {
-      const x = meadowDoor.x + dx;
-      const y = meadowDoor.y + dy + 1;
-      if (y === h - 1 && x >= 0 && x < w) absorb.push(at(w, x, y));
-    }
+  for (let dx = -1; dx <= 1; dx++) {
+    const x = meadowDoor.x + dx;
+    if (x >= 0 && x < w) absorb.push(at(w, x, h - 1));
   }
 
   const rooms = boxes.map((b) => {
@@ -186,14 +284,48 @@ export function buildRoomMap(seed) {
     return { x: b.x, y: b.y, w: b.w, h: b.h, cx: c.x, cy: c.y, kind: 'room' };
   });
 
-  const monsters = [];
-  const tryMonster = (box) => {
-    const c = centerOf(box);
-    if (Math.hypot(c.x - spawnC.x, c.y - spawnC.y) < 10) return;
-    monsters.push({ x: c.x, y: c.y, type: 'lurker' });
+  // --- 4. props and enemies -------------------------------------------------
+  const CHARM_IDS = ['sleep', 'stress', 'survive', 'stone', 'counter', 'sneakSonar', 'swift', 'home', 'rewind', 'hunt'];
+  const ITEM_IDS = ['pebbles', 'sharpStone', 'vitamin', 'totem', 'star', 'corpse', 'bugspray', 'scanner'];
+  const loot = [];
+  const taken = new Set();
+  const spotIn = (box) => {
+    for (let i = 0; i < 24; i++) {
+      const x = ri(rnd, box.x + 1, box.x + box.w - 2);
+      const y = ri(rnd, box.y + 1, box.y + box.h - 2);
+      const k = y * w + x;
+      if (!isFloor(x, y) || taken.has(k)) continue;
+      taken.add(k);
+      return { x, y };
+    }
+    return null;
   };
-  const far = boxes.filter((b) => Math.hypot(centerOf(b).x - spawnC.x, centerOf(b).y - spawnC.y) > 10);
-  for (let i = 0; i < Math.min(3, far.length); i++) tryMonster(far[ri(rnd, 0, far.length - 1)]);
+  for (const b of boxes) {
+    if (rnd() > 0.42) continue;
+    const p = spotIn(b);
+    if (!p) continue;
+    const charm = rnd() < 0.55;
+    loot.push(charm
+      ? { kind: 'charm', id: CHARM_IDS[ri(rnd, 0, CHARM_IDS.length - 1)], x: p.x, y: p.y }
+      : { kind: 'item', id: ITEM_IDS[ri(rnd, 0, ITEM_IDS.length - 1)], x: p.x, y: p.y });
+  }
+
+  const monsters = [];
+  const far = boxes
+    .filter((b) => Math.hypot(centerOf(b).x - spawnC.x, centerOf(b).y - spawnC.y) > 12)
+    .sort(() => rnd() - 0.5);
+  for (const b of far) {
+    if (monsters.length >= 5) break;
+    const c = centerOf(b);
+    if (monsters.some((m) => Math.hypot(m.x - c.x, m.y - c.y) < 10)) continue;
+    if (!isFloor(c.x, c.y)) {
+      const p = spotIn(b);
+      if (!p) continue;
+      monsters.push({ x: p.x, y: p.y, type: 'lurker' });
+    } else {
+      monsters.push({ x: c.x, y: c.y, type: 'lurker' });
+    }
+  }
 
   const standing = (t) => grid[at(w, t.x, t.y)] === 0;
   return {
@@ -217,7 +349,7 @@ export function buildRoomMap(seed) {
     ],
     absorb,
     monsters,
-    loot: [],
+    loot,
     seed,
     valid: standing(spawnC) && standing(keyC) && standing(mazeTile),
   };

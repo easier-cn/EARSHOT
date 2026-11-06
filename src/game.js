@@ -381,7 +381,12 @@ export class Game {
     this.shards = [];
     this.totalShards = 0;
     this.collected = 0;
-    this.loot = [];
+    this.loot = (level.loot || []).map((l) => ({
+      x: l.x * level.tile + level.tile / 2,
+      y: l.y * level.tile + level.tile / 2,
+      kind: l.kind,
+      id: l.id,
+    }));
     this.throws = [];
     this.pings = [];
     this.rays = [];
@@ -1389,9 +1394,12 @@ export class Game {
     const stamp = tag === null ? null : tag || { x, y, t: this.now, kind };
     for (let i = 0; i < count; i++) {
       const a = (i / count) * Math.PI * 2 + Math.random() * 0.035;
+      const o = 6 + Math.random() * 9;
+      const ox = x + Math.cos(a) * o;
+      const oy = y + Math.sin(a) * o;
       this.rays.push({
-        x,
-        y,
+        x: ox,
+        y: oy,
         dx: Math.cos(a),
         dy: Math.sin(a),
         age: 0,
@@ -1402,7 +1410,7 @@ export class Game {
         tint,
         tag: stamp,
         sweep,
-        pts: [{ x, y }],
+        pts: [{ x: ox, y: oy }],
       });
     }
     while (this.rays.length > RAY_COUNT * 4) this.rays.shift();
