@@ -893,11 +893,12 @@ kbd {
 }
 .inv-cell.charm-count .c-charm { width: 3px; background: rgba(190, 160, 255, 0.8); }
 .inv-cell:empty { background: rgba(255, 255, 255, 0.012); }
-.inv-cut { grid-column: span 4; height: 1px; margin: 5px 2px; }
-.inv-cut.work { background: linear-gradient(90deg, transparent, rgba(127, 227, 212, 0.5), transparent); }
-.inv-cut.hot { background: linear-gradient(90deg, transparent, rgba(120, 200, 230, 0.42), transparent); }
-.inv-cut.charm { background: linear-gradient(90deg, transparent, rgba(190, 160, 255, 0.45), transparent); }
-.inv-cut.pack { background: linear-gradient(90deg, transparent, rgba(255, 214, 155, 0.4), transparent); }
+.inv-cut { grid-column: span 4; position: relative; height: 18px; margin: 2px; display: flex; align-items: center; }
+.inv-cut::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 1px; }
+.inv-cut.work::before { background: linear-gradient(90deg, transparent, rgba(127, 227, 212, 0.55), transparent); }
+.inv-cut.hot::before { background: linear-gradient(90deg, transparent, rgba(120, 200, 230, 0.45), transparent); }
+.inv-cut.charm::before { background: linear-gradient(90deg, transparent, rgba(190, 160, 255, 0.5), transparent); }
+.inv-cut.pack::before { background: linear-gradient(90deg, transparent, rgba(255, 214, 155, 0.45), transparent); }
 .inv-cell.hot .glyph { color: rgba(150, 215, 245, 0.95); }
 .inv-cell.charm .glyph { color: rgba(186, 160, 255, 0.95); }
 .inv-ghost {
@@ -925,6 +926,36 @@ kbd {
   border-radius: 2px;
 }
 .inv-cell.drop-on { outline: 1px solid rgba(255, 214, 155, 0.85); background: rgba(255, 214, 155, 0.08); }
+
+/* status ticker, bottom-left */
+.feed { position: fixed; left: 26px; bottom: 58px; display: flex; flex-direction: column; gap: 4px; pointer-events: none; z-index: 40; }
+.feed-line { font-size: 12px; letter-spacing: 0.08em; color: rgba(226, 244, 240, 0.72); opacity: 0; transform: translateX(-10px); transition: opacity 0.25s ease, transform 0.25s ease; text-shadow: 0 0 10px rgba(0, 0, 0, 0.9); }
+.feed-line.in { opacity: 1; transform: none; }
+.feed-line.out { opacity: 0; transform: translateX(-6px); }
+
+/* guide can hold several lines */
+.guide.multi { line-height: 1.7; }
+.guide.multi div + div { opacity: 0.8; }
+
+/* labels on the inventory separators */
+.inv-cut { position: relative; height: 18px; margin: 3px 2px; display: flex; align-items: center; }
+.inv-cut span { position: relative; font-size: 10px; letter-spacing: 0.22em; color: rgba(210, 236, 233, 0.45); background: #070b0b; padding: 0 8px 0 0; margin-left: 0; }
+.inv-cut.work span { color: rgba(127, 227, 212, 0.6); }
+.inv-cut.hot span { color: rgba(150, 215, 245, 0.62); }
+.inv-cut.charm span { color: rgba(186, 160, 255, 0.62); }
+
+/* map picker */
+.map-select { position: fixed; inset: 0; background: rgba(2, 6, 6, 0.82); z-index: 90; display: grid; place-items: center; }
+.ms-panel { width: min(560px, 86vw); border: 1px solid rgba(127, 227, 212, 0.22); background: #070b0b; padding: 22px 24px 16px; }
+.ms-head { font-size: 12px; letter-spacing: 0.4em; color: rgba(127, 227, 212, 0.75); margin-bottom: 14px; }
+.ms-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; max-height: 56vh; overflow: auto; }
+.ms-cell { text-align: left; padding: 9px 10px; background: transparent; border: 1px solid rgba(234, 247, 244, 0.13); color: inherit; cursor: pointer; }
+.ms-cell b { display: block; font-size: 13px; font-weight: 500; color: rgba(232, 248, 244, 0.9); }
+.ms-cell span { display: block; margin-top: 3px; font-size: 10px; letter-spacing: 0.06em; color: rgba(200, 226, 222, 0.42); }
+.ms-cell:hover { border-color: rgba(127, 227, 212, 0.6); background: rgba(127, 227, 212, 0.05); }
+.ms-cell.locked { opacity: 0.34; cursor: not-allowed; }
+.ms-cell.cur { border-color: rgba(255, 214, 155, 0.55); }
+.ms-hint { margin-top: 12px; font-size: 10px; letter-spacing: 0.18em; color: rgba(200, 226, 222, 0.35); }
 
 </style>
   </head>
@@ -2234,15 +2265,15 @@ function buildRoomMap(seed) {
     .filter((b) => Math.hypot(centerOf(b).x - spawnC.x, centerOf(b).y - spawnC.y) > 12)
     .sort(() => rnd() - 0.5);
   for (const b of far) {
-    if (monsters.length >= 5) break;
+    if (monsters.length >= 9) break;
     const c = centerOf(b);
     if (monsters.some((m) => Math.hypot(m.x - c.x, m.y - c.y) < 10)) continue;
     if (!isFloor(c.x, c.y)) {
       const p = spotIn(b);
       if (!p) continue;
-      monsters.push({ x: p.x, y: p.y, type: 'lurker' });
+      monsters.push({ x: p.x, y: p.y, type: 'hunter' });
     } else {
-      monsters.push({ x: c.x, y: c.y, type: 'lurker' });
+      monsters.push({ x: c.x, y: c.y, type: 'hunter' });
     }
   }
 
@@ -3532,7 +3563,9 @@ const SLOTS = {
 };
 
 /** Hotkey order on the number row: 1, 2, 4, 3. */
-const HOTKEY_ORDER = [1, 2, 4, 3];
+const HOTKEY_ORDER = [1, 3, 4, 5];
+// 2 is reserved for the map picker, so the hot row is 1 / 3 / 4 / 5.
+const HOTKEY_LABELS = ['1', '3', '4', '5'];
 
 /**
  * Inventory: four charm sockets (only these take effect), four hotkey cells,
@@ -4164,8 +4197,8 @@ class Renderer {
       const showAim = !!game.activeItem || (game.inv && game.inv.stones > 0);
       if (showAim) {
         const r = this;
-        const ax = game.camX + ((game.msx || r.cw / 2) - r.cw / 2) / r.scale;
-        const ay = game.camY + ((game.msy || r.ch / 2) - r.ch / 2) / r.scale;
+        const ax = game.aimX ?? p.x + Math.cos(p.face || 0) * 160;
+        const ay = game.aimY ?? p.y + Math.sin(p.face || 0) * 160;
         const a = Math.atan2(ay - p.y, ax - p.x);
         const len = 196;
         ctx.save();
@@ -4561,7 +4594,7 @@ class UI {
       cell.disabled = i >= unlocked;
       cell.addEventListener('click', () => {
         cell.blur();
-        this.game.startChamber(i);
+        this.game.openMapSelect();
       });
       this.grid.appendChild(cell);
     }
@@ -4885,19 +4918,19 @@ class UI {
     cells.push('<div class="inv-cell arrow">→</div>');
     const out = inv.craftable();
     push('result', 0, out, out ? 'result ready' : 'result');
-    cells.push('<div class="inv-cut work"></div>');
+    cells.push('<div class="inv-cut work"><span>工作台</span></div>');
     for (let i = 0; i < 4; i++) {
       const o = inv.hot[i];
       const t = this.cellTip(o);
       const tip = o ? `data-tip="${t.tip.replace(/"/g, '&quot;')}" data-title="${t.title.replace(/"/g, '&quot;')}"` : '';
-      cells.push(`<div class="inv-cell hot${o ? ' filled' : ''}" data-kind="hot" data-i="${i}" ${tip}>${this.cellBody(o)}<b class="key">${i + 1}</b></div>`);
+      cells.push(`<div class="inv-cell hot${o ? ' filled' : ''}" data-kind="hot" data-i="${i}" ${tip}>${this.cellBody(o)}<b class="key">${['1', '3', '4', '5'][i]}</b></div>`);
     }
-    cells.push('<div class="inv-cut hot"></div>');
+    cells.push('<div class="inv-cut hot"><span>快捷键</span></div>');
     for (let i = 0; i < 4; i++) push('charm', i, inv.charms[i], 'charm');
-    cells.push('<div class="inv-cut charm"></div>');
+    cells.push('<div class="inv-cut charm"><span>护符槽</span></div>');
     for (let i = 0; i < 6; i++) push('pack', i, inv.pack[i], 'pack');
     for (let i = 0; i < 2; i++) cells.push('<div class="inv-cell deco"></div>');
-    cells.push('<div class="inv-cut pack"></div>');
+    cells.push('<div class="inv-cut pack"><span>背包</span></div>');
     this.invPanel.innerHTML = `<div class="inv-grid">${cells.join('')}</div>`;
   }
 
@@ -4930,10 +4963,66 @@ class UI {
       this.guideEl.className = 'guide';
       document.body.appendChild(this.guideEl);
     }
-    this.guideEl.textContent = text;
+    const lines = Array.isArray(text) ? text : [text];
+    this.guideEl.innerHTML = lines.map((t) => `<div>${t}</div>`).join('');
+    this.guideEl.classList.toggle('multi', lines.length > 1);
     this.guideEl.classList.add('show');
     clearTimeout(this.guideT);
     this.guideT = setTimeout(() => this.guideEl.classList.remove('show'), 7200);
+  }
+
+  feed(text) {
+    if (!this.feedEl) {
+      this.feedEl = document.createElement('div');
+      this.feedEl.className = 'feed';
+      document.body.appendChild(this.feedEl);
+    }
+    const line = document.createElement('div');
+    line.className = 'feed-line';
+    line.textContent = text;
+    this.feedEl.appendChild(line);
+    requestAnimationFrame(() => line.classList.add('in'));
+    setTimeout(() => line.classList.add('out'), 3200);
+    setTimeout(() => line.remove(), 4000);
+    while (this.feedEl.children.length > 5) this.feedEl.firstChild.remove();
+  }
+
+  showMapSelect(entries, current, onPick) {
+    this.hideMapSelect();
+    const ov = document.createElement('div');
+    ov.className = 'map-select';
+    ov.innerHTML = `<div class="ms-panel"><div class="ms-head">地图</div><div class="ms-grid"></div><div class="ms-hint">Esc 关闭</div></div>`;
+    const grid = ov.querySelector('.ms-grid');
+    for (const e of entries) {
+      const b = document.createElement('button');
+      b.className = 'ms-cell' + (e.built ? '' : ' locked') + (e.id === current ? ' cur' : '');
+      b.innerHTML = `<b>${e.name}</b><span>${e.sub || ''}</span>`;
+      b.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        b.blur();
+        onPick(e.id);
+      });
+      grid.appendChild(b);
+    }
+    ov.addEventListener('pointerdown', (ev) => {
+      if (ev.target === ov) this.hideMapSelect();
+    });
+    this.mapSel = ov;
+    document.body.appendChild(ov);
+    this.mapSelKey = (ev) => {
+      if (ev.key === 'Escape') {
+        ev.stopPropagation();
+        this.hideMapSelect();
+      }
+    };
+    window.addEventListener('keydown', this.mapSelKey, true);
+  }
+
+  hideMapSelect() {
+    if (!this.mapSel) return;
+    window.removeEventListener('keydown', this.mapSelKey, true);
+    this.mapSel.remove();
+    this.mapSel = null;
   }
 
   updateHUD({ shards = 0, total = 1, charges = 0, listen = false, danger = 0, depth = 0, diamonds = 0, gold = 0 } = {}) {
@@ -5109,8 +5198,13 @@ class Game {
     this.alertCd = 0;
     this.titlePingTimer = 0;
 
-    this.msx = 0;
-    this.msy = 0;
+    this.msx = null;
+    this.msy = null;
+    this.aimX = null;
+    this.aimY = null;
+    this.lures = [];
+    this.repels = [];
+    this.scanT = 0;
     canvas.addEventListener('mousemove', (e) => {
       const r = canvas.getBoundingClientRect();
       this.msx = e.clientX - r.left;
@@ -5443,7 +5537,11 @@ class Game {
       const idx = this.inv.pack.findIndex((s) => s && s.id === id && s.n >= n);
       if (idx < 0) return false;
       this.inv.pack[idx].n -= n;
-      if (this.inv.pack[idx].n <= 0) this.inv.pack[idx] = null;
+      if (this.inv.pack[idx].n <= 0) {
+        const dead = this.inv.pack[idx];
+        this.inv.pack[idx] = null;
+        for (let k = 0; k < this.inv.hot.length; k++) if (this.inv.hot[k] === dead) this.inv.hot[k] = null;
+      }
       return true;
     };
     if (id === 'vitamin') {
@@ -5483,13 +5581,46 @@ class Game {
     this.firePing();
   }
 
+  openMapSelect() {
+    const entries = MAP_ORDER.map((id) => {
+      const node = mapNode(id);
+      return { id, name: node.name, sub: node.sub || '', built: BUILT_MAPS.has(id) };
+    });
+    this.ui.showMapSelect(entries, this.mapId, (id) => {
+      this.ui.hideMapSelect();
+      if (!BUILT_MAPS.has(id)) {
+        this.ui.feed(`「${mapNode(id).name}」还没有建成`);
+        return;
+      }
+      const seed = (Math.random() * 1e9) | 0;
+      this.startMap(id, seed);
+      this.ui.feed(`进入「${mapNode(id).name}」`);
+    });
+  }
+
+  aimPoint() {
+    const r = this.renderer;
+    if (this.msx == null) {
+      const a = this.player.face ?? 0;
+      return { x: this.player.x + Math.cos(a) * 160, y: this.player.y + Math.sin(a) * 160 };
+    }
+    return {
+      x: this.camX + (this.msx - r.cw / 2) / r.scale,
+      y: this.camY + (this.msy - r.ch / 2) / r.scale,
+    };
+  }
+
   throwItem(id, opts = {}) {
     const p = this.player;
-    const r = this.renderer;
-    const wx = this.camX + (this.msx - r.cw / 2) / r.scale;
-    const wy = this.camY + (this.msy - r.ch / 2) / r.scale;
-    const a = Math.atan2(wy - p.y, wx - p.x);
+    const aim = this.aimPoint();
+    const a = Math.atan2(aim.y - p.y, aim.x - p.x);
     const def = ITEMS[id];
+    if (!def) return;
+    if (!opts.free && !this.inv.consume(id)) {
+      this.activeItem = null;
+      this.audio.deny();
+      return;
+    }
     const speed = id === 'bugspray' ? 190 : 420;
     this.throws.push({
       x: p.x, y: p.y, trail: [],
@@ -5498,7 +5629,6 @@ class Game {
       kills: !!def.kills, noise: def.noise || 1,
     });
     if (opts.noise) this.throws[this.throws.length - 1].noise = opts.noise;
-    if (!opts.free) this.inv.consume(id);
     const still = this.inv.pack.some((sl) => sl && sl.kind === 'item' && sl.id === id);
     if (!still) this.activeItem = null;
   }
@@ -5535,6 +5665,20 @@ class Game {
       }
       if (hitWall || t.life <= 0) {
         this.stepEcho(t.x, t.y, null, { count: 30, speed: 380, life: 0.7 * (t.noise || 1), tagged: false });
+        const def = ITEMS[t.id] || {};
+        if (def.lure) {
+          this.lures.push({ x: t.x, y: t.y, t: def.lure, tick: 0 });
+          this.ui.feed(`尸骸的气味散开了`);
+        }
+        if (def.repel) {
+          this.repels.push({ x: t.x, y: t.y, t: 4.5 });
+          for (const h of this.hunters) {
+            if (dist(h.x, h.y, t.x, t.y) > 330) continue;
+            const a = Math.atan2(h.y - t.y, h.x - t.x);
+            h.hear(t.x + Math.cos(a) * 260, t.y + Math.sin(a) * 260, 0.05);
+          }
+          this.ui.feed(`驱虫器喷出一阵刺鼻的雾`);
+        }
         for (const h of this.hunters) {
           if (dist(t.x, t.y, h.x, h.y) < 620) this.alertHunter(h, t.x, t.y, 0.1);
         }
@@ -5880,6 +6024,10 @@ class Game {
   }
 
   next() {
+    if (this.mapMode) {
+      this.startMap(this.mapId === 'room' ? 'maze' : 'room', (Math.random() * 1e9) | 0);
+      return;
+    }
     if (this.floorMode) {
       if (this.depth < FLOORS) this.startFloor(this.depth + 1);
       else this.victory();
@@ -5934,10 +6082,9 @@ class Game {
     }
     // Debug digits must win over the hotkey row, or 2 would just use slot 2.
     let debugDigit = false;
-    if (this.debugMode && this.input.consume('Digit2')) {
+    if (this.input.consume('Digit2') && !this.ui.mapSel) {
       debugDigit = true;
-      const i = (MAP_ORDER.indexOf(this.mapId) + 1) % MAP_ORDER.length;
-      this.startMap(MAP_ORDER[i], (Math.random() * 1e9) | 0);
+      this.openMapSelect();
     }
     if (this.debugMode && this.input.consume('Digit1')) {
       debugDigit = true;
@@ -6091,6 +6238,29 @@ class Game {
     if (this.input.consume('Space') || this.input.consume('KeyJ')) this.firePing();
 
 
+    const aim = this.aimPoint();
+    this.aimX = aim.x;
+    this.aimY = aim.y;
+
+    // timed items and thrown lures
+    if (this.scanT > 0) this.scanT -= dt;
+    for (let i = this.lures.length - 1; i >= 0; i--) {
+      const lu = this.lures[i];
+      lu.t -= dt;
+      lu.tick -= dt;
+      if (lu.tick <= 0) {
+        lu.tick = 1.1;
+        for (const h of this.hunters) {
+          if (dist(h.x, h.y, lu.x, lu.y) < 760) this.alertHunter(h, lu.x, lu.y, 0.1);
+        }
+      }
+      if (lu.t <= 0) this.lures.splice(i, 1);
+    }
+    for (let i = this.repels.length - 1; i >= 0; i--) {
+      this.repels[i].t -= dt;
+      if (this.repels[i].t <= 0) this.repels.splice(i, 1);
+    }
+
     // charge regen
     if (this.charges < PING_MAX) {
       this.chargeTimer -= dt;
@@ -6160,7 +6330,16 @@ class Game {
         this.stepEcho(p.x, p.y, '255, 205, 110', { count: 26, speed: 360, life: 0.6 });
         this.nearLoot = null;
         this.ui.hideTip();
-        this.maybeGuide('bag', '按下 Tab 键打开背包');
+        const label = it.kind === 'charm'
+          ? `${CHARMS[it.id].name} 护符`
+          : `${ITEMS[it.id].name} ×${it.n || 1}`;
+        this.ui.feed(`拾取 ${label}`);
+        if (!this.seenLoot) {
+          this.seenLoot = true;
+          this.ui.guide(['按下 Tab 打开背包', '把物品拖到对应位置以完成装配']);
+        } else {
+          this.maybeGuide('bag', '按下 Tab 键打开背包');
+        }
         if (it.id === 'stone' || (it.kind === 'item' && ITEMS[it.id] && ITEMS[it.id].kind === 'throw')) {
           this.maybeGuide('throw', '鼠标选择角度以丢出');
         }
@@ -6321,6 +6500,9 @@ class Game {
   }
 
   alertHunter(h, x, y, delay) {
+    for (const rp of this.repels || []) {
+      if (dist(x, y, rp.x, rp.y) < 240) return;
+    }
     this.maybeGuide('sneak', '按下 Shift 潜行');
     const tracking = h.state === 'investigate';
     h.hear(x, y, delay);

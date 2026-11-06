@@ -880,11 +880,12 @@ kbd {
 }
 .inv-cell.charm-count .c-charm { width: 3px; background: rgba(190, 160, 255, 0.8); }
 .inv-cell:empty { background: rgba(255, 255, 255, 0.012); }
-.inv-cut { grid-column: span 4; height: 1px; margin: 5px 2px; }
-.inv-cut.work { background: linear-gradient(90deg, transparent, rgba(127, 227, 212, 0.5), transparent); }
-.inv-cut.hot { background: linear-gradient(90deg, transparent, rgba(120, 200, 230, 0.42), transparent); }
-.inv-cut.charm { background: linear-gradient(90deg, transparent, rgba(190, 160, 255, 0.45), transparent); }
-.inv-cut.pack { background: linear-gradient(90deg, transparent, rgba(255, 214, 155, 0.4), transparent); }
+.inv-cut { grid-column: span 4; position: relative; height: 18px; margin: 2px; display: flex; align-items: center; }
+.inv-cut::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 1px; }
+.inv-cut.work::before { background: linear-gradient(90deg, transparent, rgba(127, 227, 212, 0.55), transparent); }
+.inv-cut.hot::before { background: linear-gradient(90deg, transparent, rgba(120, 200, 230, 0.45), transparent); }
+.inv-cut.charm::before { background: linear-gradient(90deg, transparent, rgba(190, 160, 255, 0.5), transparent); }
+.inv-cut.pack::before { background: linear-gradient(90deg, transparent, rgba(255, 214, 155, 0.45), transparent); }
 .inv-cell.hot .glyph { color: rgba(150, 215, 245, 0.95); }
 .inv-cell.charm .glyph { color: rgba(186, 160, 255, 0.95); }
 .inv-ghost {
@@ -912,3 +913,33 @@ kbd {
   border-radius: 2px;
 }
 .inv-cell.drop-on { outline: 1px solid rgba(255, 214, 155, 0.85); background: rgba(255, 214, 155, 0.08); }
+
+/* status ticker, bottom-left */
+.feed { position: fixed; left: 26px; bottom: 58px; display: flex; flex-direction: column; gap: 4px; pointer-events: none; z-index: 40; }
+.feed-line { font-size: 12px; letter-spacing: 0.08em; color: rgba(226, 244, 240, 0.72); opacity: 0; transform: translateX(-10px); transition: opacity 0.25s ease, transform 0.25s ease; text-shadow: 0 0 10px rgba(0, 0, 0, 0.9); }
+.feed-line.in { opacity: 1; transform: none; }
+.feed-line.out { opacity: 0; transform: translateX(-6px); }
+
+/* guide can hold several lines */
+.guide.multi { line-height: 1.7; }
+.guide.multi div + div { opacity: 0.8; }
+
+/* labels on the inventory separators */
+.inv-cut { position: relative; height: 18px; margin: 3px 2px; display: flex; align-items: center; }
+.inv-cut span { position: relative; font-size: 10px; letter-spacing: 0.22em; color: rgba(210, 236, 233, 0.45); background: #070b0b; padding: 0 8px 0 0; margin-left: 0; }
+.inv-cut.work span { color: rgba(127, 227, 212, 0.6); }
+.inv-cut.hot span { color: rgba(150, 215, 245, 0.62); }
+.inv-cut.charm span { color: rgba(186, 160, 255, 0.62); }
+
+/* map picker */
+.map-select { position: fixed; inset: 0; background: rgba(2, 6, 6, 0.82); z-index: 90; display: grid; place-items: center; }
+.ms-panel { width: min(560px, 86vw); border: 1px solid rgba(127, 227, 212, 0.22); background: #070b0b; padding: 22px 24px 16px; }
+.ms-head { font-size: 12px; letter-spacing: 0.4em; color: rgba(127, 227, 212, 0.75); margin-bottom: 14px; }
+.ms-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; max-height: 56vh; overflow: auto; }
+.ms-cell { text-align: left; padding: 9px 10px; background: transparent; border: 1px solid rgba(234, 247, 244, 0.13); color: inherit; cursor: pointer; }
+.ms-cell b { display: block; font-size: 13px; font-weight: 500; color: rgba(232, 248, 244, 0.9); }
+.ms-cell span { display: block; margin-top: 3px; font-size: 10px; letter-spacing: 0.06em; color: rgba(200, 226, 222, 0.42); }
+.ms-cell:hover { border-color: rgba(127, 227, 212, 0.6); background: rgba(127, 227, 212, 0.05); }
+.ms-cell.locked { opacity: 0.34; cursor: not-allowed; }
+.ms-cell.cur { border-color: rgba(255, 214, 155, 0.55); }
+.ms-hint { margin-top: 12px; font-size: 10px; letter-spacing: 0.18em; color: rgba(200, 226, 222, 0.35); }

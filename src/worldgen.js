@@ -315,15 +315,15 @@ export function buildRoomMap(seed) {
     .filter((b) => Math.hypot(centerOf(b).x - spawnC.x, centerOf(b).y - spawnC.y) > 12)
     .sort(() => rnd() - 0.5);
   for (const b of far) {
-    if (monsters.length >= 5) break;
+    if (monsters.length >= 9) break;
     const c = centerOf(b);
     if (monsters.some((m) => Math.hypot(m.x - c.x, m.y - c.y) < 10)) continue;
     if (!isFloor(c.x, c.y)) {
       const p = spotIn(b);
       if (!p) continue;
-      monsters.push({ x: p.x, y: p.y, type: 'lurker' });
+      monsters.push({ x: p.x, y: p.y, type: 'hunter' });
     } else {
-      monsters.push({ x: c.x, y: c.y, type: 'lurker' });
+      monsters.push({ x: c.x, y: c.y, type: 'hunter' });
     }
   }
 

@@ -348,8 +348,8 @@ export class Renderer {
       const showAim = !!game.activeItem || (game.inv && game.inv.stones > 0);
       if (showAim) {
         const r = this;
-        const ax = game.camX + ((game.msx || r.cw / 2) - r.cw / 2) / r.scale;
-        const ay = game.camY + ((game.msy || r.ch / 2) - r.ch / 2) / r.scale;
+        const ax = game.aimX ?? p.x + Math.cos(p.face || 0) * 160;
+        const ay = game.aimY ?? p.y + Math.sin(p.face || 0) * 160;
         const a = Math.atan2(ay - p.y, ax - p.x);
         const len = 196;
         ctx.save();

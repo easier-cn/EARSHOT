@@ -92,7 +92,9 @@ export const SLOTS = {
 };
 
 /** Hotkey order on the number row: 1, 2, 4, 3. */
-export const HOTKEY_ORDER = [1, 2, 4, 3];
+export const HOTKEY_ORDER = [1, 3, 4, 5];
+// 2 is reserved for the map picker, so the hot row is 1 / 3 / 4 / 5.
+export const HOTKEY_LABELS = ['1', '3', '4', '5'];
 
 /**
  * Inventory: four charm sockets (only these take effect), four hotkey cells,

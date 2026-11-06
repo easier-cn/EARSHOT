@@ -121,8 +121,13 @@ export class Game {
     this.alertCd = 0;
     this.titlePingTimer = 0;
 
-    this.msx = 0;
-    this.msy = 0;
+    this.msx = null;
+    this.msy = null;
+    this.aimX = null;
+    this.aimY = null;
+    this.lures = [];
+    this.repels = [];
+    this.scanT = 0;
     canvas.addEventListener('mousemove', (e) => {
       const r = canvas.getBoundingClientRect();
       this.msx = e.clientX - r.left;
@@ -455,7 +460,11 @@ export class Game {
       const idx = this.inv.pack.findIndex((s) => s && s.id === id && s.n >= n);
       if (idx < 0) return false;
       this.inv.pack[idx].n -= n;
-      if (this.inv.pack[idx].n <= 0) this.inv.pack[idx] = null;
+      if (this.inv.pack[idx].n <= 0) {
+        const dead = this.inv.pack[idx];
+        this.inv.pack[idx] = null;
+        for (let k = 0; k < this.inv.hot.length; k++) if (this.inv.hot[k] === dead) this.inv.hot[k] = null;
+      }
       return true;
     };
     if (id === 'vitamin') {
@@ -495,13 +504,46 @@ export class Game {
     this.firePing();
   }
 
+  openMapSelect() {
+    const entries = MAP_ORDER.map((id) => {
+      const node = mapNode(id);
+      return { id, name: node.name, sub: node.sub || '', built: BUILT_MAPS.has(id) };
+    });
+    this.ui.showMapSelect(entries, this.mapId, (id) => {
+      this.ui.hideMapSelect();
+      if (!BUILT_MAPS.has(id)) {
+        this.ui.feed(`「${mapNode(id).name}」还没有建成`);
+        return;
+      }
+      const seed = (Math.random() * 1e9) | 0;
+      this.startMap(id, seed);
+      this.ui.feed(`进入「${mapNode(id).name}」`);
+    });
+  }
+
+  aimPoint() {
+    const r = this.renderer;
+    if (this.msx == null) {
+      const a = this.player.face ?? 0;
+      return { x: this.player.x + Math.cos(a) * 160, y: this.player.y + Math.sin(a) * 160 };
+    }
+    return {
+      x: this.camX + (this.msx - r.cw / 2) / r.scale,
+      y: this.camY + (this.msy - r.ch / 2) / r.scale,
+    };
+  }
+
   throwItem(id, opts = {}) {
     const p = this.player;
-    const r = this.renderer;
-    const wx = this.camX + (this.msx - r.cw / 2) / r.scale;
-    const wy = this.camY + (this.msy - r.ch / 2) / r.scale;
-    const a = Math.atan2(wy - p.y, wx - p.x);
+    const aim = this.aimPoint();
+    const a = Math.atan2(aim.y - p.y, aim.x - p.x);
     const def = ITEMS[id];
+    if (!def) return;
+    if (!opts.free && !this.inv.consume(id)) {
+      this.activeItem = null;
+      this.audio.deny();
+      return;
+    }
     const speed = id === 'bugspray' ? 190 : 420;
     this.throws.push({
       x: p.x, y: p.y, trail: [],
@@ -510,7 +552,6 @@ export class Game {
       kills: !!def.kills, noise: def.noise || 1,
     });
     if (opts.noise) this.throws[this.throws.length - 1].noise = opts.noise;
-    if (!opts.free) this.inv.consume(id);
     const still = this.inv.pack.some((sl) => sl && sl.kind === 'item' && sl.id === id);
     if (!still) this.activeItem = null;
   }
@@ -547,6 +588,20 @@ export class Game {
       }
       if (hitWall || t.life <= 0) {
         this.stepEcho(t.x, t.y, null, { count: 30, speed: 380, life: 0.7 * (t.noise || 1), tagged: false });
+        const def = ITEMS[t.id] || {};
+        if (def.lure) {
+          this.lures.push({ x: t.x, y: t.y, t: def.lure, tick: 0 });
+          this.ui.feed(`尸骸的气味散开了`);
+        }
+        if (def.repel) {
+          this.repels.push({ x: t.x, y: t.y, t: 4.5 });
+          for (const h of this.hunters) {
+            if (dist(h.x, h.y, t.x, t.y) > 330) continue;
+            const a = Math.atan2(h.y - t.y, h.x - t.x);
+            h.hear(t.x + Math.cos(a) * 260, t.y + Math.sin(a) * 260, 0.05);
+          }
+          this.ui.feed(`驱虫器喷出一阵刺鼻的雾`);
+        }
         for (const h of this.hunters) {
           if (dist(t.x, t.y, h.x, h.y) < 620) this.alertHunter(h, t.x, t.y, 0.1);
         }
@@ -892,6 +947,10 @@ export class Game {
   }
 
   next() {
+    if (this.mapMode) {
+      this.startMap(this.mapId === 'room' ? 'maze' : 'room', (Math.random() * 1e9) | 0);
+      return;
+    }
     if (this.floorMode) {
       if (this.depth < FLOORS) this.startFloor(this.depth + 1);
       else this.victory();
@@ -946,10 +1005,9 @@ export class Game {
     }
     // Debug digits must win over the hotkey row, or 2 would just use slot 2.
     let debugDigit = false;
-    if (this.debugMode && this.input.consume('Digit2')) {
+    if (this.input.consume('Digit2') && !this.ui.mapSel) {
       debugDigit = true;
-      const i = (MAP_ORDER.indexOf(this.mapId) + 1) % MAP_ORDER.length;
-      this.startMap(MAP_ORDER[i], (Math.random() * 1e9) | 0);
+      this.openMapSelect();
     }
     if (this.debugMode && this.input.consume('Digit1')) {
       debugDigit = true;
@@ -1103,6 +1161,29 @@ export class Game {
     if (this.input.consume('Space') || this.input.consume('KeyJ')) this.firePing();
 
 
+    const aim = this.aimPoint();
+    this.aimX = aim.x;
+    this.aimY = aim.y;
+
+    // timed items and thrown lures
+    if (this.scanT > 0) this.scanT -= dt;
+    for (let i = this.lures.length - 1; i >= 0; i--) {
+      const lu = this.lures[i];
+      lu.t -= dt;
+      lu.tick -= dt;
+      if (lu.tick <= 0) {
+        lu.tick = 1.1;
+        for (const h of this.hunters) {
+          if (dist(h.x, h.y, lu.x, lu.y) < 760) this.alertHunter(h, lu.x, lu.y, 0.1);
+        }
+      }
+      if (lu.t <= 0) this.lures.splice(i, 1);
+    }
+    for (let i = this.repels.length - 1; i >= 0; i--) {
+      this.repels[i].t -= dt;
+      if (this.repels[i].t <= 0) this.repels.splice(i, 1);
+    }
+
     // charge regen
     if (this.charges < PING_MAX) {
       this.chargeTimer -= dt;
@@ -1172,7 +1253,16 @@ export class Game {
         this.stepEcho(p.x, p.y, '255, 205, 110', { count: 26, speed: 360, life: 0.6 });
         this.nearLoot = null;
         this.ui.hideTip();
-        this.maybeGuide('bag', '按下 Tab 键打开背包');
+        const label = it.kind === 'charm'
+          ? `${CHARMS[it.id].name} 护符`
+          : `${ITEMS[it.id].name} ×${it.n || 1}`;
+        this.ui.feed(`拾取 ${label}`);
+        if (!this.seenLoot) {
+          this.seenLoot = true;
+          this.ui.guide(['按下 Tab 打开背包', '把物品拖到对应位置以完成装配']);
+        } else {
+          this.maybeGuide('bag', '按下 Tab 键打开背包');
+        }
         if (it.id === 'stone' || (it.kind === 'item' && ITEMS[it.id] && ITEMS[it.id].kind === 'throw')) {
           this.maybeGuide('throw', '鼠标选择角度以丢出');
         }
@@ -1333,6 +1423,9 @@ export class Game {
   }
 
   alertHunter(h, x, y, delay) {
+    for (const rp of this.repels || []) {
+      if (dist(x, y, rp.x, rp.y) < 240) return;
+    }
     this.maybeGuide('sneak', '按下 Shift 潜行');
     const tracking = h.state === 'investigate';
     h.hear(x, y, delay);

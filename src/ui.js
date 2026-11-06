@@ -197,7 +197,7 @@ export class UI {
       cell.disabled = i >= unlocked;
       cell.addEventListener('click', () => {
         cell.blur();
-        this.game.startChamber(i);
+        this.game.openMapSelect();
       });
       this.grid.appendChild(cell);
     }
@@ -521,19 +521,19 @@ export class UI {
     cells.push('<div class="inv-cell arrow">→</div>');
     const out = inv.craftable();
     push('result', 0, out, out ? 'result ready' : 'result');
-    cells.push('<div class="inv-cut work"></div>');
+    cells.push('<div class="inv-cut work"><span>工作台</span></div>');
     for (let i = 0; i < 4; i++) {
       const o = inv.hot[i];
       const t = this.cellTip(o);
       const tip = o ? `data-tip="${t.tip.replace(/"/g, '&quot;')}" data-title="${t.title.replace(/"/g, '&quot;')}"` : '';
-      cells.push(`<div class="inv-cell hot${o ? ' filled' : ''}" data-kind="hot" data-i="${i}" ${tip}>${this.cellBody(o)}<b class="key">${i + 1}</b></div>`);
+      cells.push(`<div class="inv-cell hot${o ? ' filled' : ''}" data-kind="hot" data-i="${i}" ${tip}>${this.cellBody(o)}<b class="key">${['1', '3', '4', '5'][i]}</b></div>`);
     }
-    cells.push('<div class="inv-cut hot"></div>');
+    cells.push('<div class="inv-cut hot"><span>快捷键</span></div>');
     for (let i = 0; i < 4; i++) push('charm', i, inv.charms[i], 'charm');
-    cells.push('<div class="inv-cut charm"></div>');
+    cells.push('<div class="inv-cut charm"><span>护符槽</span></div>');
     for (let i = 0; i < 6; i++) push('pack', i, inv.pack[i], 'pack');
     for (let i = 0; i < 2; i++) cells.push('<div class="inv-cell deco"></div>');
-    cells.push('<div class="inv-cut pack"></div>');
+    cells.push('<div class="inv-cut pack"><span>背包</span></div>');
     this.invPanel.innerHTML = `<div class="inv-grid">${cells.join('')}</div>`;
   }
 
@@ -566,10 +566,66 @@ export class UI {
       this.guideEl.className = 'guide';
       document.body.appendChild(this.guideEl);
     }
-    this.guideEl.textContent = text;
+    const lines = Array.isArray(text) ? text : [text];
+    this.guideEl.innerHTML = lines.map((t) => `<div>${t}</div>`).join('');
+    this.guideEl.classList.toggle('multi', lines.length > 1);
     this.guideEl.classList.add('show');
     clearTimeout(this.guideT);
     this.guideT = setTimeout(() => this.guideEl.classList.remove('show'), 7200);
+  }
+
+  feed(text) {
+    if (!this.feedEl) {
+      this.feedEl = document.createElement('div');
+      this.feedEl.className = 'feed';
+      document.body.appendChild(this.feedEl);
+    }
+    const line = document.createElement('div');
+    line.className = 'feed-line';
+    line.textContent = text;
+    this.feedEl.appendChild(line);
+    requestAnimationFrame(() => line.classList.add('in'));
+    setTimeout(() => line.classList.add('out'), 3200);
+    setTimeout(() => line.remove(), 4000);
+    while (this.feedEl.children.length > 5) this.feedEl.firstChild.remove();
+  }
+
+  showMapSelect(entries, current, onPick) {
+    this.hideMapSelect();
+    const ov = document.createElement('div');
+    ov.className = 'map-select';
+    ov.innerHTML = `<div class="ms-panel"><div class="ms-head">地图</div><div class="ms-grid"></div><div class="ms-hint">Esc 关闭</div></div>`;
+    const grid = ov.querySelector('.ms-grid');
+    for (const e of entries) {
+      const b = document.createElement('button');
+      b.className = 'ms-cell' + (e.built ? '' : ' locked') + (e.id === current ? ' cur' : '');
+      b.innerHTML = `<b>${e.name}</b><span>${e.sub || ''}</span>`;
+      b.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        b.blur();
+        onPick(e.id);
+      });
+      grid.appendChild(b);
+    }
+    ov.addEventListener('pointerdown', (ev) => {
+      if (ev.target === ov) this.hideMapSelect();
+    });
+    this.mapSel = ov;
+    document.body.appendChild(ov);
+    this.mapSelKey = (ev) => {
+      if (ev.key === 'Escape') {
+        ev.stopPropagation();
+        this.hideMapSelect();
+      }
+    };
+    window.addEventListener('keydown', this.mapSelKey, true);
+  }
+
+  hideMapSelect() {
+    if (!this.mapSel) return;
+    window.removeEventListener('keydown', this.mapSelKey, true);
+    this.mapSel.remove();
+    this.mapSel = null;
   }
 
   updateHUD({ shards = 0, total = 1, charges = 0, listen = false, danger = 0, depth = 0, diamonds = 0, gold = 0 } = {}) {
