@@ -5349,7 +5349,8 @@ class Game {
       color: e.color || '140,240,170',
     }));
     this.absorbSet = new Set((level.absorb || []).map((a) => `${a.x},${a.y}`));
-    this.mapKey = level.key ? { x: level.key.x * level.tile + level.tile / 2, y: level.key.y * level.tile + level.tile / 2 } : null;
+    // worldgen already hands back pixel coordinates for key/spawn/exit.
+    this.mapKey = level.key ? { x: level.key.x, y: level.key.y } : null;
     this.castleKey = false;
     this.hasKey = false;
     this.exitOpen = false;
@@ -6271,8 +6272,17 @@ class Game {
     const homeLvl = this.inv.level('home');
     if (homeLvl) {
       const r = CHARMS.home.range[homeLvl - 1];
-      if (dist(p.x, p.y, L.key.x, L.key.y) < r) this.homeMarkers.push({ x: L.key.x, y: L.key.y, c: '150,220,255', s: 'key' });
-      if (dist(p.x, p.y, L.exit.x, L.exit.y) < r) this.homeMarkers.push({ x: L.exit.x, y: L.exit.y, c: '255,205,110', s: 'exit' });
+      const marks = [];
+      if (this.mapMode) {
+        if (this.mapKey && !this.hasKey) marks.push({ x: this.mapKey.x, y: this.mapKey.y, c: '150,220,255', s: 'key' });
+        for (const e of this.mapExits) marks.push({ x: e.x, y: e.y, c: '255,205,110', s: 'exit' });
+      } else {
+        if (L.key) marks.push({ x: L.key.x, y: L.key.y, c: '150,220,255', s: 'key' });
+        if (L.exit) marks.push({ x: L.exit.x, y: L.exit.y, c: '255,205,110', s: 'exit' });
+      }
+      for (const m of marks) {
+        if (dist(p.x, p.y, m.x, m.y) < r) this.homeMarkers.push(m);
+      }
     }
   }
 
