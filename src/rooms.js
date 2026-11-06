@@ -15,7 +15,7 @@ export const FLOOR_W = 78;
 export const FLOOR_H = 96;
 const M = 3;
 
-const DIRS = [
+const ROOM_DIRS = [
   [1, 0],
   [-1, 0],
   [0, 1],
@@ -88,7 +88,7 @@ function decorate(grid, room, rnd) {
   seen[0] = 1;
   while (q.length) {
     const [px, py] = q.pop();
-    for (const [dx, dy] of DIRS) {
+    for (const [dx, dy] of ROOM_DIRS) {
       const nx = px + dx;
       const ny = py + dy;
       if (nx < x || ny < y || nx >= x + w || ny >= y + h) continue;
@@ -344,7 +344,7 @@ export function floorReachable(level) {
   seen[sy * w + sx] = 1;
   while (q.length) {
     const [x, y] = q.pop();
-    for (const [dx, dy] of DIRS) {
+    for (const [dx, dy] of ROOM_DIRS) {
       const nx = x + dx;
       const ny = y + dy;
       if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;

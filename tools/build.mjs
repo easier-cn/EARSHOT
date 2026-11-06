@@ -25,6 +25,7 @@ const MODULES = [
   'src/loot.js',
   'src/desc.js',
   'src/render.js',
+  'src/editor.js',
   'src/ui.js',
   'src/game.js',
   'src/main.js',
@@ -42,7 +43,24 @@ function bundleModule(file) {
   return '// ---- ' + file + ' ----\n' + stripped.trimEnd() + '\n';
 }
 
-const js = MODULES.map(bundleModule).join('\n');
+let js = MODULES.map(bundleModule).join('\n');
+
+// Modules share a few single-line top-level constants (TILE, DIRS...).
+// Keep the first identical declaration and comment out the repeats.
+const seenConst = new Set();
+const lines = js.split('\n');
+for (let i = 0; i < lines.length; i++) {
+  const m = lines[i].match(/^const ([A-Za-z_$][\w$]*) = (.+);\r?$/);
+  if (!m) continue;
+  const key = m[1] + '=' + m[2];
+  if (seenConst.has(key)) {
+    lines[i] = '// (duplicate ' + m[1] + ' removed by the bundler)';
+  } else {
+    seenConst.add(key);
+  }
+}
+js = lines.join('\n');
+
 const css = fs.readFileSync(path.join(ROOT, 'style.css'), 'utf8');
 
 let html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
