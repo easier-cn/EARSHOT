@@ -393,6 +393,35 @@ export class Renderer {
         ctx.stroke();
         ctx.restore();
       }
+      // lingering scent / gas clouds
+      for (const rp of game.repels || []) {
+        const k = Math.max(0, Math.min(1, rp.t / 4.5));
+        const g = ctx.createRadialGradient(rp.x, rp.y, 8, rp.x, rp.y, 330);
+        g.addColorStop(0, `rgba(160, 240, 180, ${0.26 * k})`);
+        g.addColorStop(0.55, `rgba(130, 225, 160, ${0.12 * k})`);
+        g.addColorStop(1, 'rgba(120, 220, 150, 0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(rp.x, rp.y, 330, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = `rgba(160, 240, 180, ${0.3 * k})`;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 9]);
+        ctx.beginPath();
+        ctx.arc(rp.x, rp.y, 330, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      for (const lu of game.lures || []) {
+        const k = Math.max(0, Math.min(1, lu.t / 5));
+        ctx.strokeStyle = `rgba(255, 150, 120, ${0.20 * k})`;
+        ctx.lineWidth = 1.2;
+        ctx.setLineDash([2, 7]);
+        ctx.beginPath();
+        ctx.arc(lu.x, lu.y, 120, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
       for (const t of game.throws || []) {
         if (!t.trail || t.trail.length < 2) continue;
         ctx.save();

@@ -566,9 +566,19 @@ export class Game {
       this.audio.deny();
       return;
     }
-    const speed = id === 'bugspray' ? 190 : 420;
+    this.ui.feed(`掷出 ${def.name}`);
+    const speed = id === 'bugspray' ? 260 : 420;
+    // start a little in front of the body: hugging a wall must not eat the throw
+    let sx = p.x + Math.cos(a) * 14;
+    let sy = p.y + Math.sin(a) * 14;
+    const L0 = this.level;
+    const solidHere = (x, y) => isSolid(L0.grid, L0.w, L0.h, Math.floor(x / L0.tile), Math.floor(y / L0.tile));
+    for (let k = 0; k < 8 && solidHere(sx, sy); k++) {
+      sx -= Math.cos(a) * 5;
+      sy -= Math.sin(a) * 5;
+    }
     this.throws.push({
-      x: p.x, y: p.y, trail: [],
+      x: sx, y: sy, trail: [],
       dx: Math.cos(a), dy: Math.sin(a),
       speed, life: 1.6, id,
       kills: !!def.kills, noise: def.noise || 1,
