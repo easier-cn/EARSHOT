@@ -102,6 +102,11 @@ if (freeze !== null) {
 }
 
 // Experimental: walk the single continuous map.
+if (params.has('map')) {
+  const id = params.get('map') || 'room';
+  const seed = Number(params.get('seed')) || ((Math.random() * 1e9) | 0);
+  setTimeout(() => game.startMap(id, seed), 0);
+}
 if (params.has('run')) {
   setTimeout(() => {
     game.startRun(Number(params.get('run')) || 12345);

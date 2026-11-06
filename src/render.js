@@ -251,6 +251,40 @@ export class Renderer {
       ctx.restore();
     }
 
+    // ---- named-map key and doors --------------------------------------------
+    if (vision && game.mapMode) {
+      if (game.mapKey && !game.hasKey) {
+        const k = game.mapKey;
+        const pulse = 0.72 + 0.28 * Math.sin(now * 3.1);
+        ctx.save();
+        ctx.translate(k.x, k.y);
+        ctx.rotate(Math.PI / 4);
+        ctx.strokeStyle = `rgba(${GOLD}, ${0.95 * pulse})`;
+        ctx.lineWidth = 1.8;
+        ctx.strokeRect(-7, -7, 14, 14);
+        ctx.strokeRect(-3.5, -3.5, 7, 7);
+        ctx.restore();
+      }
+      for (const e of game.mapExits || []) {
+        const locked = e.require === 'key' && !game.hasKey;
+        const col = locked ? '255, 110, 110' : e.color;
+        const pulse = 0.6 + 0.4 * Math.sin(now * 2.2);
+        const a = locked ? 0.5 : 0.55 + 0.35 * pulse;
+        ctx.strokeStyle = `rgba(${col}, ${a})`;
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, 13, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, 20, Math.PI * 0.15, Math.PI * 0.85);
+        ctx.stroke();
+        ctx.fillStyle = `rgba(${col}, ${a * 0.7})`;
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, 3.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
     // ---- exit ---------------------------------------------------------------
     if (vision) {
       const eSeen = now - (level.exit.seenAt ?? -99);

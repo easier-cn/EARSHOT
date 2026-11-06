@@ -221,7 +221,7 @@ export class Hunter {
   }
 
   update(dt, game) {
-    const speed = game.hunterSpeed ? game.hunterSpeed() : 126;
+    const speed = this.speedCap || (game.hunterSpeed ? game.hunterSpeed() : 126);
     if (this.pending) {
       this.pending.t -= dt;
       if (this.pending.t <= 0) {
@@ -240,9 +240,31 @@ export class Hunter {
     if (this.type === 'patroller') return this._patrol(dt, game, speed);
     if (this.type === 'stalker') return this._stalker(dt, game, speed);
     if (this.type === 'butcher') return this._butcher(dt, game, speed);
+    if (this.type === 'lurker') return this._lurk(dt, game, speed);
 
     const arrived = this._walk(dt, game, speed);
     if (arrived && this.state === 'investigate') this.state = 'idle';
+  }
+
+  /** A slow drifter used on the room and maze maps: wanders when it hears nothing. */
+  _lurk(dt, game, speed) {
+    const L = game.level;
+    this.lurkT = (this.lurkT ?? 0) - dt;
+    if (this.lurkT <= 0 && (!this.path || this.path.length === 0)) {
+      this.lurkT = 2.2 + Math.random() * 2.8;
+      const t = L.tile;
+      for (let i = 0; i < 60; i++) {
+        const tx = 1 + Math.floor(Math.random() * (L.w - 2));
+        const ty = 1 + Math.floor(Math.random() * (L.h - 2));
+        if (isSolid(L.grid, L.w, L.h, tx, ty)) continue;
+        this._plan(game, (tx + 0.5) * t, (ty + 0.5) * t);
+        break;
+      }
+    }
+    const moving = speed * (this.moving ? 1 : 0.55);
+    const arrived = this._walk(dt, game, moving);
+    if (arrived) this.state = 'idle';
+    return arrived;
   }
 
   _patrol(dt, game, speed) {

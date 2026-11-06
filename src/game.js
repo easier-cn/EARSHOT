@@ -9,6 +9,8 @@ import { UI } from './ui.js';
 import { Editor } from './editor.js';
 import { CHAMBERS } from './chambers.js';
 import { generateFloor } from './rooms.js';
+import { buildRoomMap, buildMazeMap } from './worldgen.js';
+import { mapNode, MAP_ORDER } from './maps.js';
 import { CHARMS, ITEMS, Inventory, HOTKEY_ORDER } from './loot.js';
 import { CHARM_TEXT, ITEM_TEXT, charmText } from './desc.js';
 
@@ -89,6 +91,13 @@ export class Game {
     this.camY = 0;
     this.chamberIndex = 0;
     this.floorMode = false;
+    this.mapMode = false;
+    this.mapId = 'room';
+    this.mapSeed = 0;
+    this.mapExits = [];
+    this.mapKey = null;
+    this.castleKey = false;
+    this.mapNodes = [];
     this.depth = 1;
     this.runSeed = 0;
     this.hasKey = false;
@@ -200,6 +209,7 @@ export class Game {
   }
 
   startBest() {
+    if (this.startMap('room', (Math.random() * 1e9) | 0)) return;
     if (this.state !== 'title') return;
     if (this.startRun()) return;
     if (this.startWorld()) return;
@@ -223,6 +233,11 @@ export class Game {
 
   /** Killing a hunter pays 2 diamonds and 10 gold. 亡命猎屠 multiplies this. */
   killHunter(h) {
+    if (this.mapMode && this.mapId === 'room' && !this.castleKey) {
+      this.castleKey = true;
+      this.flash = 1;
+      this.stepEcho(h.x, h.y, '200, 170, 255', { count: 30, speed: 380, life: 0.7 });
+    }
     const i = this.hunters.indexOf(h);
     if (i < 0) return false;
     this.hunters.splice(i, 1);
@@ -321,6 +336,85 @@ export class Game {
     this.inv.stones = 0;
     this.refreshStones();
     this.ui.showGame();
+    return true;
+  }
+
+  /** One of the named map nodes from the redesigned world. */
+  startMap(id = 'room', seed = (Math.random() * 1e9) | 0) {
+    const node = mapNode(id) || mapNode('room');
+    const level = node.kind === 'maze' ? buildMazeMap(seed) : buildRoomMap(seed);
+    this.mapMode = true;
+    this.mapId = node.id;
+    this.mapSeed = seed;
+    this.mapNode = node;
+    this.floorMode = false;
+    this.worldMode = false;
+    this.customData = null;
+    this.level = level;
+    this.player = new Player(level.spawn.x, level.spawn.y);
+    this.mapExits = (level.exits || []).map((e) => ({
+      x: e.x * level.tile + level.tile / 2,
+      y: e.y * level.tile + level.tile / 2,
+      to: e.to,
+      require: e.require || null,
+      color: e.color || '140,240,170',
+    }));
+    this.absorbSet = new Set((level.absorb || []).map((a) => `${a.x},${a.y}`));
+    this.mapKey = level.key ? { x: level.key.x * level.tile + level.tile / 2, y: level.key.y * level.tile + level.tile / 2 } : null;
+    this.castleKey = false;
+    this.hasKey = false;
+    this.exitOpen = false;
+    this.echoRequired = false;
+    this.echoHeard = false;
+    this.humT = 99;
+    this.camX = this.player.x;
+    this.camY = this.player.y;
+    this.mapNodes = level.monsters || [];
+    this.hunters = this.mapNodes.map((m) => {
+      const h = new Hunter(m.x * level.tile + level.tile / 2, m.y * level.tile + level.tile / 2, m.type);
+      h.speedCap = m.speed || (node.kind === 'maze' ? 76 : 84);
+      h.state = 'idle';
+      return h;
+    });
+    this.skitters = [];
+    this.shards = [];
+    this.totalShards = 0;
+    this.collected = 0;
+    this.loot = [];
+    this.throws = [];
+    this.pings = [];
+    this.rays = [];
+    this.contacts = [];
+    this.echoRings = [];
+    this.particles = [];
+    this.charges = PING_MAX;
+    this.pingsUsed = 0;
+    this.levelTime = 0;
+    this.activeItem = null;
+    this.state = 'playing';
+    this.ui.showGame();
+    this.ui.updateHUD({ chamber: 0, title: node.name, shards: 0, total: 0, charges: this.charges, listen: false, muted: this.audio.muted, danger: 0, depth: 0, diamonds: this.diamonds, gold: this.gold });
+    return true;
+  }
+
+  /** Step through a map exit (or bounce when the door is locked). */
+  enterMapExit(exit) {
+    if (exit.require === 'key' && !this.hasKey) {
+      this.audio.deny();
+      this.ui.toast('deny');
+      return false;
+    }
+    if (exit.require === 'castle' && !this.castleKey) {
+      this.audio.deny();
+      this.ui.toast('deny');
+      return false;
+    }
+    this.audio.gateOpen();
+    this.flash = 1;
+    const to = exit.to;
+    if (!to || to === this.mapId) return false;
+    if (mapNode(to)) this.startMap(to, this.mapSeed);
+    else this.startFloor(1);
     return true;
   }
 
@@ -745,6 +839,11 @@ export class Game {
       if (this.state !== 'playing') this.state = 'playing';
       return;
     }
+    if (this.mapMode) {
+      this.startMap(this.mapId, this.mapSeed);
+      if (this.state !== 'playing') this.state = 'playing';
+      return;
+    }
     // Same room, same seed — a retry must not quietly hand you a new map.
     if (this.worldMode) this.startWorld(this.worldSeed ?? 424242);
     else if (this.customData) this.startCustom(this.customData);
@@ -826,17 +925,28 @@ export class Game {
   handleGlobalKeys() {
     if (this.input.consume('KeyM')) this.toggleMute();
     if (this.input.consume('Tab')) this.ui.toggleInventory(this);
-    for (let i = 0; i < 4; i++) {
-      if (this.input.consume(`Digit${HOTKEY_ORDER[i]}`)) this.useHotkey(i);
-    }
     if (this.input.consume('Backquote')) {
       this.debugMode = !this.debugMode;
+      this.debugInvincible = this.debugMode;
       if (!this.debugMode) this.debugFreeze = false;
       this.ui.toast(this.debugMode ? 'shard' : 'deny');
     }
+    // Debug digits must win over the hotkey row, or 2 would just use slot 2.
+    let debugDigit = false;
+    if (this.debugMode && this.input.consume('Digit2')) {
+      debugDigit = true;
+      const i = (MAP_ORDER.indexOf(this.mapId) + 1) % MAP_ORDER.length;
+      this.startMap(MAP_ORDER[i], (Math.random() * 1e9) | 0);
+    }
     if (this.debugMode && this.input.consume('Digit1')) {
+      debugDigit = true;
       this.debugFreeze = !this.debugFreeze;
       this.ui.toast(this.debugFreeze ? 'deny' : 'shard');
+    }
+    if (!debugDigit) {
+      for (let i = 0; i < 4; i++) {
+        if (this.input.consume(`Digit${HOTKEY_ORDER[i]}`)) this.useHotkey(i);
+      }
     }
     if (this.state === 'edit' && this.input.consume('Escape')) this.closeEditor();
     else if (this.state === 'playing' && this.input.consume('Escape')) this.pause();
@@ -1054,6 +1164,23 @@ export class Game {
           this.maybeGuide('throw', '鼠标选择角度以丢出');
         }
       }
+    }
+
+    // map nodes: a key on the floor and doors that lead to another area
+    if (this.mapMode) {
+      if (this.mapKey && !this.hasKey && dist(p.x, p.y, this.mapKey.x, this.mapKey.y) < 24) {
+        this.hasKey = true;
+        this.audio.shard();
+        this.flash = 1;
+        this.shake = Math.max(this.shake, 2);
+        this.stepEcho(p.x, p.y, '255, 205, 110', { count: 28, speed: 360, life: 0.6 });
+      }
+      for (const ex of this.mapExits) {
+        if (dist(p.x, p.y, ex.x, ex.y) < 20) {
+          if (this.enterMapExit(ex)) return;
+        }
+      }
+      if (this.castleKey) this.maybeGuide('castle', '城堡钥匙');
     }
 
     // exit
@@ -1320,6 +1447,12 @@ export class Game {
           if (hitX) r.dx *= -1;
           if (hitY) r.dy *= -1;
           if (hitX || hitY) {
+            const ax = Math.floor(r.x / TILE);
+            const ay = Math.floor(r.y / TILE);
+            if (this.mapMode && this.absorbSet && this.absorbSet.has(`${ax},${ay}`)) {
+              r.age = Math.max(r.age, r.life);
+              break;
+            }
             r.bounce++;
             this.contacts.push({ x: r.x, y: r.y, t: this.now, tint: r.tint });
           }

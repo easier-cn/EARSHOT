@@ -1513,6 +1513,735 @@ function generateLevel(seed, cfg) {
   throw new Error('level generation failed for seed ' + seed);
 }
 
+// ---- src/rooms.js ----
+// Room-graph floor generator.
+//
+// 1. Walk a snake of 5..8 "nodes" across the floor, carving a 3-wide corridor.
+// 2. Stamp a room over each node (varied sizes, structures inside).
+// 3. The last room holds the key; a branch leaves one of the middle rooms and
+//    ends in the exit room; two more branches end in loot rooms.
+//
+// Because the corridor is carved first and every room is stamped on top of it,
+// the whole floor is connected by construction.
+const TILE = 32;
+const FLOOR_W = 78;
+const FLOOR_H = 96;
+const M = 3;
+
+const DIRS = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+];
+
+const ri = (rnd, a, b) => a + Math.floor(rnd() * (b - a + 1));
+
+function fillRect(grid, x, y, w, h, v) {
+  for (let ty = y; ty < y + h; ty++) {
+    for (let tx = x; tx < x + w; tx++) {
+      if (tx < 1 || ty < 1 || tx >= FLOOR_W - 1 || ty >= FLOOR_H - 1) continue;
+      grid[ty * FLOOR_W + tx] = v;
+    }
+  }
+}
+
+function carveH(grid, x0, x1, y) {
+  const a = Math.min(x0, x1);
+  const b = Math.max(x0, x1);
+  fillRect(grid, a - 1, y - 1, b - a + 3, 3, 0);
+}
+
+function carveV(grid, y0, y1, x) {
+  const a = Math.min(y0, y1);
+  const b = Math.max(y0, y1);
+  fillRect(grid, x - 1, a - 1, 3, b - a + 3, 0);
+}
+
+function roomSize(rnd, kind) {
+  if (kind === 'small') return { w: ri(rnd, 7, 10), h: ri(rnd, 6, 8) };
+  if (kind === 'large') return { w: ri(rnd, 14, 19), h: ri(rnd, 11, 15) };
+  return { w: ri(rnd, 9, 13), h: ri(rnd, 7, 10) };
+}
+
+// Pillars / islands, always checked so the room stays one connected piece.
+function decorate(grid, room, rnd) {
+  if (room.w < 8 || room.h < 8) return;
+  const { x, y, w, h } = room;
+  const style = ri(rnd, 0, 3);
+  const put = (tx, ty) => {
+    if (tx <= x + 1 || ty <= y + 1 || tx >= x + w - 2 || ty >= y + h - 2) return;
+    grid[ty * FLOOR_W + tx] = 1;
+  };
+  if (style === 0) {
+    for (let ty = y + 3; ty < y + h - 2; ty += 4) {
+      for (let tx = x + 3; tx < x + w - 2; tx += 4) put(tx, ty);
+    }
+  } else if (style === 1) {
+    const cx = x + (w >> 1);
+    const cy = y + (h >> 1);
+    for (let ty = cy - 1; ty <= cy + 1; ty++) {
+      for (let tx = cx - 2; tx <= cx + 2; tx++) put(tx, ty);
+    }
+  } else if (style === 2) {
+    const cy = y + (h >> 1);
+    for (let tx = x + 2; tx < x + w - 2; tx++) {
+      if (Math.abs(tx - (x + (w >> 1))) > 1) put(tx, cy);
+    }
+  } else {
+    const n = Math.floor((w * h) / 30);
+    for (let k = 0; k < n; k++) put(ri(rnd, x + 2, x + w - 3), ri(rnd, y + 2, y + h - 3));
+  }
+
+  // Validate: everything inside must still be reachable from the centre.
+  const cx = x + (w >> 1);
+  const cy = y + (h >> 1);
+  const seen = new Uint8Array(w * h);
+  const q = [[cx, cy]];
+  seen[0] = 1;
+  while (q.length) {
+    const [px, py] = q.pop();
+    for (const [dx, dy] of DIRS) {
+      const nx = px + dx;
+      const ny = py + dy;
+      if (nx < x || ny < y || nx >= x + w || ny >= y + h) continue;
+      if (grid[ny * FLOOR_W + nx]) continue;
+      const k = (ny - y) * w + (nx - x);
+      if (seen[k]) continue;
+      seen[k] = 1;
+      q.push([nx, ny]);
+    }
+  }
+  let broken = false;
+  for (let ty = y; ty < y + h && !broken; ty++) {
+    for (let tx = x; tx < x + w; tx++) {
+      if (!grid[ty * FLOOR_W + tx] && !seen[(ty - y) * w + (tx - x)]) {
+        broken = true;
+        break;
+      }
+    }
+  }
+  if (broken) fillRect(grid, x, y, w, h, 0);
+}
+
+function stampRoom(grid, room) {
+  fillRect(grid, room.x, room.y, room.w, room.h, 0);
+}
+
+function openTileIn(grid, room) {
+  const cx = room.x + (room.w >> 1);
+  const cy = room.y + (room.h >> 1);
+  for (let rad = 0; rad < Math.max(room.w, room.h); rad++) {
+    for (let dy = -rad; dy <= rad; dy++) {
+      for (let dx = -rad; dx <= rad; dx++) {
+        const tx = cx + dx;
+        const ty = cy + dy;
+        if (tx < room.x || ty < room.y || tx >= room.x + room.w || ty >= room.y + room.h) continue;
+        if (!grid[ty * FLOOR_W + tx]) return { x: tx, y: ty };
+      }
+    }
+  }
+  return { x: cx, y: cy };
+}
+
+function generateFloor(seed, depth = 0) {
+  // A floor that breaks its own rules is worse than a new floor: retry a few
+  // sub-seeds until the layout is legal.
+  let best = null;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const f = buildFloor(seed + attempt * 104729, depth);
+    const clean = !hasOverlap(f) && f.mainCount >= 5 && f.mainCount <= 8 && floorReachable(f).ok;
+    if (clean) return f;
+    if (!best) best = f;
+  }
+  return best;
+}
+
+function hasOverlap(f) {
+  for (let i = 0; i < f.rooms.length; i++) {
+    for (let j = i + 1; j < f.rooms.length; j++) {
+      const a = f.rooms[i];
+      const b = f.rooms[j];
+      if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) return true;
+    }
+  }
+  return false;
+}
+
+function buildFloor(seed, depth) {
+  const rnd = mulberry32(seed);
+  const grid = new Uint8Array(FLOOR_W * FLOOR_H).fill(1);
+  const rooms = [];
+  const count = ri(rnd, 5, 8);
+
+  const hits = (r) => rooms.some((q) => r.x < q.x + q.w + 1 && q.x < r.x + r.w + 1 && r.y < q.y + q.h + 1 && q.y < r.y + r.h + 1);
+
+  // ---- snake of nodes ----------------------------------------------------
+  let cx = ri(rnd, 8, 12);
+  let cy = ri(rnd, 10, 14);
+  let dir = 1;
+  for (let i = 0; i < count; i++) {
+    const kind = i === 0 ? 'start' : i === count - 1 ? 'key' : rnd() < 0.3 ? 'small' : rnd() < 0.7 ? 'mid' : 'large';
+    const size = roomSize(rnd, kind);
+    if (dir > 0 && cx + size.w > FLOOR_W - M - 2) {
+      cy += 24 + ri(rnd, 0, 6);
+      dir = -1;
+      cx = FLOOR_W - M - size.w - ri(rnd, 2, 6);
+    } else if (dir < 0 && cx - size.w < M) {
+      cy += 24 + ri(rnd, 0, 6);
+      dir = 1;
+      cx = M + ri(rnd, 2, 6);
+    }
+    const x = Math.max(M, Math.min(FLOOR_W - M - size.w, dir > 0 ? cx : cx - size.w));
+    let y = Math.max(M, Math.min(FLOOR_H - M - size.h, cy));
+    // Keep the snake clear of what is already stamped.
+    while (hits({ x, y, w: size.w, h: size.h }) && y + 2 + size.h < FLOOR_H - M) {
+      y += 2;
+    }
+    rooms.push({ i, kind, x, y, w: size.w, h: size.h, links: [] });
+    cx = dir > 0 ? x + size.w + ri(rnd, 7, 12) : x - ri(rnd, 7, 12);
+    cy = y + ri(rnd, -1, 2);
+  }
+
+  // ---- corridor first, rooms on top --------------------------------------
+  const spine = [];
+  const carveSpine = () => {
+    for (const seg of spine) {
+      carveH(grid, seg.ax, seg.bx, seg.ay);
+      carveV(grid, seg.ay, seg.by, seg.bx);
+    }
+  };
+  for (let i = 0; i < rooms.length - 1; i++) {
+    const a = rooms[i];
+    const b = rooms[i + 1];
+    spine.push({
+      ax: a.x + (a.w >> 1),
+      ay: a.y + (a.h >> 1),
+      bx: b.x + (b.w >> 1),
+      by: b.y + (b.h >> 1),
+    });
+  }
+  carveSpine();
+  for (const room of rooms) stampRoom(grid, room);
+  for (const room of rooms) decorate(grid, room, rnd);
+  // Decorations must never close a corridor: carve the spine once more.
+  carveSpine();
+
+  const center = (r) => {
+    const t = openTileIn(grid, r);
+    return { x: t.x * TILE + TILE / 2, y: t.y * TILE + TILE / 2, tile: t };
+  };
+
+  // ---- branches: exit off a middle room, plus two dead ends --------------
+  const midLo = 2;
+  const midHi = Math.max(midLo, rooms.length - 3);
+  const mother = rooms[ri(rnd, midLo, midHi)];
+  const branches = [];
+  const specs = [
+    { kind: 'exit', from: mother, size: { w: ri(rnd, 9, 12), h: ri(rnd, 8, 10) } },
+    { kind: 'branch', from: rooms[ri(rnd, 1, rooms.length - 2)], size: { w: ri(rnd, 7, 9), h: ri(rnd, 7, 9) } },
+    { kind: 'branch', from: rooms[ri(rnd, 1, rooms.length - 2)], size: { w: ri(rnd, 7, 10), h: ri(rnd, 7, 9) } },
+  ];
+  for (const spec of specs) {
+    const from = spec.from;
+    const options = [
+      { x: from.x + (from.w >> 1) - (spec.size.w >> 1), y: from.y + from.h + 8 },
+      { x: from.x + (from.w >> 1) - (spec.size.w >> 1), y: from.y - 8 - spec.size.h },
+      { x: from.x + from.w + 8, y: from.y + (from.h >> 1) - (spec.size.h >> 1) },
+      { x: from.x - 8 - spec.size.w, y: from.y + (from.h >> 1) - (spec.size.h >> 1) },
+    ];
+    let spot = null;
+    for (const o of options) {
+      if (o.x < M || o.y < M || o.x + spec.size.w > FLOOR_W - M || o.y + spec.size.h > FLOOR_H - M) continue;
+      if (hits({ x: o.x, y: o.y, w: spec.size.w, h: spec.size.h })) continue;
+      spot = o;
+      break;
+    }
+    // Nothing clean next door: search a ring around the mother room.
+    if (!spot) {
+      const fx = from.x + (from.w >> 1);
+      const fy = from.y + (from.h >> 1);
+      for (let ring = 10; ring < 40 && !spot; ring += 5) {
+        for (const dir of [1, -1]) {
+          const cands = [
+            { x: fx - (spec.size.w >> 1), y: fy + dir * (ring + (from.h >> 1)) },
+            { x: fx + dir * (ring + (from.w >> 1)), y: fy - (spec.size.h >> 1) },
+          ];
+          for (const o of cands) {
+            if (o.x < M || o.y < M || o.x + spec.size.w > FLOOR_W - M || o.y + spec.size.h > FLOOR_H - M) continue;
+            if (hits({ x: o.x, y: o.y, w: spec.size.w, h: spec.size.h })) continue;
+            spot = o;
+            break;
+          }
+          if (spot) break;
+        }
+      }
+    }
+    if (!spot) continue;
+    const room = {
+      i: rooms.length,
+      kind: spec.kind,
+      x: spot.x,
+      y: spot.y,
+      w: spec.size.w,
+      h: spec.size.h,
+      links: [from.i],
+    };
+    const fx = from.x + (from.w >> 1);
+    const fy = from.y + (from.h >> 1);
+    const tx = room.x + (room.w >> 1);
+    const ty = room.y + (room.h >> 1);
+    carveH(grid, fx, tx, fy);
+    carveV(grid, fy, ty, tx);
+    stampRoom(grid, room);
+    decorate(grid, room, rnd);
+    carveH(grid, fx, tx, fy);
+    carveV(grid, fy, ty, tx);
+    from.links.push(room.i);
+    rooms.push(room);
+    branches.push(room);
+  }
+
+  const startRoom = rooms[0];
+  const keyRoom = rooms.find((r) => r.kind === 'key') || rooms[1];
+  const exitRoom = rooms.find((r) => r.kind === 'exit') || branches[0] || keyRoom;
+  const spawn = center(startRoom);
+  const key = center(keyRoom);
+  const exit = center(exitRoom);
+
+  // Loot: every branch end, the room the exit leaves from, and the room just
+  // before the key.
+  const loot = [];
+  const charmIds = ['sleep', 'stress', 'survive', 'stone', 'counter', 'sneakSonar', 'swift', 'home', 'rewind', 'hunt'];
+  const itemIds = ['pebbles', 'sharpStone', 'vitamin', 'totem', 'star', 'corpse', 'bugspray', 'scanner'];
+  const spots = [];
+  for (const r of rooms) if (r.kind === 'branch' || r.kind === 'exit') spots.push(center(r));
+  const mainRooms = rooms.filter((r) => r.kind !== 'branch' && r.kind !== 'exit');
+  const beforeKey = mainRooms[mainRooms.length - 2];
+  const exitMother = rooms.find((r) => r.i === exitRoom.links?.[0]);
+  if (beforeKey) spots.push(center(beforeKey));
+  if (exitMother) spots.push(center(exitMother));
+  for (let i = 0; i < spots.length; i++) {
+    const charm = i % 3 !== 2;
+    const id = charm ? charmIds[Math.floor(rnd() * charmIds.length)] : itemIds[Math.floor(rnd() * itemIds.length)];
+    loot.push({ x: spots[i].x, y: spots[i].y, kind: charm ? 'charm' : 'item', id });
+  }
+
+  return {
+    w: FLOOR_W,
+    h: FLOOR_H,
+    tile: TILE,
+    size: { w: FLOOR_W * TILE, h: FLOOR_H * TILE },
+    grid,
+    rooms,
+    loot,
+    branches: branches.map((b) => b.i),
+    spawn,
+    spawnTile: spawn.tile,
+    key,
+    keyTile: key.tile,
+    exit,
+    exitTile: exit.tile,
+    depth,
+    seed,
+    mainCount: rooms.filter((r) => r.kind !== 'branch' && r.kind !== 'exit').length,
+  };
+}
+
+function floorReachable(level) {
+  const { grid, w, h, tile } = level;
+  const seen = new Uint8Array(w * h);
+  const sx = Math.floor(level.spawn.x / tile);
+  const sy = Math.floor(level.spawn.y / tile);
+  const q = [[sx, sy]];
+  seen[sy * w + sx] = 1;
+  while (q.length) {
+    const [x, y] = q.pop();
+    for (const [dx, dy] of DIRS) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+      const k = ny * w + nx;
+      if (seen[k] || grid[k]) continue;
+      seen[k] = 1;
+      q.push([nx, ny]);
+    }
+  }
+  const at = (p) => seen[Math.floor(p.y / tile) * w + Math.floor(p.x / tile)] === 1;
+  const bad = [];
+  if (!at(level.key)) bad.push('key');
+  if (!at(level.exit)) bad.push('exit');
+  for (const r of level.rooms) {
+    const t = { x: (r.x + (r.w >> 1) + 0.5) * tile, y: (r.y + (r.h >> 1) + 0.5) * tile };
+    if (!at(t)) bad.push(`room${r.i}`);
+  }
+  return { ok: bad.length === 0, bad, seen };
+}
+
+// ---- src/maps.js ----
+// The map graph. Only the entrances named in the design exist: every edge here
+// was requested explicitly, nothing is invented.
+//
+// kind: room | maze | moving | mech | plain   (plain = not designed yet)
+
+const MAPS = {
+  room: { id: 'room', name: '房间', sub: '初始地图', kind: 'room' },
+  maze: { id: 'maze', name: '迷宫', kind: 'maze' },
+  meadow: { id: 'meadow', name: '草原', kind: 'plain' },
+  swamp: { id: 'swamp', name: '沼泽', kind: 'plain' },
+  witch: { id: 'witch', name: '女巫塔', sub: '巫妖领地', kind: 'plain' },
+  forestEdge: { id: 'forestEdge', name: '森林外围', kind: 'plain' },
+  forestCore: { id: 'forestCore', name: '森林核心', sub: '生命树', kind: 'plain' },
+  castle: { id: 'castle', name: '城堡', kind: 'plain' },
+  mountain: { id: 'mountain', name: '荒山', kind: 'plain' },
+  canyon: { id: 'canyon', name: '峡谷', sub: '山洞', kind: 'plain' },
+  ruins: { id: 'ruins', name: '遗迹', sub: '失落之地', kind: 'plain' },
+  volcano: { id: 'volcano', name: '火山', sub: '山洞', kind: 'plain' },
+  vault: { id: 'vault', name: '金库', kind: 'plain' },
+  vaultCellar: { id: 'vaultCellar', name: '金库地下室', kind: 'plain' },
+  vaultSafe: { id: 'vaultSafe', name: '金库保险柜', kind: 'plain' },
+  sewer: { id: 'sewer', name: '下水道', kind: 'plain' },
+  gas: { id: 'gas', name: '沼气池', kind: 'plain' },
+  rot: { id: 'rot', name: '腐臭之地', kind: 'plain' },
+  moving: { id: 'moving', name: '移动迷宫', kind: 'moving' },
+  lab: { id: 'lab', name: '实验室', kind: 'plain' },
+  mech: { id: 'mech', name: '机械地牢', sub: '机械核心', kind: 'mech' },
+};
+
+// Ordered walkthrough: this is what the debug key (2) cycles through.
+const MAP_ORDER = [
+  'room', 'maze', 'meadow', 'swamp', 'witch', 'forestEdge', 'forestCore',
+  'castle', 'mountain', 'canyon', 'ruins', 'volcano', 'vault', 'vaultCellar',
+  'vaultSafe', 'sewer', 'gas', 'rot', 'moving', 'lab', 'mech',
+];
+
+function mapNode(id) {
+  return MAPS[id] || MAPS.room;
+}
+
+// ---- src/worldgen.js ----
+// Map generators for the redesigned world.
+//
+//   room  — the starting map: one big rectangle split by walls into rooms with
+//           doorways, no corridors. Key in the middle, three far corners hold
+//           the maze exit, the castle door sits on the middle of one side and
+//           the meadow exit is a sound-absorbing wall.
+//   maze  — narrow one-tile corridors with the occasional 3x3 / 4x4 pocket.
+//
+// Everything works on whole tiles; the game converts to pixels with TILE.
+const TILE = 32;
+
+const ri = (rnd, a, b) => a + Math.floor(rnd() * (b - a + 1));
+const at = (w, x, y) => y * w + x;
+
+function solid(grid, w, h, x, y) {
+  if (x < 0 || y < 0 || x >= w || y >= h) return true;
+  return grid[y * w + x] === 1;
+}
+
+function fill(grid, w, x0, y0, x1, y1, v) {
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) grid[y * w + x] = v;
+  }
+}
+
+function reachable(grid, w, h, sx, sy) {
+  const seen = new Uint8Array(w * h);
+  const q = [sx, sy];
+  seen[at(w, sx, sy)] = 1;
+  while (q.length) {
+    const y = q.pop();
+    const x = q.pop();
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+      const i = at(w, nx, ny);
+      if (seen[i] || grid[i] === 1) continue;
+      seen[i] = 1;
+      q.push(nx, ny);
+    }
+  }
+  return seen;
+}
+
+function floorCount(grid, w, h) {
+  let n = 0;
+  for (let i = 0; i < w * h; i++) if (grid[i] === 0) n++;
+  return n;
+}
+
+function centerOf(r) {
+  return { x: r.x + (r.w >> 1), y: r.y + (r.h >> 1) };
+}
+
+// ---------------------------------------------------------------- room map --
+
+function splitRooms(rnd, box, depth, rooms) {
+  const minW = 9;
+  const minH = 7;
+  const canV = box.w >= minW * 2 + 1;
+  const canH = box.h >= minH * 2 + 1;
+  if (depth <= 0 || (!canV && !canH)) {
+    rooms.push(box);
+    return;
+  }
+  const vertical = canV && (!canH || box.w > box.h || (box.w === box.h && rnd() < 0.5));
+  if (vertical) {
+    const cut = ri(rnd, minW, box.w - minW - 1);
+    const wall = box.x + cut;
+    rooms.push({ ...box, wallX: wall, split: 'v' });
+    // the two halves are recorded by the caller through this marker
+    splitRooms(rnd, { x: box.x, y: box.y, w: cut, h: box.h }, depth - 1, rooms);
+    splitRooms(rnd, { x: wall + 1, y: box.y, w: box.w - cut - 1, h: box.h }, depth - 1, rooms);
+  } else {
+    const cut = ri(rnd, minH, box.h - minH - 1);
+    const wall = box.y + cut;
+    rooms.push({ ...box, wallY: wall, split: 'h' });
+    splitRooms(rnd, { x: box.x, y: box.y, w: box.w, h: cut }, depth - 1, rooms);
+    splitRooms(rnd, { x: box.x, y: wall + 1, w: box.w, h: box.h - cut - 1 }, depth - 1, rooms);
+  }
+}
+
+/**
+ * The starting map. Rooms touch each other, separated by one-tile walls with
+ * two-tile doorways, so the whole rectangle is one connected space.
+ */
+function buildRoomMap(seed) {
+  const rnd = mulberry32(seed);
+  const w = 72;
+  const h = 48;
+  const grid = new Uint8Array(w * h);
+  fill(grid, w, 0, 0, w - 1, h - 1, 1);
+  fill(grid, w, 1, 1, w - 2, h - 2, 0);
+
+  // Split the interior into rooms; keep every split wall so we can cut doors.
+  const boxes = [];
+  const walls = [];
+  const walk = (x, y, ww, hh, depth) => {
+    const canV = ww >= 19;
+    const canH = hh >= 15;
+    if (depth <= 0 || (!canV && !canH)) {
+      boxes.push({ x, y, w: ww, h: hh });
+      return;
+    }
+    const vertical = canV && (!canH || ww > hh || (ww === hh && rnd() < 0.5));
+    if (vertical) {
+      const cut = ri(rnd, 9, ww - 10);
+      walls.push({ x: x + cut, y, len: hh, axis: 'v', lo: x, hi: x + cut + 1 });
+      walk(x, y, cut, hh, depth - 1);
+      walk(x + cut + 1, y, ww - cut - 1, hh, depth - 1);
+    } else {
+      const cut = ri(rnd, 7, hh - 8);
+      walls.push({ x, y: y + cut, len: ww, axis: 'h', lo: y, hi: y + cut + 1 });
+      walk(x, y, ww, cut, depth - 1);
+      walk(x, y + cut + 1, ww, hh - cut - 1, depth - 1);
+    }
+  };
+  walk(1, 1, w - 2, h - 2, 4);
+
+  // Cut doorways through every split wall: two tiles wide, with a one-tile
+  // margin so doors never merge with the outer wall.
+  for (const wl of walls) {
+    if (wl.axis === 'v') {
+      const y0 = wl.y + 2;
+      const y1 = wl.y + wl.len - 3;
+      if (y1 <= y0) continue;
+      const atY = ri(rnd, y0, y1);
+      for (let dy = 0; dy < 2; dy++) {
+        fill(grid, w, wl.x, atY + dy, wl.x, atY + dy, 0);
+      }
+    } else {
+      const x0 = wl.x + 2;
+      const x1 = wl.x + wl.len - 3;
+      if (x1 <= x0) continue;
+      const atX = ri(rnd, x0, x1);
+      for (let dx = 0; dx < 2; dx++) {
+        fill(grid, w, atX + dx, wl.y, atX + dx, wl.y, 0);
+      }
+    }
+  }
+
+  const spawnBox = boxes.reduce((a, b) => (a.x + a.y <= b.x + b.y ? a : b));
+  const spawnC = centerOf(spawnBox);
+  const mid = { x: w >> 1, y: h >> 1 };
+  const keyBox = boxes.reduce((a, b) => {
+    const da = Math.hypot(a.x + a.w / 2 - mid.x, a.y + a.h / 2 - mid.y);
+    const db = Math.hypot(b.x + b.w / 2 - mid.x, b.y + b.h / 2 - mid.y);
+    return da <= db ? a : b;
+  });
+  const keyC = centerOf(keyBox);
+
+  // Three far corners: the maze exit goes into one of them at random.
+  const corners = [
+    { x: 2, y: h - 3 },
+    { x: w - 3, y: 2 },
+    { x: w - 3, y: h - 3 },
+  ];
+  const pickCorner = corners[ri(rnd, 0, 2)];
+  const mazeTile = { x: pickCorner.x, y: pickCorner.y };
+  // carve the actual doorway on the outer wall next to that corner
+  const mazeDoor = { x: 1, y: mazeTile.y };
+  fill(grid, w, mazeDoor.x, mazeDoor.y, mazeDoor.x, mazeDoor.y, 0);
+
+  // Castle door: middle of the right side. Meadow: middle of the bottom side,
+  // and that stretch of wall absorbs sound instead of reflecting it.
+  const castleDoor = { x: w - 2, y: h >> 1 };
+  const meadowDoor = { x: w >> 1, y: h - 2 };
+  fill(grid, w, castleDoor.x, castleDoor.y, castleDoor.x, castleDoor.y, 0);
+  fill(grid, w, meadowDoor.x, meadowDoor.y, meadowDoor.x, meadowDoor.y, 0);
+
+  const absorb = [];
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const x = meadowDoor.x + dx;
+      const y = meadowDoor.y + dy + 1;
+      if (y === h - 1 && x >= 0 && x < w) absorb.push(at(w, x, y));
+    }
+  }
+
+  const rooms = boxes.map((b) => {
+    const c = centerOf(b);
+    return { x: b.x, y: b.y, w: b.w, h: b.h, cx: c.x, cy: c.y, kind: 'room' };
+  });
+
+  const monsters = [];
+  const tryMonster = (box) => {
+    const c = centerOf(box);
+    if (Math.hypot(c.x - spawnC.x, c.y - spawnC.y) < 10) return;
+    monsters.push({ x: c.x, y: c.y, type: 'lurker' });
+  };
+  const far = boxes.filter((b) => Math.hypot(centerOf(b).x - spawnC.x, centerOf(b).y - spawnC.y) > 10);
+  for (let i = 0; i < Math.min(3, far.length); i++) tryMonster(far[ri(rnd, 0, far.length - 1)]);
+
+  const standing = (t) => grid[at(w, t.x, t.y)] === 0;
+  return {
+    mapId: 'room',
+    w,
+    h,
+    tile: TILE,
+    size: { w: w * TILE, h: h * TILE },
+    grid,
+    rooms,
+    spawn: { x: spawnC.x * TILE + TILE / 2, y: spawnC.y * TILE + TILE / 2 },
+    spawnTile: spawnC,
+    key: { x: keyC.x * TILE + TILE / 2, y: keyC.y * TILE + TILE / 2 },
+    keyTile: keyC,
+    exit: { x: mazeTile.x * TILE + TILE / 2, y: mazeTile.y * TILE + TILE / 2 },
+    exitTile: mazeTile,
+    exits: [
+      { to: 'maze', x: mazeDoor.x, y: mazeDoor.y, require: 'key', color: '127,227,212' },
+      { to: 'meadow', x: meadowDoor.x, y: meadowDoor.y, require: null, color: '140,240,170', absorb: true },
+      { to: 'castle', x: castleDoor.x, y: castleDoor.y, require: 'castle', color: '255,150,90' },
+    ],
+    absorb,
+    monsters,
+    loot: [],
+    seed,
+    valid: standing(spawnC) && standing(keyC) && standing(mazeTile),
+  };
+}
+
+// ---------------------------------------------------------------- maze map --
+
+/**
+ * Narrow maze: one-tile corridors, occasional 3x3 / 4x4 pockets so it never
+ * dead-ends into a single blocked tile. Exit sits diagonally opposite spawn.
+ */
+function buildMazeMap(seed) {
+  const rnd = mulberry32(seed);
+  const cw = 39;
+  const ch = 25;
+  const w = cw * 2 + 1;
+  const h = ch * 2 + 1;
+  const grid = new Uint8Array(w * h);
+  fill(grid, w, 0, 0, w - 1, h - 1, 1);
+
+  const seenCell = new Uint8Array(cw * ch);
+  const stack = [[0, 0]];
+  seenCell[0] = 1;
+  fill(grid, w, 1, 1, 1, 1, 0);
+  while (stack.length) {
+    const [cx, cy] = stack[stack.length - 1];
+    const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]].sort(() => rnd() - 0.5);
+    let moved = false;
+    for (const [dx, dy] of dirs) {
+      const nx = cx + dx;
+      const ny = cy + dy;
+      if (nx < 0 || ny < 0 || nx >= cw || ny >= ch) continue;
+      if (seenCell[ny * cw + nx]) continue;
+      seenCell[ny * cw + nx] = 1;
+      fill(grid, w, cx * 2 + 1 + dx, cy * 2 + 1 + dy, cx * 2 + 1 + dx, cy * 2 + 1 + dy, 0);
+      fill(grid, w, nx * 2 + 1, ny * 2 + 1, nx * 2 + 1, ny * 2 + 1, 0);
+      stack.push([nx, ny]);
+      moved = true;
+      break;
+    }
+    if (!moved) stack.pop();
+  }
+
+  // pockets: widen a handful of cells into 3x3 / 4x4 open squares
+  const pockets = [];
+  for (let i = 0; i < 26; i++) {
+    const cx = ri(rnd, 2, cw - 3);
+    const cy = ri(rnd, 2, ch - 3);
+    const size = rnd() < 0.65 ? 3 : 4;
+    const tx = cx * 2;
+    const ty = cy * 2;
+    fill(grid, w, tx - 1, ty - 1, tx + size - 2, ty + size - 2, 0);
+    pockets.push({ x: tx - 1, y: ty - 1, w: size, h: size });
+  }
+
+  const spawnTile = { x: 1, y: 1 };
+  const exitTile = { x: w - 2, y: h - 2 };
+
+  const monsters = [];
+  for (let i = 0; i < 5; i++) {
+    let tx = 0;
+    let ty = 0;
+    for (let tries = 0; tries < 200; tries++) {
+      tx = ri(rnd, 3, w - 4);
+      ty = ri(rnd, 3, h - 4);
+      if (grid[at(w, tx, ty)] === 0 && Math.hypot(tx - spawnTile.x, ty - spawnTile.y) > 18) break;
+    }
+    if (grid[at(w, tx, ty)] === 0) monsters.push({ x: tx, y: ty, type: 'lurker' });
+  }
+
+  return {
+    mapId: 'maze',
+    w,
+    h,
+    tile: TILE,
+    size: { w: w * TILE, h: h * TILE },
+    grid,
+    rooms: pockets,
+    spawn: { x: spawnTile.x * TILE + TILE / 2, y: spawnTile.y * TILE + TILE / 2 },
+    spawnTile,
+    key: null,
+    exit: { x: exitTile.x * TILE + TILE / 2, y: exitTile.y * TILE + TILE / 2 },
+    exitTile,
+    exits: [{ to: 'room', x: 0, y: 0, require: null, color: '127,227,212', silent: true }],
+    absorb: [],
+    monsters,
+    loot: [],
+    seed,
+  };
+}
+
+/** Connectivity audit used by tests + the generator retry loop. */
+function mapConnected(level) {
+  const { grid, w, h, spawnTile } = level;
+  const seen = reachable(grid, w, h, spawnTile.x, spawnTile.y);
+  let open = 0;
+  let ok = 0;
+  for (let i = 0; i < w * h; i++) {
+    if (grid[i] !== 0) continue;
+    open++;
+    if (seen[i]) ok++;
+  }
+  return { ok: open === ok, open, reached: ok };
+}
+
 // ---- src/entities.js ----
 
 function isSolid(grid, w, h, tx, ty) {
@@ -1736,7 +2465,7 @@ class Hunter {
   }
 
   update(dt, game) {
-    const speed = game.hunterSpeed ? game.hunterSpeed() : 126;
+    const speed = this.speedCap || (game.hunterSpeed ? game.hunterSpeed() : 126);
     if (this.pending) {
       this.pending.t -= dt;
       if (this.pending.t <= 0) {
@@ -1755,9 +2484,31 @@ class Hunter {
     if (this.type === 'patroller') return this._patrol(dt, game, speed);
     if (this.type === 'stalker') return this._stalker(dt, game, speed);
     if (this.type === 'butcher') return this._butcher(dt, game, speed);
+    if (this.type === 'lurker') return this._lurk(dt, game, speed);
 
     const arrived = this._walk(dt, game, speed);
     if (arrived && this.state === 'investigate') this.state = 'idle';
+  }
+
+  /** A slow drifter used on the room and maze maps: wanders when it hears nothing. */
+  _lurk(dt, game, speed) {
+    const L = game.level;
+    this.lurkT = (this.lurkT ?? 0) - dt;
+    if (this.lurkT <= 0 && (!this.path || this.path.length === 0)) {
+      this.lurkT = 2.2 + Math.random() * 2.8;
+      const t = L.tile;
+      for (let i = 0; i < 60; i++) {
+        const tx = 1 + Math.floor(Math.random() * (L.w - 2));
+        const ty = 1 + Math.floor(Math.random() * (L.h - 2));
+        if (isSolid(L.grid, L.w, L.h, tx, ty)) continue;
+        this._plan(game, (tx + 0.5) * t, (ty + 0.5) * t);
+        break;
+      }
+    }
+    const moving = speed * (this.moving ? 1 : 0.55);
+    const arrived = this._walk(dt, game, moving);
+    if (arrived) this.state = 'idle';
+    return arrived;
   }
 
   _patrol(dt, game, speed) {
@@ -3184,6 +3935,40 @@ class Renderer {
       ctx.restore();
     }
 
+    // ---- named-map key and doors --------------------------------------------
+    if (vision && game.mapMode) {
+      if (game.mapKey && !game.hasKey) {
+        const k = game.mapKey;
+        const pulse = 0.72 + 0.28 * Math.sin(now * 3.1);
+        ctx.save();
+        ctx.translate(k.x, k.y);
+        ctx.rotate(Math.PI / 4);
+        ctx.strokeStyle = `rgba(${GOLD}, ${0.95 * pulse})`;
+        ctx.lineWidth = 1.8;
+        ctx.strokeRect(-7, -7, 14, 14);
+        ctx.strokeRect(-3.5, -3.5, 7, 7);
+        ctx.restore();
+      }
+      for (const e of game.mapExits || []) {
+        const locked = e.require === 'key' && !game.hasKey;
+        const col = locked ? '255, 110, 110' : e.color;
+        const pulse = 0.6 + 0.4 * Math.sin(now * 2.2);
+        const a = locked ? 0.5 : 0.55 + 0.35 * pulse;
+        ctx.strokeStyle = `rgba(${col}, ${a})`;
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, 13, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, 20, Math.PI * 0.15, Math.PI * 0.85);
+        ctx.stroke();
+        ctx.fillStyle = `rgba(${col}, ${a * 0.7})`;
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, 3.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
     // ---- exit ---------------------------------------------------------------
     if (vision) {
       const eSeen = now - (level.exit.seenAt ?? -99);
@@ -4162,6 +4947,13 @@ class Game {
     this.camY = 0;
     this.chamberIndex = 0;
     this.floorMode = false;
+    this.mapMode = false;
+    this.mapId = 'room';
+    this.mapSeed = 0;
+    this.mapExits = [];
+    this.mapKey = null;
+    this.castleKey = false;
+    this.mapNodes = [];
     this.depth = 1;
     this.runSeed = 0;
     this.hasKey = false;
@@ -4273,6 +5065,7 @@ class Game {
   }
 
   startBest() {
+    if (this.startMap('room', (Math.random() * 1e9) | 0)) return;
     if (this.state !== 'title') return;
     if (this.startRun()) return;
     if (this.startWorld()) return;
@@ -4296,6 +5089,11 @@ class Game {
 
   /** Killing a hunter pays 2 diamonds and 10 gold. 亡命猎屠 multiplies this. */
   killHunter(h) {
+    if (this.mapMode && this.mapId === 'room' && !this.castleKey) {
+      this.castleKey = true;
+      this.flash = 1;
+      this.stepEcho(h.x, h.y, '200, 170, 255', { count: 30, speed: 380, life: 0.7 });
+    }
     const i = this.hunters.indexOf(h);
     if (i < 0) return false;
     this.hunters.splice(i, 1);
@@ -4394,6 +5192,85 @@ class Game {
     this.inv.stones = 0;
     this.refreshStones();
     this.ui.showGame();
+    return true;
+  }
+
+  /** One of the named map nodes from the redesigned world. */
+  startMap(id = 'room', seed = (Math.random() * 1e9) | 0) {
+    const node = mapNode(id) || mapNode('room');
+    const level = node.kind === 'maze' ? buildMazeMap(seed) : buildRoomMap(seed);
+    this.mapMode = true;
+    this.mapId = node.id;
+    this.mapSeed = seed;
+    this.mapNode = node;
+    this.floorMode = false;
+    this.worldMode = false;
+    this.customData = null;
+    this.level = level;
+    this.player = new Player(level.spawn.x, level.spawn.y);
+    this.mapExits = (level.exits || []).map((e) => ({
+      x: e.x * level.tile + level.tile / 2,
+      y: e.y * level.tile + level.tile / 2,
+      to: e.to,
+      require: e.require || null,
+      color: e.color || '140,240,170',
+    }));
+    this.absorbSet = new Set((level.absorb || []).map((a) => `${a.x},${a.y}`));
+    this.mapKey = level.key ? { x: level.key.x * level.tile + level.tile / 2, y: level.key.y * level.tile + level.tile / 2 } : null;
+    this.castleKey = false;
+    this.hasKey = false;
+    this.exitOpen = false;
+    this.echoRequired = false;
+    this.echoHeard = false;
+    this.humT = 99;
+    this.camX = this.player.x;
+    this.camY = this.player.y;
+    this.mapNodes = level.monsters || [];
+    this.hunters = this.mapNodes.map((m) => {
+      const h = new Hunter(m.x * level.tile + level.tile / 2, m.y * level.tile + level.tile / 2, m.type);
+      h.speedCap = m.speed || (node.kind === 'maze' ? 76 : 84);
+      h.state = 'idle';
+      return h;
+    });
+    this.skitters = [];
+    this.shards = [];
+    this.totalShards = 0;
+    this.collected = 0;
+    this.loot = [];
+    this.throws = [];
+    this.pings = [];
+    this.rays = [];
+    this.contacts = [];
+    this.echoRings = [];
+    this.particles = [];
+    this.charges = PING_MAX;
+    this.pingsUsed = 0;
+    this.levelTime = 0;
+    this.activeItem = null;
+    this.state = 'playing';
+    this.ui.showGame();
+    this.ui.updateHUD({ chamber: 0, title: node.name, shards: 0, total: 0, charges: this.charges, listen: false, muted: this.audio.muted, danger: 0, depth: 0, diamonds: this.diamonds, gold: this.gold });
+    return true;
+  }
+
+  /** Step through a map exit (or bounce when the door is locked). */
+  enterMapExit(exit) {
+    if (exit.require === 'key' && !this.hasKey) {
+      this.audio.deny();
+      this.ui.toast('deny');
+      return false;
+    }
+    if (exit.require === 'castle' && !this.castleKey) {
+      this.audio.deny();
+      this.ui.toast('deny');
+      return false;
+    }
+    this.audio.gateOpen();
+    this.flash = 1;
+    const to = exit.to;
+    if (!to || to === this.mapId) return false;
+    if (mapNode(to)) this.startMap(to, this.mapSeed);
+    else this.startFloor(1);
     return true;
   }
 
@@ -4818,6 +5695,11 @@ class Game {
       if (this.state !== 'playing') this.state = 'playing';
       return;
     }
+    if (this.mapMode) {
+      this.startMap(this.mapId, this.mapSeed);
+      if (this.state !== 'playing') this.state = 'playing';
+      return;
+    }
     // Same room, same seed — a retry must not quietly hand you a new map.
     if (this.worldMode) this.startWorld(this.worldSeed ?? 424242);
     else if (this.customData) this.startCustom(this.customData);
@@ -4899,17 +5781,28 @@ class Game {
   handleGlobalKeys() {
     if (this.input.consume('KeyM')) this.toggleMute();
     if (this.input.consume('Tab')) this.ui.toggleInventory(this);
-    for (let i = 0; i < 4; i++) {
-      if (this.input.consume(`Digit${HOTKEY_ORDER[i]}`)) this.useHotkey(i);
-    }
     if (this.input.consume('Backquote')) {
       this.debugMode = !this.debugMode;
+      this.debugInvincible = this.debugMode;
       if (!this.debugMode) this.debugFreeze = false;
       this.ui.toast(this.debugMode ? 'shard' : 'deny');
     }
+    // Debug digits must win over the hotkey row, or 2 would just use slot 2.
+    let debugDigit = false;
+    if (this.debugMode && this.input.consume('Digit2')) {
+      debugDigit = true;
+      const i = (MAP_ORDER.indexOf(this.mapId) + 1) % MAP_ORDER.length;
+      this.startMap(MAP_ORDER[i], (Math.random() * 1e9) | 0);
+    }
     if (this.debugMode && this.input.consume('Digit1')) {
+      debugDigit = true;
       this.debugFreeze = !this.debugFreeze;
       this.ui.toast(this.debugFreeze ? 'deny' : 'shard');
+    }
+    if (!debugDigit) {
+      for (let i = 0; i < 4; i++) {
+        if (this.input.consume(`Digit${HOTKEY_ORDER[i]}`)) this.useHotkey(i);
+      }
     }
     if (this.state === 'edit' && this.input.consume('Escape')) this.closeEditor();
     else if (this.state === 'playing' && this.input.consume('Escape')) this.pause();
@@ -5127,6 +6020,23 @@ class Game {
           this.maybeGuide('throw', '鼠标选择角度以丢出');
         }
       }
+    }
+
+    // map nodes: a key on the floor and doors that lead to another area
+    if (this.mapMode) {
+      if (this.mapKey && !this.hasKey && dist(p.x, p.y, this.mapKey.x, this.mapKey.y) < 24) {
+        this.hasKey = true;
+        this.audio.shard();
+        this.flash = 1;
+        this.shake = Math.max(this.shake, 2);
+        this.stepEcho(p.x, p.y, '255, 205, 110', { count: 28, speed: 360, life: 0.6 });
+      }
+      for (const ex of this.mapExits) {
+        if (dist(p.x, p.y, ex.x, ex.y) < 20) {
+          if (this.enterMapExit(ex)) return;
+        }
+      }
+      if (this.castleKey) this.maybeGuide('castle', '城堡钥匙');
     }
 
     // exit
@@ -5393,6 +6303,12 @@ class Game {
           if (hitX) r.dx *= -1;
           if (hitY) r.dy *= -1;
           if (hitX || hitY) {
+            const ax = Math.floor(r.x / TILE);
+            const ay = Math.floor(r.y / TILE);
+            if (this.mapMode && this.absorbSet && this.absorbSet.has(`${ax},${ay}`)) {
+              r.age = Math.max(r.age, r.life);
+              break;
+            }
             r.bounce++;
             this.contacts.push({ x: r.x, y: r.y, t: this.now, tint: r.tint });
           }
@@ -5720,6 +6636,11 @@ if (freeze !== null) {
 }
 
 // Experimental: walk the single continuous map.
+if (params.has('map')) {
+  const id = params.get('map') || 'room';
+  const seed = Number(params.get('seed')) || ((Math.random() * 1e9) | 0);
+  setTimeout(() => game.startMap(id, seed), 0);
+}
 if (params.has('run')) {
   setTimeout(() => {
     game.startRun(Number(params.get('run')) || 12345);
