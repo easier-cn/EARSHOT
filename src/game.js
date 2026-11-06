@@ -339,7 +339,6 @@ export class Game {
     this.counterUsed = false;
     this.stoneGranted = false;
     this.stoneLevel = 0;
-    this.inv.stones = 0;
     this.refreshStones();
     this.ui.showGame();
     return true;
@@ -449,6 +448,7 @@ export class Game {
       const id = slot.id;
       this.activeItem = this.activeItem === id ? null : id;
       this.audio.click(0.4);
+      if (this.activeItem) this.maybeGuide('throw2', '用鼠标左键瞄准，再点击掷出');
       return;
     }
     this.useItem(slot.id);
@@ -491,9 +491,11 @@ export class Game {
 
   throwStone() {
     const lvl = this.inv.level('stone');
-    if (!lvl || this.inv.stones <= 0) return;
-    this.inv.stones -= 1;
-    this.throwItem(lvl >= CHARMS.stone.sharp ? 'sharpStone' : 'pebbles', { free: true, noise: CHARMS.stone.noise[lvl - 1] });
+    if (!lvl) return;
+    const id = this.inv.count('sharpStone') > 0 ? 'sharpStone' : this.inv.count('pebbles') > 0 ? 'pebbles' : null;
+    if (!id) return;
+    if (!this.inv.consume(id)) return;
+    this.throwItem(id, { free: true, noise: CHARMS.stone.noise[lvl - 1] });
   }
 
   tryPing() {
@@ -720,18 +722,19 @@ export class Game {
   refreshStones() {
     const lvl = this.inv.level('stone');
     if (lvl < 1) return;
+    if (this.stoneGranted && lvl <= this.stoneLevel) return;
     const quota = CHARMS.stone.stones[lvl - 1];
-    if (!this.stoneGranted) {
-      this.stoneGranted = true;
-      this.stoneLevel = lvl;
-      this.inv.stones = quota;
-      return;
-    }
-    if (lvl > this.stoneLevel) {
-      const gain = quota - CHARMS.stone.stones[this.stoneLevel - 1];
-      this.stoneLevel = lvl;
-      this.inv.stones += gain;
-    }
+    const prev = this.stoneGranted ? CHARMS.stone.stones[this.stoneLevel - 1] : 0;
+    this.stoneGranted = true;
+    this.stoneLevel = lvl;
+    const gain = quota - prev;
+    if (gain <= 0) return;
+    // Stones are ordinary items now: they sit in the pack, stack, and can be dragged.
+    this.inv.addItem(lvl >= CHARMS.stone.sharp ? 'sharpStone' : 'pebbles', gain);
+  }
+
+  stoneCount() {
+    return this.inv.count('sharpStone') + this.inv.count('pebbles');
   }
 
   /** Dev/experimental: one continuous map, no chamber select. */
@@ -1155,7 +1158,7 @@ export class Game {
     // pinging
     if (this.input.consume('Mouse0')) {
       if (this.activeItem) this.throwItem(this.activeItem);
-      else if (this.inv.stones > 0) this.throwStone();
+      else if (this.stoneCount() > 0) this.throwStone();
       else this.tryPing();
     }
     if (this.input.consume('Space') || this.input.consume('KeyJ')) this.firePing();
@@ -1236,9 +1239,10 @@ export class Game {
       this.ui.hideTip();
     }
     if (near && this.input.consume('KeyF')) {
+      const amount = near.kind === 'charm' ? 1 : (ITEMS[near.id].count || 1);
       const res = near.kind === 'charm'
         ? this.inv.addCharm(near.id)
-        : (this.inv.addItem(near.id) ? 'added' : 'full');
+        : (this.inv.addItem(near.id, amount) ? 'added' : 'full');
       if (res === 'full' || res === 'max') {
         this.audio.deny();
         this.ui.toast('deny');
@@ -1255,16 +1259,13 @@ export class Game {
         this.ui.hideTip();
         const label = it.kind === 'charm'
           ? `${CHARMS[it.id].name} 护符`
-          : `${ITEMS[it.id].name} ×${it.n || 1}`;
+          : `${ITEMS[it.id].name} ×${amount}`;
         this.ui.feed(`拾取 ${label}`);
         if (!this.seenLoot) {
           this.seenLoot = true;
           this.ui.guide(['按下 Tab 打开背包', '把物品拖到对应位置以完成装配']);
         } else {
           this.maybeGuide('bag', '按下 Tab 键打开背包');
-        }
-        if (it.id === 'stone' || (it.kind === 'item' && ITEMS[it.id] && ITEMS[it.id].kind === 'throw')) {
-          this.maybeGuide('throw', '鼠标选择角度以丢出');
         }
       }
     }
@@ -1369,6 +1370,8 @@ export class Game {
       diamonds: this.diamonds,
       gold: this.gold,
       charms: this.inv.charms.length,
+      hot: this.inv.hot,
+      active: this.activeItem,
     });
     this.homeMarkers = [];
     const homeLvl = this.inv.level('home');

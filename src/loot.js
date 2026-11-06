@@ -123,6 +123,12 @@ export class Inventory {
     return this.charms[i] || null;
   }
 
+  count(id) {
+    let n = 0;
+    for (const s of this.pack) if (s && s.kind === 'item' && s.id === id) n += s.n;
+    return n;
+  }
+
   addItem(id, n = 1) {
     if (!ITEMS[id]) return false;
     for (const slot of this.pack) {

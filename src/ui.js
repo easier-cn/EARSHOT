@@ -113,6 +113,7 @@ export class UI {
           <span class="diamond"></span>
           <span class="shard-bar" id="hud-shards"></span>
         </div>
+        <div class="hud-hot" id="hud-hot"></div>
         <div class="hud-loot" id="hud-loot"></div>
         <div class="hud-charges" id="hud-charges"></div>
         <div class="hud-listen" id="hud-listen">
@@ -141,6 +142,7 @@ export class UI {
     this.hudShards = $('hud-shards');
     this.hudCharges = $('hud-charges');
     this.hudLoot = $('hud-loot');
+    this.hudHot = $('hud-hot');
     this.hudListen = $('hud-listen');
     this.clearStats = $('clear-stats');
     this.victoryStats = $('victory-stats');
@@ -628,7 +630,15 @@ export class UI {
     this.mapSel = null;
   }
 
-  updateHUD({ shards = 0, total = 1, charges = 0, listen = false, danger = 0, depth = 0, diamonds = 0, gold = 0 } = {}) {
+  updateHUD({ shards = 0, total = 1, charges = 0, listen = false, danger = 0, depth = 0, diamonds = 0, gold = 0, hot = null, active = null } = {}) {
+    if (this.hudHot && hot) {
+      this.hudHot.innerHTML = hot.map((s, i) => {
+        if (!s) return `<div class="hud-slot empty"><b>${['1', '3', '4', '5'][i]}</b></div>`;
+        const count = s.kind === 'item' ? s.n : s.lvl;
+        const on = active && active === s.id ? ' on' : '';
+        return `<div class="hud-slot${on}"><b>${['1', '3', '4', '5'][i]}</b>${this.glyph(s.kind, s.id)}<i>${count}</i></div>`;
+      }).join('');
+    }
     if (this.hudLoot) {
       const d = Math.min(8, diamonds);
       let dh = '';

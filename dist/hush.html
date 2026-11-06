@@ -957,6 +957,17 @@ kbd {
 .ms-cell.cur { border-color: rgba(255, 214, 155, 0.55); }
 .ms-hint { margin-top: 12px; font-size: 10px; letter-spacing: 0.18em; color: rgba(200, 226, 222, 0.35); }
 
+/* bound items, top-left under the depth pips */
+.hud-hot { position: absolute; top: 54px; left: 28px; display: flex; gap: 6px; }
+.hud-slot { position: relative; width: 30px; height: 30px; border: 1px solid rgba(234, 247, 244, 0.16); display: grid; place-items: center; }
+.hud-slot b { position: absolute; left: 2px; top: 0; font-size: 8px; font-weight: 400; color: rgba(200, 226, 222, 0.45); }
+.hud-slot svg { width: 17px; height: 17px; }
+.hud-slot i { position: absolute; right: 2px; bottom: 0; font-size: 9px; font-style: normal; color: rgba(255, 214, 155, 0.8); }
+.hud-slot.empty { opacity: 0.35; }
+.hud-slot.on { border-color: rgba(255, 214, 155, 0.75); box-shadow: 0 0 10px rgba(255, 196, 107, 0.25); }
+.hud-slot svg { width: 17px; height: 17px; fill: none; stroke: rgba(226, 244, 240, 0.85); stroke-width: 1.5; stroke-linecap: round; }
+.hud-slot svg * { fill: none; stroke: inherit; stroke-width: inherit; }
+
 </style>
   </head>
   <body>
@@ -3594,6 +3605,12 @@ class Inventory {
     return this.charms[i] || null;
   }
 
+  count(id) {
+    let n = 0;
+    for (const s of this.pack) if (s && s.kind === 'item' && s.id === id) n += s.n;
+    return n;
+  }
+
   addItem(id, n = 1) {
     if (!ITEMS[id]) return false;
     for (const slot of this.pack) {
@@ -4194,7 +4211,7 @@ class Renderer {
     // ---- throwables: aiming fan and flight trails ---------------------------
     if (game.player) {
       const p = game.player;
-      const showAim = !!game.activeItem || (game.inv && game.inv.stones > 0);
+      const showAim = !!game.activeItem || (game.inv && game.stoneCount && game.stoneCount() > 0) || !!(game.inv && (game.inv.count('pebbles') + game.inv.count('sharpStone')) > 0);
       if (showAim) {
         const r = this;
         const ax = game.aimX ?? p.x + Math.cos(p.face || 0) * 160;
@@ -4510,6 +4527,7 @@ class UI {
           <span class="diamond"></span>
           <span class="shard-bar" id="hud-shards"></span>
         </div>
+        <div class="hud-hot" id="hud-hot"></div>
         <div class="hud-loot" id="hud-loot"></div>
         <div class="hud-charges" id="hud-charges"></div>
         <div class="hud-listen" id="hud-listen">
@@ -4538,6 +4556,7 @@ class UI {
     this.hudShards = $('hud-shards');
     this.hudCharges = $('hud-charges');
     this.hudLoot = $('hud-loot');
+    this.hudHot = $('hud-hot');
     this.hudListen = $('hud-listen');
     this.clearStats = $('clear-stats');
     this.victoryStats = $('victory-stats');
@@ -5025,7 +5044,15 @@ class UI {
     this.mapSel = null;
   }
 
-  updateHUD({ shards = 0, total = 1, charges = 0, listen = false, danger = 0, depth = 0, diamonds = 0, gold = 0 } = {}) {
+  updateHUD({ shards = 0, total = 1, charges = 0, listen = false, danger = 0, depth = 0, diamonds = 0, gold = 0, hot = null, active = null } = {}) {
+    if (this.hudHot && hot) {
+      this.hudHot.innerHTML = hot.map((s, i) => {
+        if (!s) return `<div class="hud-slot empty"><b>${['1', '3', '4', '5'][i]}</b></div>`;
+        const count = s.kind === 'item' ? s.n : s.lvl;
+        const on = active && active === s.id ? ' on' : '';
+        return `<div class="hud-slot${on}"><b>${['1', '3', '4', '5'][i]}</b>${this.glyph(s.kind, s.id)}<i>${count}</i></div>`;
+      }).join('');
+    }
     if (this.hudLoot) {
       const d = Math.min(8, diamonds);
       let dh = '';
@@ -5416,7 +5443,6 @@ class Game {
     this.counterUsed = false;
     this.stoneGranted = false;
     this.stoneLevel = 0;
-    this.inv.stones = 0;
     this.refreshStones();
     this.ui.showGame();
     return true;
@@ -5526,6 +5552,7 @@ class Game {
       const id = slot.id;
       this.activeItem = this.activeItem === id ? null : id;
       this.audio.click(0.4);
+      if (this.activeItem) this.maybeGuide('throw2', '用鼠标左键瞄准，再点击掷出');
       return;
     }
     this.useItem(slot.id);
@@ -5568,9 +5595,11 @@ class Game {
 
   throwStone() {
     const lvl = this.inv.level('stone');
-    if (!lvl || this.inv.stones <= 0) return;
-    this.inv.stones -= 1;
-    this.throwItem(lvl >= CHARMS.stone.sharp ? 'sharpStone' : 'pebbles', { free: true, noise: CHARMS.stone.noise[lvl - 1] });
+    if (!lvl) return;
+    const id = this.inv.count('sharpStone') > 0 ? 'sharpStone' : this.inv.count('pebbles') > 0 ? 'pebbles' : null;
+    if (!id) return;
+    if (!this.inv.consume(id)) return;
+    this.throwItem(id, { free: true, noise: CHARMS.stone.noise[lvl - 1] });
   }
 
   tryPing() {
@@ -5797,18 +5826,19 @@ class Game {
   refreshStones() {
     const lvl = this.inv.level('stone');
     if (lvl < 1) return;
+    if (this.stoneGranted && lvl <= this.stoneLevel) return;
     const quota = CHARMS.stone.stones[lvl - 1];
-    if (!this.stoneGranted) {
-      this.stoneGranted = true;
-      this.stoneLevel = lvl;
-      this.inv.stones = quota;
-      return;
-    }
-    if (lvl > this.stoneLevel) {
-      const gain = quota - CHARMS.stone.stones[this.stoneLevel - 1];
-      this.stoneLevel = lvl;
-      this.inv.stones += gain;
-    }
+    const prev = this.stoneGranted ? CHARMS.stone.stones[this.stoneLevel - 1] : 0;
+    this.stoneGranted = true;
+    this.stoneLevel = lvl;
+    const gain = quota - prev;
+    if (gain <= 0) return;
+    // Stones are ordinary items now: they sit in the pack, stack, and can be dragged.
+    this.inv.addItem(lvl >= CHARMS.stone.sharp ? 'sharpStone' : 'pebbles', gain);
+  }
+
+  stoneCount() {
+    return this.inv.count('sharpStone') + this.inv.count('pebbles');
   }
 
   /** Dev/experimental: one continuous map, no chamber select. */
@@ -6232,7 +6262,7 @@ class Game {
     // pinging
     if (this.input.consume('Mouse0')) {
       if (this.activeItem) this.throwItem(this.activeItem);
-      else if (this.inv.stones > 0) this.throwStone();
+      else if (this.stoneCount() > 0) this.throwStone();
       else this.tryPing();
     }
     if (this.input.consume('Space') || this.input.consume('KeyJ')) this.firePing();
@@ -6313,9 +6343,10 @@ class Game {
       this.ui.hideTip();
     }
     if (near && this.input.consume('KeyF')) {
+      const amount = near.kind === 'charm' ? 1 : (ITEMS[near.id].count || 1);
       const res = near.kind === 'charm'
         ? this.inv.addCharm(near.id)
-        : (this.inv.addItem(near.id) ? 'added' : 'full');
+        : (this.inv.addItem(near.id, amount) ? 'added' : 'full');
       if (res === 'full' || res === 'max') {
         this.audio.deny();
         this.ui.toast('deny');
@@ -6332,16 +6363,13 @@ class Game {
         this.ui.hideTip();
         const label = it.kind === 'charm'
           ? `${CHARMS[it.id].name} 护符`
-          : `${ITEMS[it.id].name} ×${it.n || 1}`;
+          : `${ITEMS[it.id].name} ×${amount}`;
         this.ui.feed(`拾取 ${label}`);
         if (!this.seenLoot) {
           this.seenLoot = true;
           this.ui.guide(['按下 Tab 打开背包', '把物品拖到对应位置以完成装配']);
         } else {
           this.maybeGuide('bag', '按下 Tab 键打开背包');
-        }
-        if (it.id === 'stone' || (it.kind === 'item' && ITEMS[it.id] && ITEMS[it.id].kind === 'throw')) {
-          this.maybeGuide('throw', '鼠标选择角度以丢出');
         }
       }
     }
@@ -6446,6 +6474,8 @@ class Game {
       diamonds: this.diamonds,
       gold: this.gold,
       charms: this.inv.charms.length,
+      hot: this.inv.hot,
+      active: this.activeItem,
     });
     this.homeMarkers = [];
     const homeLvl = this.inv.level('home');
