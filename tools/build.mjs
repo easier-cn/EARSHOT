@@ -51,7 +51,7 @@ const styleTag = /<link\s+rel="stylesheet"\s+href="style\.css"\s*\/?>/;
 if (!styleTag.test(html)) throw new Error('style link tag not found');
 html = html.replace(styleTag, () => '<style>\n' + css + '\n</style>');
 
-const scriptTag = /<script\s+type="module"\s+src="src\/main\.js"><\/script>/;
+const scriptTag = /<script\s+type="module"\s+src="src\/main\.js(?:\?[^"]*)?"><\/script>/;
 if (!scriptTag.test(html)) throw new Error('main.js script tag not found');
 const inline = js.replace(/<\/script>/gi, '<\\/script>');
 html = html.replace(scriptTag, () => '<script type="module">\n' + inline + '\n</script>');

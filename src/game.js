@@ -437,9 +437,21 @@ export class Game {
 
   /** 1..4 map to hotkeys left-to-right; throwables arm the left mouse button. */
   useHotkey(i) {
-    const slot = this.inv.hot[i];
+    let slot = this.inv.hot[i];
+    // A hot slot can outlive its pack stack (used up, dropped, map restart).
+    if (slot && slot.kind === 'item' && this.inv.count(slot.id) === 0) {
+      const idx = this.inv.pack.findIndex((s) => s && s.kind === 'item' && s.id === slot.id);
+      if (idx >= 0) {
+        this.inv.hot[i] = this.inv.pack[idx];
+        slot = this.inv.hot[i];
+      } else {
+        this.inv.hot[i] = null;
+        slot = null;
+      }
+    }
     if (!slot) {
       this.audio.deny();
+      this.ui.feed(`${i + 1} 号键是空的`);
       return;
     }
     const def = ITEMS[slot.id];
@@ -451,7 +463,7 @@ export class Game {
       if (this.activeItem) this.maybeGuide('throw2', '用鼠标左键瞄准，再点击掷出');
       return;
     }
-    this.useItem(slot.id);
+    if (!this.useItem(slot.id)) this.ui.feed(`${def.name}：已经没有了`);
   }
 
   useItem(id) {
@@ -468,30 +480,33 @@ export class Game {
       return true;
     };
     if (id === 'vitamin') {
-      if (!take()) return this.audio.deny();
+      if (!take()) { this.audio.deny(); return false; }
       this.speedT = ITEMS.vitamin.dur;
       this.flash = 1;
       this.audio.shard();
       this.ui.feed('维他命：脚下生风');
     } else if (id === 'star') {
-      if (!take()) return this.audio.deny();
+      if (!take()) { this.audio.deny(); return false; }
       this.invulnT = 3;
       this.starKills = 3;
       this.audio.gateOpen();
       this.flash = 1;
       this.ui.feed('无敌星：撞上你的会死');
     } else if (id === 'totem') {
-      if (!take()) return this.audio.deny();
+      if (!take()) { this.audio.deny(); return false; }
       this.stressCharges += 1;
       this.audio.gateOpen();
       this.ui.feed('不死图腾：多一条命');
     } else if (id === 'scanner') {
-      if (!take()) return this.audio.deny();
+      if (!take()) { this.audio.deny(); return false; }
       this.scanT = 6;
       this.audio.gateOpen();
       this.ui.feed('扫描仪：钥匙与门的位置亮了');
       this.audio.ping();
+    } else {
+      return false;
     }
+    return true;
   }
 
   throwStone() {
