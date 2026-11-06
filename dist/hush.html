@@ -968,6 +968,7 @@ kbd {
 .hud-slot.on { border-color: rgba(255, 214, 155, 0.75); box-shadow: 0 0 10px rgba(255, 196, 107, 0.25); }
 .hud-slot svg { width: 17px; height: 17px; fill: none; stroke: rgba(226, 244, 240, 0.85); stroke-width: 1.5; stroke-linecap: round; }
 .hud-slot svg * { fill: none; stroke: inherit; stroke-width: inherit; }
+.hud-name { letter-spacing: 0.3em; font-size: 11px; color: rgba(220, 250, 245, 0.55); margin-right: 12px; }
 
 </style>
   </head>
@@ -5314,7 +5315,14 @@ class UI {
     this.mapSel = null;
   }
 
-  updateHUD({ shards = 0, total = 1, charges = 0, listen = false, danger = 0, depth = 0, diamonds = 0, gold = 0, hot = null, active = null } = {}) {
+  updateHUD({ shards = 0, total = 1, charges = 0, listen = false, danger = 0, depth = 0, diamonds = 0, gold = 0, hot = null, active = null, name = null } = {}) {
+    if (name && this.hudNum && this.hudNum.dataset.mode !== 'name') {
+      this.hudNum.dataset.mode = 'name';
+      this.hudNum.classList.add('hud-name');
+      this.hudNum.textContent = name;
+    } else if (name && this.hudNum) {
+      this.hudNum.textContent = name;
+    }
     if (this.hudHot && hot) {
       this.hudHot.innerHTML = hot.map((s, i) => {
         if (!s) return `<div class="hud-slot empty"><b>${['1', '2', '3', '4'][i]}</b></div>`;
@@ -6021,6 +6029,11 @@ class Game {
       this.invulnT = Math.max(this.invulnT, 0.6);
       return;
     }
+    if (this.stressCharges > 0) {
+      this.stressCharges -= 1;
+      this.enterStress();
+      return;
+    }
     if (this.inv.level('stress') > 0 && !this.stressUsed) {
       this.stressUsed = true;
       this.enterStress();
@@ -6052,13 +6065,23 @@ class Game {
       const forced = !this.rewindUsed;
       this.rewindUsed = true;
       if (forced || Math.random() < chance) {
-        this.startFloor(this.depth);
+        this.reviveHere();
         this.flash = 1;
         this.audio.gateOpen();
+        this.ui.feed('时间逆流：这一击没有发生');
         return;
       }
     }
     this.die();
+  }
+
+  /** Restart the current area (same seed), keeping the inventory. */
+  reviveHere() {
+    if (this.mapMode) return this.startMap(this.mapId, this.mapSeed);
+    if (this.floorMode) return this.startFloor(this.depth);
+    if (this.worldMode) return this.startWorld(this.worldSeed ?? 424242);
+    if (this.customData) return this.startCustom(this.customData);
+    return this.startChamber(this.chamberIndex);
   }
 
   enterStress() {
@@ -6479,6 +6502,7 @@ class Game {
       this.updateParticles(dt);
       this.ui.updateHUD({
         chamber: this.chamberLabel,
+        name: this.mapMode && this.mapNode ? this.mapNode.name : null,
         shards: this.totalShards - this.shards.length,
         total: this.totalShards,
         charges: this.charges,
@@ -6766,6 +6790,7 @@ class Game {
       charms: this.inv.charms.length,
       hot: this.inv.hot,
       active: this.activeItem,
+      name: this.mapMode && this.mapNode ? this.mapNode.name : null,
     });
     this.homeMarkers = [];
     const homeLvl = this.inv.level('home');

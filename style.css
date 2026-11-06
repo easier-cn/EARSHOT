@@ -954,3 +954,4 @@ kbd {
 .hud-slot.on { border-color: rgba(255, 214, 155, 0.75); box-shadow: 0 0 10px rgba(255, 196, 107, 0.25); }
 .hud-slot svg { width: 17px; height: 17px; fill: none; stroke: rgba(226, 244, 240, 0.85); stroke-width: 1.5; stroke-linecap: round; }
 .hud-slot svg * { fill: none; stroke: inherit; stroke-width: inherit; }
+.hud-name { letter-spacing: 0.3em; font-size: 11px; color: rgba(220, 250, 245, 0.55); margin-right: 12px; }

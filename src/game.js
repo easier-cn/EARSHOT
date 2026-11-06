@@ -647,6 +647,11 @@ export class Game {
       this.invulnT = Math.max(this.invulnT, 0.6);
       return;
     }
+    if (this.stressCharges > 0) {
+      this.stressCharges -= 1;
+      this.enterStress();
+      return;
+    }
     if (this.inv.level('stress') > 0 && !this.stressUsed) {
       this.stressUsed = true;
       this.enterStress();
@@ -678,13 +683,23 @@ export class Game {
       const forced = !this.rewindUsed;
       this.rewindUsed = true;
       if (forced || Math.random() < chance) {
-        this.startFloor(this.depth);
+        this.reviveHere();
         this.flash = 1;
         this.audio.gateOpen();
+        this.ui.feed('时间逆流：这一击没有发生');
         return;
       }
     }
     this.die();
+  }
+
+  /** Restart the current area (same seed), keeping the inventory. */
+  reviveHere() {
+    if (this.mapMode) return this.startMap(this.mapId, this.mapSeed);
+    if (this.floorMode) return this.startFloor(this.depth);
+    if (this.worldMode) return this.startWorld(this.worldSeed ?? 424242);
+    if (this.customData) return this.startCustom(this.customData);
+    return this.startChamber(this.chamberIndex);
   }
 
   enterStress() {
@@ -1105,6 +1120,7 @@ export class Game {
       this.updateParticles(dt);
       this.ui.updateHUD({
         chamber: this.chamberLabel,
+        name: this.mapMode && this.mapNode ? this.mapNode.name : null,
         shards: this.totalShards - this.shards.length,
         total: this.totalShards,
         charges: this.charges,
@@ -1392,6 +1408,7 @@ export class Game {
       charms: this.inv.charms.length,
       hot: this.inv.hot,
       active: this.activeItem,
+      name: this.mapMode && this.mapNode ? this.mapNode.name : null,
     });
     this.homeMarkers = [];
     const homeLvl = this.inv.level('home');

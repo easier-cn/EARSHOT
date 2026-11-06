@@ -630,7 +630,14 @@ export class UI {
     this.mapSel = null;
   }
 
-  updateHUD({ shards = 0, total = 1, charges = 0, listen = false, danger = 0, depth = 0, diamonds = 0, gold = 0, hot = null, active = null } = {}) {
+  updateHUD({ shards = 0, total = 1, charges = 0, listen = false, danger = 0, depth = 0, diamonds = 0, gold = 0, hot = null, active = null, name = null } = {}) {
+    if (name && this.hudNum && this.hudNum.dataset.mode !== 'name') {
+      this.hudNum.dataset.mode = 'name';
+      this.hudNum.classList.add('hud-name');
+      this.hudNum.textContent = name;
+    } else if (name && this.hudNum) {
+      this.hudNum.textContent = name;
+    }
     if (this.hudHot && hot) {
       this.hudHot.innerHTML = hot.map((s, i) => {
         if (!s) return `<div class="hud-slot empty"><b>${['1', '2', '3', '4'][i]}</b></div>`;
