@@ -108,6 +108,23 @@ export class Inventory {
     this.stones = 0;
   }
 
+  /** Deep copy, keeping hotkey references pointing at the copied pack. */
+  clone() {
+    const c = new Inventory();
+    const map = new Map();
+    c.pack = this.pack.map((s) => {
+      if (!s) return null;
+      const copy = { ...s };
+      map.set(s, copy);
+      return copy;
+    });
+    c.hot = this.hot.map((h) => (h && map.get(h)) || null);
+    c.charms = this.charms.map((s) => (s ? { ...s } : null));
+    c.work = this.work.map((s) => (s ? { ...s } : null));
+    c.stones = this.stones;
+    return c;
+  }
+
   /** Only equipped charms count. */
   level(id) {
     return this.charms.reduce((sum, c) => sum + (c && c.id === id ? c.lvl : 0), 0);

@@ -214,6 +214,43 @@ export class Game {
     this.state = 'title';
   }
 
+  /** Freeze the state you had the moment you entered this area. */
+  snapshotEntry() {
+    this.entryState = {
+      inv: this.inv.clone(),
+      diamonds: this.diamonds,
+      gold: this.gold,
+      lives: this.lives,
+      stressCharges: this.stressCharges,
+      rewindUsed: this.rewindUsed,
+    };
+  }
+
+  /** Rewind: put you back at the door of this area, same loot on the floor. */
+  restoreEntry() {
+    const snap = this.entryState;
+    this._suppressSnapshot = true;
+    if (this.mapMode) this.startMap(this.mapId, this.mapSeed);
+    else if (this.floorMode) this.startFloor(this.depth);
+    else if (this.worldMode) this.startWorld(this.worldSeed ?? 424242);
+    else if (this.customData) this.startCustom(this.customData);
+    else this.startChamber(this.chamberIndex);
+    if (snap) {
+      this.inv = snap.inv.clone();
+      this.diamonds = snap.diamonds;
+      this.gold = snap.gold;
+      this.lives = snap.lives;
+      this.stressCharges = snap.stressCharges;
+    }
+    this._suppressSnapshot = false;
+    this._entryPending = false;
+    this.rewindUsed = true;
+    this.stressUsed = false;
+    this.counterUsed = false;
+    this.invulnT = Math.max(this.invulnT, 1.2);
+    this.activeItem = null;
+  }
+
   /** A new attempt: nothing you carried survives a death or a manual retry. */
   resetRunState() {
     this.inv = new Inventory();
@@ -282,6 +319,7 @@ export class Game {
   }
 
   startFloor(depth) {
+    this._entryPending = true;
     this.depth = clamp(depth, 1, FLOORS);
     const level = generateFloor(this.runSeed + this.depth * 7919, this.depth - 1);
     this.floorMode = true;
@@ -369,6 +407,7 @@ export class Game {
 
   /** One of the named map nodes from the redesigned world. */
   startMap(id = 'room', seed = (Math.random() * 1e9) | 0) {
+    this._entryPending = true;
     const node = mapNode(id) || mapNode('room');
     const level = node.kind === 'maze' ? buildMazeMap(seed) : buildRoomMap(seed);
     this.mapMode = true;
@@ -717,7 +756,7 @@ export class Game {
       const forced = !this.rewindUsed;
       this.rewindUsed = true;
       if (forced || Math.random() < chance) {
-        this.reviveHere();
+        this.restoreEntry();
         this.flash = 1;
         this.audio.gateOpen();
         this.ui.feed('时间逆流：这一击没有发生');
@@ -808,6 +847,7 @@ export class Game {
 
   /** Dev/experimental: one continuous map, no chamber select. */
   startWorld(seed = 424242) {
+    this._entryPending = true;
     const level = generateWorld(seed);
     if (!level) return false;
     this.worldSeed = seed;
@@ -851,6 +891,7 @@ export class Game {
 
   /** Build mode: play the map the player drew. */
   startCustom(data) {
+    this._entryPending = true;
     this.customData = data;
     this.worldMode = false;
     const w = data.w;
@@ -930,6 +971,7 @@ export class Game {
   }
 
   startChamber(index) {
+    this._entryPending = true;
     this.audio.unlock();
     this.chamberIndex = clamp(index, 0, CHAMBERS.length - 1);
     const cfg = CHAMBERS[this.chamberIndex];
@@ -1149,6 +1191,10 @@ export class Game {
   }
 
   update(dt) {
+    if (this._entryPending && this.player && !this._suppressSnapshot) {
+      this._entryPending = false;
+      this.snapshotEntry();
+    }
     const p = this.player;
     const L = this.level;
     if (this.debugFreeze && this.debugMode) {
