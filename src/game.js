@@ -16,6 +16,7 @@ import { CHARM_TEXT, ITEM_TEXT, charmText } from './desc.js';
 
 const SAVE_KEY = 'hush.save.v1';
 const FLOORS = 5;
+const BUILT_MAPS = new Set(['room', 'maze']);
 const PING_MAX = 3;
 const PING_REGEN = 2.4;
 const PING_SPEED = 720;
@@ -399,6 +400,12 @@ export class Game {
 
   /** Step through a map exit (or bounce when the door is locked). */
   enterMapExit(exit) {
+    // Only the areas that actually have a generator are open; the rest stay sealed.
+    if (!BUILT_MAPS.has(exit.to)) {
+      this.audio.deny();
+      this.ui.toast('deny');
+      return false;
+    }
     if (exit.require === 'key' && !this.hasKey) {
       this.audio.deny();
       this.ui.toast('deny');
