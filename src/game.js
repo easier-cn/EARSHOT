@@ -1008,7 +1008,7 @@ export class Game {
     }
     // Debug digits must win over the hotkey row, or 2 would just use slot 2.
     let debugDigit = false;
-    if (this.input.consume('Digit2') && !this.ui.mapSel) {
+    if (this.debugMode && this.input.consume('Digit2') && !this.ui.mapSel) {
       debugDigit = true;
       this.openMapSelect();
     }
