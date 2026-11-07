@@ -52,6 +52,21 @@ export function angleDelta(a, b) {
   return d;
 }
 
+/**
+ * The world point at the centre of the screen.
+ *
+ * The camera follows the player but stops at the level edges, and a level
+ * smaller than the viewport is simply centred. So near an edge the screen
+ * centre is NOT the player: anything mapping cursor pixels to a world
+ * direction must subtract this point, not the raw camera.
+ */
+export function viewCenter(sizeW, sizeH, camX, camY, vw, vh) {
+  return {
+    x: sizeW <= vw ? sizeW / 2 : clamp(camX || sizeW / 2, vw / 2, sizeW - vw / 2),
+    y: sizeH <= vh ? sizeH / 2 : clamp(camY || sizeH / 2, vh / 2, sizeH - vh / 2),
+  };
+}
+
 export function nowSec() {
   return performance.now() / 1000;
 }

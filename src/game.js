@@ -1,6 +1,6 @@
 import { generateLevel, generateWorld, sectorOf, TILE } from './levelgen.js';
 import { lineOfSight } from './pathfind.js';
-import { clamp, dist, dist2, echoPan } from './util.js';
+import { clamp, dist, dist2, echoPan, viewCenter } from './util.js';
 import { Player, Hunter, Skitter, moveCircle, isSolid } from './entities.js';
 import { Renderer } from './render.js';
 import { Input } from './input.js';
@@ -622,13 +622,22 @@ export class Game {
 
   aimPoint() {
     const r = this.renderer;
+    const p = this.player;
     if (this.msx == null) {
-      const a = this.player.face ?? 0;
-      return { x: this.player.x + Math.cos(a) * 160, y: this.player.y + Math.sin(a) * 160 };
+      const a = p.face ?? 0;
+      return { x: p.x + Math.cos(a) * 160, y: p.y + Math.sin(a) * 160 };
     }
+    // The camera stops at the level edges, so near one the screen centre is
+    // not the player. Aim from the clamped centre the renderer actually uses;
+    // using raw camX made the throw leave along "screen centre -> cursor"
+    // instead of "player -> cursor".
+    const L = this.level;
+    const c = L
+      ? viewCenter(L.size.w, L.size.h, this.camX, this.camY, r.cw / r.scale, r.ch / r.scale)
+      : { x: this.camX, y: this.camY };
     return {
-      x: this.camX + (this.msx - r.cw / 2) / r.scale,
-      y: this.camY + (this.msy - r.ch / 2) / r.scale,
+      x: c.x + (this.msx - r.cw / 2) / r.scale,
+      y: c.y + (this.msy - r.ch / 2) / r.scale,
     };
   }
 

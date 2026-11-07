@@ -1,4 +1,4 @@
-import { clamp, lerp } from './util.js';
+import { clamp, lerp, viewCenter } from './util.js';
 import { lineOfSight } from './pathfind.js';
 
 const WALL_RGB = '150, 238, 226';
@@ -113,12 +113,7 @@ export class Renderer {
 
     const vw = this.cw / this.scale;
     const vh = this.ch / this.scale;
-    const cx = level.size.w <= vw
-      ? level.size.w / 2
-      : clamp(game.camX || level.size.w / 2, vw / 2, level.size.w - vw / 2);
-    const cy = level.size.h <= vh
-      ? level.size.h / 2
-      : clamp(game.camY || level.size.h / 2, vh / 2, level.size.h - vh / 2);
+    const { x: cx, y: cy } = viewCenter(level.size.w, level.size.h, game.camX, game.camY, vw, vh);
 
     ctx.save();
     ctx.translate(this.cw / 2 - cx * this.scale + sx, this.ch / 2 - cy * this.scale + sy);

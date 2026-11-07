@@ -3,6 +3,16 @@
 All notable changes to HUSH. The format follows [Keep a Changelog](https://keepachangelog.com/),
 and the game follows [SemVer](https://semver.org/).
 
+## [0.7.20] - 2026-11-07
+
+### Fixed
+- Throws near a map edge now leave along **player → cursor**. The aim point was
+  built from the raw camera, but the renderer clamps the camera to the level
+  bounds, so with the player pinned against a wall the throw followed
+  "screen centre → cursor" instead (the corner repro was ~158° off). Both sides
+  now share `viewCenter()`, and `tests/aim.test.js` pins the edge and
+  small-level cases.
+
 ## [0.3.7] - 2026-11-05
 
 ### Added

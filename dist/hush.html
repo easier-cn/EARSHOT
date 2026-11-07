@@ -1053,6 +1053,21 @@ function angleDelta(a, b) {
   return d;
 }
 
+/**
+ * The world point at the centre of the screen.
+ *
+ * The camera follows the player but stops at the level edges, and a level
+ * smaller than the viewport is simply centred. So near an edge the screen
+ * centre is NOT the player: anything mapping cursor pixels to a world
+ * direction must subtract this point, not the raw camera.
+ */
+function viewCenter(sizeW, sizeH, camX, camY, vw, vh) {
+  return {
+    x: sizeW <= vw ? sizeW / 2 : clamp(camX || sizeW / 2, vw / 2, sizeW - vw / 2),
+    y: sizeH <= vh ? sizeH / 2 : clamp(camY || sizeH / 2, vh / 2, sizeH - vh / 2),
+  };
+}
+
 function nowSec() {
   return performance.now() / 1000;
 }
@@ -3911,7 +3926,7 @@ const ITEM_GLYPH = {
 // Startup self-check: proves the build the browser actually loaded is intact.
 // This exists because a stale module cache once made bug fixes look absent
 // until Ctrl+F5 — so the boot screen now shows what loaded and what works.
-const VERSION = '0.7.19';
+const VERSION = '0.7.20';
 
 const SCRIPT_VERSION = () => {
   const s = [...document.scripts].map((el) => el.src).find((src) => src.includes('main.js'));
@@ -4150,12 +4165,7 @@ class Renderer {
 
     const vw = this.cw / this.scale;
     const vh = this.ch / this.scale;
-    const cx = level.size.w <= vw
-      ? level.size.w / 2
-      : clamp(game.camX || level.size.w / 2, vw / 2, level.size.w - vw / 2);
-    const cy = level.size.h <= vh
-      ? level.size.h / 2
-      : clamp(game.camY || level.size.h / 2, vh / 2, level.size.h - vh / 2);
+    const { x: cx, y: cy } = viewCenter(level.size.w, level.size.h, game.camX, game.camY, vw, vh);
 
     ctx.save();
     ctx.translate(this.cw / 2 - cx * this.scale + sx, this.ch / 2 - cy * this.scale + sy);
@@ -6214,13 +6224,22 @@ class Game {
 
   aimPoint() {
     const r = this.renderer;
+    const p = this.player;
     if (this.msx == null) {
-      const a = this.player.face ?? 0;
-      return { x: this.player.x + Math.cos(a) * 160, y: this.player.y + Math.sin(a) * 160 };
+      const a = p.face ?? 0;
+      return { x: p.x + Math.cos(a) * 160, y: p.y + Math.sin(a) * 160 };
     }
+    // The camera stops at the level edges, so near one the screen centre is
+    // not the player. Aim from the clamped centre the renderer actually uses;
+    // using raw camX made the throw leave along "screen centre -> cursor"
+    // instead of "player -> cursor".
+    const L = this.level;
+    const c = L
+      ? viewCenter(L.size.w, L.size.h, this.camX, this.camY, r.cw / r.scale, r.ch / r.scale)
+      : { x: this.camX, y: this.camY };
     return {
-      x: this.camX + (this.msx - r.cw / 2) / r.scale,
-      y: this.camY + (this.msy - r.ch / 2) / r.scale,
+      x: c.x + (this.msx - r.cw / 2) / r.scale,
+      y: c.y + (this.msy - r.ch / 2) / r.scale,
     };
   }
 

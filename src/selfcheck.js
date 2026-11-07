@@ -3,7 +3,7 @@
 // until Ctrl+F5 — so the boot screen now shows what loaded and what works.
 import { Inventory } from './loot.js';
 
-export const VERSION = '0.7.19';
+export const VERSION = '0.7.20';
 
 const SCRIPT_VERSION = () => {
   const s = [...document.scripts].map((el) => el.src).find((src) => src.includes('main.js'));
