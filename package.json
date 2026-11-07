@@ -1,6 +1,6 @@
 {
   "name": "hush",
-  "version": "0.7.22",
+  "version": "0.7.23",
   "private": true,
   "type": "module",
   "description": "HUSH — a sonar stealth game played in the dark",

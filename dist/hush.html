@@ -3951,7 +3951,7 @@ const ITEM_GLYPH = {
 // until Ctrl+F5 — so the boot screen now shows what loaded and what works.
 
 
-const VERSION = '0.7.22';
+const VERSION = '0.7.23';
 
 const SCRIPT_VERSION = () => {
   const s = [...document.scripts].map((el) => el.src).find((src) => src.includes('main.js'));
@@ -3998,12 +3998,14 @@ function collectChecks(game) {
   // Consumables are the most bug-prone part of the inventory: every one must
   // consume exactly one unit and have a name/line to show in the tooltip.
   try {
-    const inv = new Inventory();
     let thrown = 0;
     let used = 0;
     for (const [id, def] of Object.entries(ITEMS)) {
       if (!ITEM_TEXT[id]) throw new Error(`${id} 缺少描述`);
-      inv.addItem(id, 2);
+      // A fresh pack per item: eight stacks would overflow the six slots and
+      // the seventh check would fail for the wrong reason.
+      const inv = new Inventory();
+      if (!inv.addItem(id, 2)) throw new Error(`${id} 未能入包`);
       const before = inv.count(id);
       if (before !== 2) throw new Error(`${id} 未能入包`);
       if (!inv.consume(id) || inv.count(id) !== 1) throw new Error(`${id} 消耗异常`);

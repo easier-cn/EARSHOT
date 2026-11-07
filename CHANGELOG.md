@@ -3,6 +3,13 @@
 All notable changes to HUSH. The format follows [Keep a Changelog](https://keepachangelog.com/),
 and the game follows [SemVer](https://semver.org/).
 
+## [0.7.23] - 2026-11-07
+
+### Fixed
+- The self-check's consumable row reused one pack for all eight items; six
+  slots filled up, so the seventh (`bugspray`) failed with "未能入包" and the
+  boot screen showed a false error. Each item now gets a fresh pack.
+
 ## [0.7.22] - 2026-11-07
 
 ### Changed
