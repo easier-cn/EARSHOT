@@ -3911,7 +3911,7 @@ const ITEM_GLYPH = {
 // Startup self-check: proves the build the browser actually loaded is intact.
 // This exists because a stale module cache once made bug fixes look absent
 // until Ctrl+F5 — so the boot screen now shows what loaded and what works.
-const VERSION = '0.7.17';
+const VERSION = '0.7.18';
 
 const SCRIPT_VERSION = () => {
   const s = [...document.scripts].map((el) => el.src).find((src) => src.includes('main.js'));
@@ -7544,6 +7544,7 @@ if (params.has('static')) document.documentElement.classList.add('no-anim');
 const canvas = document.getElementById('game');
 const game = new Game(canvas, document.getElementById('ui'));
 window.__hush = game;
+try { sessionStorage.removeItem('hushReload'); } catch {}
 runSelfCheck(game);
 
 // Chrome can suspend/interrupt the audio context after a reload or device change.
@@ -7700,5 +7701,17 @@ if (doc) {
 }
 
 </script>
+    <script>
+      // If a cached copy of this page ever runs without the game booting, fetch
+      // a fresh document once instead of showing a black screen forever.
+      if (!sessionStorage.getItem('hushReload')) {
+        setTimeout(function () {
+          if (!window.__hush) {
+            sessionStorage.setItem('hushReload', '1');
+            location.replace(location.pathname + '?fresh=' + Date.now());
+          }
+        }, 3200);
+      }
+    </script>
   </body>
 </html>

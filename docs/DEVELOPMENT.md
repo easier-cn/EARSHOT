@@ -1,10 +1,14 @@
 # HUSH 开发交接文档
 
-> 面向"接手的人 / 下一个会话的 AI"。目标：读完这一篇就能跑起来、知道代码在哪、知道哪些坑踩过、下一步做什么。
->
-> 最后更新：v0.7.13（commit `5754f23`）
+> 最后更新：v0.7.18（2026-11-07）
 
----
+## 交接约定（每次改动都必须遵守）
+
+1. **自动更新文档**：任何改动完成后，同一次提交里必须同步更新——`CHANGELOG.md` 增加版本条目、`README.md`（玩法/启动方式有变时）、本文件（目录、踩坑、路线图、当前状态有变时）。不允许“代码先上，文档以后补”。
+2. **版本号三处一致**：`package.json` 的 `version`、`index.html` 里 `src/main.js?v=…`、`src/selfcheck.js` 的 `VERSION`。启动自检会对比脚本参数与代码版本，不一致会标红。
+3. **不要用 `python -m http.server`**：它允许浏览器缓存 ES 模块，会出现“改了没生效 / 只有 Ctrl+F5 才对”的假 bug。用 `play.cmd`（内部 `tools/serve.py`，全部响应 `no-store`）。
+4. **启动带随机参数**：`play.ps1` 打开的是 `…/?launch=<时间戳>`，强制取新文档；`index.html` 还有一层兜底脚本，3.2 秒内没启动游戏就自动 `?fresh=` 重载一次。
+5. **改完跑三件事**：`npm test`、`npm run playtest`、`node tools/build.mjs`（更新 `dist/hush.html`）。
 
 ## 1. 项目是什么
 
@@ -230,6 +234,15 @@ ni/
 - 护符副本漏了 `kind:'charm'` → `ITEM_TEXT[sleep]` 未定义 → 读取 `.name` 崩溃。
 - HUD 的 SVG 图标曾因缺少 `stroke` 规则而完全不可见。
 
+### 启动与缓存（2026-11 新增，**这组坑最坑人**）
+
+- 浏览器会缓存**文档本身**：旧缓存页里没有 `no-store`，普通打开根本不发请求，只有 Ctrl+F5 才更新 → 表现为“第一次打开没自检动画、还有老 bug，硬刷新就正常”。
+  → `play.ps1` 现在打开 `…/?launch=<时间戳>`；`index.html` 另有 3.2 秒兜底自动重载。
+- 模块也会被缓存：`python -m http.server` 不禁止缓存 → 必须用 `tools/serve.py`（全部 `no-store`）。
+- 单线程 `TCPServer` 在浏览器并发加载十几个模块时会拒绝连接（白屏）→ 已改 `ThreadingTCPServer`。
+- 快捷键格只是**指向背包堆叠的引用**：拖上去时如果把整堆搬出背包，第一次按键就会判定“空”并清空引用，整堆丢失。
+  → `place('hot')` 只接受仍在 `pack` 里的对象；`useHotkey` 会把“孤儿堆”放回背包。
+
 ### 环境
 
 - Windows 的 `http.server` 带 SO_REUSEADDR，**端口被占用时 bind 也会成功**，不能用 bind 判断端口是否空闲；要 TCP connect 探测。
@@ -239,11 +252,13 @@ ni/
 
 ## 8. 当前进度与下一步
 
-### 已完成（v0.7.x）
+### 已完成（截至 v0.7.18）
 
 - 两张地图：房间（BSP 多房间 + 内饰 + 钥匙/出口/三扇门）、迷宫（递归回溯 + 口袋）
 - 无字 UI、护符/道具/背包/工作台、投掷与瞄准、区域名、弹幕、引导
 - 地图选择窗、调试冻结/选图、单文件构建修复
+- 消耗品/快捷键契约（投掷=绑定+左键，使用=按键立即生效）、时间逆流快照、死亡重开清空、图腾/复活原地
+- 启动自检 + 不缓存服务器 + 启动 URL 去缓存（见第 7 节）
 
 ### 待做（按优先级）
 
@@ -270,7 +285,7 @@ ni/
 
 - 语义化版本 `v0.x.y`，**每个可见改动都打 tag**，并在 `CHANGELOG.md` 写"改了什么 + 为什么"。
 - 提交信息用 `fix:` / `feat:` / `docs:` / `perf:` 前缀，一句话说清根因（例：`fix: rewind revived into a stale floor`）。
-- 提交前检查：`npm test` 37/37、`playtest` 无异常、`dist` 已重建。
+- 提交前检查：`npm test` 38/38、`playtest` 无异常、`dist` 已重建（`node tools/build.mjs`）。
 - 截图不进仓库（`.gitignore` 忽略 `shots*/`），README 用的图放 `docs/img/`。
 
 ---
@@ -279,9 +294,9 @@ ni/
 
 ```bash
 cd C:\Users\浩\Desktop\ni
-npm test                       # 37 项应全绿
+npm test                       # 38 项应全绿
 node tools/build.mjs           # 重建 dist
-start http://127.0.0.1:8080/   # 或双击 play.cmd
+play.cmd                       # 自动选端口、不缓存、带自检
 ```
 
 想直接看某张图：

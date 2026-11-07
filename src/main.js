@@ -19,6 +19,7 @@ if (params.has('static')) document.documentElement.classList.add('no-anim');
 const canvas = document.getElementById('game');
 const game = new Game(canvas, document.getElementById('ui'));
 window.__hush = game;
+try { sessionStorage.removeItem('hushReload'); } catch {}
 runSelfCheck(game);
 
 // Chrome can suspend/interrupt the audio context after a reload or device change.

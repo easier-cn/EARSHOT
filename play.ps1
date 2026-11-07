@@ -60,13 +60,16 @@ if (-not $port) {
 }
 
 $url = "http://127.0.0.1:$port/"
+# A fresh query string forces a network fetch: an old cached document can
+# otherwise reopen with yesterday's JS and no boot screen (Ctrl+F5 "fixes" it).
+$openUrl = $url + "?launch=" + [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
 
 if ($reused) {
   Write-Host ""
   Write-Host "  HUSH  ->  $url"
   Write-Host "  (an existing HUSH server is already running here)"
   Write-Host ""
-  if (-not $env:HUSH_NO_OPEN) { Start-Process $url }
+  if (-not $env:HUSH_NO_OPEN) { Start-Process $openUrl }
   exit 0
 }
 
@@ -93,7 +96,7 @@ if (-not $py) {
 if (-not $env:HUSH_NO_OPEN) {
   # Open the browser from a detached helper, after the server has had time to bind.
   Start-Process -FilePath 'powershell' -WindowStyle Hidden -ArgumentList @(
-    '-NoProfile', '-Command', "Start-Sleep -Milliseconds 2800; Start-Process '$url'"
+    '-NoProfile', '-Command', "Start-Sleep -Milliseconds 2800; Start-Process '$openUrl'"
   )
 }
 
