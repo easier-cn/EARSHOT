@@ -79,3 +79,16 @@ test('glyphs are all distinct within their family', () => {
   assert.equal(charms.size, Object.keys(CHARM_GLYPH).length);
   assert.equal(items.size, Object.keys(ITEM_GLYPH).length);
 });
+
+test('a hotkey points into the pack instead of taking the stack away', () => {
+  const inv = new Inventory();
+  inv.addItem('pebbles', 3);
+  const idx = inv.pack.findIndex((s) => s && s.id === 'pebbles');
+  assert.equal(inv.bindHot(0, idx), true);
+  assert.equal(inv.count('pebbles'), 3, 'binding must not move the stack out of the pack');
+  assert.equal(inv.consume('pebbles'), true);
+  assert.equal(inv.count('pebbles'), 2);
+  assert.equal(inv.hot[0].n, 2, 'the hotkey sees the same stack');
+  // A stack that is not in the pack must not be adopted, or the first press deletes it.
+  assert.equal(inv.place('hot', 1, { kind: 'item', id: 'vitamin', n: 2 }), false);
+});

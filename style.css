@@ -955,3 +955,25 @@ kbd {
 .hud-slot svg { width: 17px; height: 17px; fill: none; stroke: rgba(226, 244, 240, 0.85); stroke-width: 1.5; stroke-linecap: round; }
 .hud-slot svg * { fill: none; stroke: inherit; stroke-width: inherit; }
 .hud-name { letter-spacing: 0.3em; font-size: 11px; color: rgba(220, 250, 245, 0.55); margin-right: 12px; }
+/* boot self-check */
+#boot { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; background: #040606; transition: opacity .4s; }
+#boot.done { opacity: 0; pointer-events: none; }
+.boot-panel { width: min(460px, 86vw); padding: 30px 32px 26px; border: 1px solid rgba(127, 227, 212, .16); background: rgba(6, 10, 10, .82); }
+.boot-mark { width: 34px; height: 34px; margin: 0 auto 18px; border: 1px solid rgba(127, 227, 212, .55); border-radius: 50%; position: relative; }
+.boot-mark::before, .boot-mark::after { content: ''; position: absolute; inset: -7px; border: 1px solid rgba(127, 227, 212, .22); border-radius: 50%; }
+.boot-mark::after { inset: -14px; opacity: .5; }
+.boot-bar { height: 2px; background: rgba(127, 227, 212, .12); margin: 0 0 18px; overflow: hidden; }
+.boot-bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, rgba(127, 227, 212, .35), #7fe3d4); transition: width .18s linear; }
+.boot-rows { list-style: none; margin: 0; padding: 0; font-size: 12px; letter-spacing: .08em; }
+.boot-rows li { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; color: rgba(210, 236, 233, .55); }
+.boot-rows li b { width: 12px; font-weight: 400; }
+.boot-rows li.ok b { color: #7fe3d4; }
+.boot-rows li.bad { color: #ff6f6f; }
+.boot-rows li.warn { color: rgba(255, 206, 150, .78); }
+.boot-rows li.warn b { color: #ffce96; }
+.boot-rows li em { margin-left: auto; font-style: normal; font-size: 10px; opacity: .55; letter-spacing: .12em; }
+.boot-actions { margin-top: 18px; min-height: 34px; display: flex; align-items: center; justify-content: center; }
+.boot-hint { font-size: 11px; letter-spacing: .18em; color: rgba(210, 236, 233, .4); }
+.boot-retry { background: transparent; color: #ffb0a8; border: 1px solid rgba(255, 120, 110, .45); padding: 9px 16px; font-size: 12px; letter-spacing: .1em; cursor: pointer; }
+.boot-retry:hover { background: rgba(255, 120, 110, .08); }
+#boot.has-errors .boot-bar i { background: #ff6f6f; }

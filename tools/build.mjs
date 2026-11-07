@@ -24,6 +24,7 @@ const MODULES = [
   'src/chambers.js',
   'src/loot.js',
   'src/desc.js',
+  'src/selfcheck.js',
   'src/render.js',
   'src/editor.js',
   'src/ui.js',

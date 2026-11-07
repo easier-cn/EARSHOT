@@ -30,7 +30,10 @@ function Test-Busy([int]$port) {
 function Test-Hush([int]$port) {
   try {
     $r = Invoke-WebRequest -Uri "http://127.0.0.1:$port/" -UseBasicParsing -TimeoutSec 1
-    return ($r.Content -match '<canvas id="game"')
+    # Only reuse a server that sends no-store; an old python -m http.server keeps
+    # yesterday's modules in the browser cache, which looks like "fixes vanished".
+    $cc = [string]$r.Headers['Cache-Control']
+    return ($r.Content -match '<canvas id="game"' -and $cc -match 'no-store')
   } catch {
     return $false
   }
@@ -98,7 +101,7 @@ if (-not $env:HUSH_NO_OPEN) {
 $pidFile = Join-Path $root '.hush.pid'
 Set-Content -Path $pidFile -Value $PID -Encoding ascii
 try {
-  & $py.Source -m http.server $port --bind 127.0.0.1
+  & $py.Source (Join-Path $root 'tools\serve.py') $port $root
 } finally {
   Remove-Item $pidFile -ErrorAction SilentlyContinue
 }

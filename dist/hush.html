@@ -969,6 +969,28 @@ kbd {
 .hud-slot svg { width: 17px; height: 17px; fill: none; stroke: rgba(226, 244, 240, 0.85); stroke-width: 1.5; stroke-linecap: round; }
 .hud-slot svg * { fill: none; stroke: inherit; stroke-width: inherit; }
 .hud-name { letter-spacing: 0.3em; font-size: 11px; color: rgba(220, 250, 245, 0.55); margin-right: 12px; }
+/* boot self-check */
+#boot { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; background: #040606; transition: opacity .4s; }
+#boot.done { opacity: 0; pointer-events: none; }
+.boot-panel { width: min(460px, 86vw); padding: 30px 32px 26px; border: 1px solid rgba(127, 227, 212, .16); background: rgba(6, 10, 10, .82); }
+.boot-mark { width: 34px; height: 34px; margin: 0 auto 18px; border: 1px solid rgba(127, 227, 212, .55); border-radius: 50%; position: relative; }
+.boot-mark::before, .boot-mark::after { content: ''; position: absolute; inset: -7px; border: 1px solid rgba(127, 227, 212, .22); border-radius: 50%; }
+.boot-mark::after { inset: -14px; opacity: .5; }
+.boot-bar { height: 2px; background: rgba(127, 227, 212, .12); margin: 0 0 18px; overflow: hidden; }
+.boot-bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, rgba(127, 227, 212, .35), #7fe3d4); transition: width .18s linear; }
+.boot-rows { list-style: none; margin: 0; padding: 0; font-size: 12px; letter-spacing: .08em; }
+.boot-rows li { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; color: rgba(210, 236, 233, .55); }
+.boot-rows li b { width: 12px; font-weight: 400; }
+.boot-rows li.ok b { color: #7fe3d4; }
+.boot-rows li.bad { color: #ff6f6f; }
+.boot-rows li.warn { color: rgba(255, 206, 150, .78); }
+.boot-rows li.warn b { color: #ffce96; }
+.boot-rows li em { margin-left: auto; font-style: normal; font-size: 10px; opacity: .55; letter-spacing: .12em; }
+.boot-actions { margin-top: 18px; min-height: 34px; display: flex; align-items: center; justify-content: center; }
+.boot-hint { font-size: 11px; letter-spacing: .18em; color: rgba(210, 236, 233, .4); }
+.boot-retry { background: transparent; color: #ffb0a8; border: 1px solid rgba(255, 120, 110, .45); padding: 9px 16px; font-size: 12px; letter-spacing: .1em; cursor: pointer; }
+.boot-retry:hover { background: rgba(255, 120, 110, .08); }
+#boot.has-errors .boot-bar i { background: #ff6f6f; }
 
 </style>
   </head>
@@ -3884,6 +3906,135 @@ const ITEM_GLYPH = {
   bugspray: '<rect x="8" y="9" width="6" height="9" rx="2"/><path d="M11 9V6h3M16 6l3-2"/>',
   scanner: '<rect x="4" y="9" width="16" height="7" rx="2"/><path d="M7 12h6M16 12h1"/>',
 };
+
+// ---- src/selfcheck.js ----
+// Startup self-check: proves the build the browser actually loaded is intact.
+// This exists because a stale module cache once made bug fixes look absent
+// until Ctrl+F5 — so the boot screen now shows what loaded and what works.
+const VERSION = '0.7.17';
+
+const SCRIPT_VERSION = () => {
+  const s = [...document.scripts].map((el) => el.src).find((src) => src.includes('main.js'));
+  if (!s) return null;
+  const m = s.match(/[?&]v=([\w.]+)/);
+  return m ? m[1] : null;
+};
+
+function collectChecks(game) {
+  const rows = [];
+  const add = (name, ok, detail = '') => rows.push({ name, ok, detail });
+
+  add('脚本', typeof window.__hush !== 'undefined' && typeof game?.update === 'function', `v${VERSION}`);
+
+  let rooms = 0;
+  try {
+    const L = game.level;
+    rooms = L?.rooms?.length ?? 0;
+    add('关卡', !!(L && L.grid && L.spawn && L.size), `${L.w}×${L.h}${rooms ? ` · ${rooms} 间` : ''}`);
+  } catch (e) {
+    add('关卡', false, String(e.message || e));
+  }
+
+  try {
+    const inv = new Inventory();
+    inv.addItem('pebbles', 3);
+    const idx = inv.pack.findIndex((s) => s && s.id === 'pebbles');
+    const bound = inv.bindHot(0, idx);
+    const kept = inv.count('pebbles') === 3;
+    const spent = inv.consume('pebbles') && inv.count('pebbles') === 2;
+    const ref = !!(inv.hot[0] && inv.hot[0].n === 2);
+    add('背包与快捷键', bound && kept && spent && ref, kept && ref ? '堆叠留在背包' : '快捷键抢走了整堆');
+  } catch (e) {
+    add('背包与快捷键', false, String(e.message || e));
+  }
+
+  const a = game.audio;
+  const audioState = a && a.ctx ? a.ctx.state : '未初始化';
+  // A suspended context is not a failure: browsers require a gesture first.
+  const audioRow = { name: '音效', ok: audioState === 'running', detail: audioState === 'running' ? '已就绪' : '点击画面启用' };
+  if (audioState !== 'running') audioRow.warn = true;
+  rows.push(audioRow);
+
+  const sv = SCRIPT_VERSION();
+  add('版本', sv === VERSION, sv ? `脚本 ${sv}` : '无版本号');
+  return rows;
+}
+
+function runSelfCheck(game, { onDone } = {}) {
+  const wrap = document.createElement('div');
+  wrap.id = 'boot';
+  wrap.innerHTML = `
+    <div class="boot-panel">
+      <div class="boot-mark"></div>
+      <div class="boot-bar"><i></i></div>
+      <ul class="boot-rows"></ul>
+      <div class="boot-actions"></div>
+    </div>`;
+  document.body.appendChild(wrap);
+
+  const bar = wrap.querySelector('.boot-bar i');
+  const list = wrap.querySelector('.boot-rows');
+  const actions = wrap.querySelector('.boot-actions');
+
+  const rows = [];
+  const paint = () => {
+    list.innerHTML = rows
+      .map(
+        (r) =>
+          `<li class="${r.warn ? 'warn' : r.ok ? 'ok' : 'bad'}"><b>${r.warn ? '·' : r.ok ? '✓' : '×'}</b><span>${r.name}</span><em>${r.detail || ''}</em></li>`
+      )
+      .join('');
+  };
+
+  const steps = [
+    ['脚本', 0.25],
+    ['关卡', 0.2],
+    ['背包与快捷键', 0.25],
+    ['音效', 0.15],
+    ['版本', 0.15],
+  ];
+
+  let p = 0;
+  let i = 0;
+  const tick = () => {
+    if (i < steps.length) {
+      const [name] = steps[i];
+      const all = collectChecks(game);
+      const row = all.find((r) => r.name === name);
+      if (row) rows.push(row);
+      p += steps[i][1];
+      bar.style.width = `${Math.round(p * 100)}%`;
+      paint();
+      i++;
+      setTimeout(tick, 130);
+      return;
+    }
+
+    // Final verdict on the complete set, so nothing is judged out of order.
+    rows.length = 0;
+    rows.push(...collectChecks(game));
+    paint();
+    const bad = rows.filter((r) => !r.ok && r.name !== '音效');
+
+    if (bad.length) {
+      actions.innerHTML = '<button class="boot-retry">重新载入（跳过缓存）</button>';
+      actions.querySelector('.boot-retry').onclick = () => {
+        location.replace(`${location.pathname}?fresh=${Date.now()}`);
+      };
+      wrap.classList.add('has-errors');
+    } else {
+      actions.innerHTML = '<span class="boot-hint">点击画面启用音效</span>';
+      setTimeout(() => {
+        wrap.classList.add('done');
+        setTimeout(() => wrap.remove(), 420);
+      }, 420);
+    }
+    onDone?.(rows);
+  };
+
+  tick();
+  return wrap;
+}
 
 // ---- src/render.js ----
 
@@ -7393,6 +7544,7 @@ if (params.has('static')) document.documentElement.classList.add('no-anim');
 const canvas = document.getElementById('game');
 const game = new Game(canvas, document.getElementById('ui'));
 window.__hush = game;
+runSelfCheck(game);
 
 // Chrome can suspend/interrupt the audio context after a reload or device change.
 const resumeAudio = () => {

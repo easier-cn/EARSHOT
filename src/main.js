@@ -1,4 +1,5 @@
 import { Game } from './game.js';
+import { runSelfCheck } from './selfcheck.js';
 
 // Surface any runtime error instead of failing to a black screen.
 window.addEventListener('error', (e) => {
@@ -18,6 +19,7 @@ if (params.has('static')) document.documentElement.classList.add('no-anim');
 const canvas = document.getElementById('game');
 const game = new Game(canvas, document.getElementById('ui'));
 window.__hush = game;
+runSelfCheck(game);
 
 // Chrome can suspend/interrupt the audio context after a reload or device change.
 const resumeAudio = () => {
