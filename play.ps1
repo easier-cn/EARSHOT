@@ -69,7 +69,7 @@ if ($reused) {
 
 Write-Host ""
 Write-Host "  HUSH  ->  $url"
-Write-Host "  (close this window to stop the server)"
+Write-Host "  (close this window, or run stop.cmd, to stop the server)"
 Write-Host ""
 
 $py = Get-Command python -ErrorAction SilentlyContinue
@@ -94,4 +94,11 @@ if (-not $env:HUSH_NO_OPEN) {
   )
 }
 
-& $py.Source -m http.server $port --bind 127.0.0.1
+# Remember who is serving, so stop.ps1 can clean up after the tab is closed.
+$pidFile = Join-Path $root '.hush.pid'
+Set-Content -Path $pidFile -Value $PID -Encoding ascii
+try {
+  & $py.Source -m http.server $port --bind 127.0.0.1
+} finally {
+  Remove-Item $pidFile -ErrorAction SilentlyContinue
+}
