@@ -3951,7 +3951,7 @@ const ITEM_GLYPH = {
 // until Ctrl+F5 — so the boot screen now shows what loaded and what works.
 
 
-const VERSION = '0.7.21';
+const VERSION = '0.7.22';
 
 const SCRIPT_VERSION = () => {
   const s = [...document.scripts].map((el) => el.src).find((src) => src.includes('main.js'));
@@ -4396,6 +4396,18 @@ class Renderer {
         ctx.beginPath();
         ctx.arc(e.x, e.y, 3.2, 0, Math.PI * 2);
         ctx.fill();
+
+        // A portal should name its destination before you step in. The font is
+        // divided by the zoom so the label stays readable at every scale.
+        const dest = mapNode(e.to);
+        const suffix = !e.built ? '·未开通' : locked ? '·需钥匙' : '';
+        const near = game.player ? Math.hypot(game.player.x - e.x, game.player.y - e.y) : 999;
+        ctx.save();
+        ctx.font = `${Math.round(11 / this.scale)}px ui-monospace, monospace`;
+        ctx.textAlign = 'center';
+        ctx.fillStyle = `rgba(${col}, ${near < 170 ? 0.9 : 0.4})`;
+        ctx.fillText(`${dest ? dest.name : '未知'}${suffix}`, e.x, e.y - 30);
+        ctx.restore();
       }
     }
 
@@ -6105,6 +6117,7 @@ class Game {
       to: e.to,
       require: e.require || null,
       color: e.color || '140,240,170',
+      built: BUILT_MAPS.has(e.to),
     }));
     this.absorbSet = new Set((level.absorb || []).map((a) => `${a.x},${a.y}`));
     // worldgen already hands back pixel coordinates for key/spawn/exit.
@@ -6176,6 +6189,114 @@ class Game {
     if (mapNode(to)) this.startMap(to, this.mapSeed);
     else this.startFloor(1);
     return true;
+  }
+
+  /** Nearest thing the player can press F on: loot, key, portal or stair. */
+  interactAt() {
+    const p = this.player;
+    let best = null;
+    const take = (kind, ref, x, y, r) => {
+      const d = dist(p.x, p.y, x, y);
+      if (d > r) return;
+      if (!best || d < best.d) best = { kind, ref, x, y, d };
+    };
+    for (const it of this.loot) if (it.kind) take('loot', it, it.x, it.y, 46);
+    if (this.mapMode) {
+      if (this.mapKey && !this.hasKey) take('key', this.mapKey, this.mapKey.x, this.mapKey.y, 42);
+      for (const e of this.mapExits) take('exit', e, e.x, e.y, 50);
+    } else if (this.level && this.level.exit) {
+      const e = this.level.exit;
+      take('stair', e, e.x, e.y, 50);
+    }
+    return best;
+  }
+
+  /** One floating prompt for whatever F would do right now. */
+  showInteractTip(near) {
+    const r = this.renderer;
+    const vw = r.cw / r.scale;
+    const vh = r.ch / r.scale;
+    const c = this.level
+      ? viewCenter(this.level.size.w, this.level.size.h, this.camX, this.camY, vw, vh)
+      : { x: this.camX, y: this.camY };
+    const sx = r.cw / 2 + (near.x - c.x) * r.scale;
+    const sy = r.ch / 2 + (near.y - c.y) * r.scale;
+    let title = '';
+    let body = '';
+    if (near.kind === 'loot') {
+      const it = near.ref;
+      const txt = it.kind === 'charm' ? CHARM_TEXT[it.id] : ITEM_TEXT[it.id];
+      title = txt.name;
+      body = `${it.kind === 'charm' ? charmText(it.id, 1) : txt.line}\n\n[ F ] 拾取`;
+    } else if (near.kind === 'key') {
+      title = '地图钥匙';
+      body = '按 [ F ] 拾取。\n取得之后，上锁的门才会回应你。';
+    } else if (near.kind === 'exit') {
+      const ex = near.ref;
+      const dest = mapNode(ex.to);
+      title = `传送门 · ${dest ? dest.name : '未知区域'}`;
+      if (!BUILT_MAPS.has(ex.to)) body = '此路尚未开通。';
+      else if (ex.require === 'key' && !this.hasKey) body = '需要地图钥匙。';
+      else if (ex.require === 'castle' && !this.castleKey) body = '需要城堡钥匙。';
+      else body = `按 [ F ] 前往「${dest.name}」。`;
+      if (dest && dest.sub && BUILT_MAPS.has(ex.to)) body += `\n${dest.sub}`;
+    } else {
+      title = '出口';
+      body = this.exitOpen ? '按 [ F ] 下行。' : `还需 ${this.shards.length} 块碎片。`;
+    }
+    this.ui.showTip(title, body, sx + 18, sy - 34);
+  }
+
+  /** Run the F action. Returns true when the scene changed. */
+  doInteract(near) {
+    if (near.kind === 'loot') { this.takeLoot(near.ref); return false; }
+    if (near.kind === 'key') {
+      this.hasKey = true;
+      this.audio.shard();
+      this.flash = 1;
+      this.shake = Math.max(this.shake, 2);
+      this.stepEcho(this.player.x, this.player.y, '255, 205, 110', { count: 28, speed: 360, life: 0.6 });
+      this.ui.feed('取得地图钥匙');
+      this.ui.hideTip();
+      return false;
+    }
+    if (near.kind === 'exit') { this.ui.hideTip(); return this.enterMapExit(near.ref); }
+    if (this.exitOpen) { this.complete(); return true; }
+    this.audio.deny();
+    this.ui.toast('deny');
+    return false;
+  }
+
+  /** Move one loot spot into the pack; shared by the F prompt. */
+  takeLoot(it) {
+    const amount = it.kind === 'charm' ? 1 : (ITEMS[it.id].count || 1);
+    const res = it.kind === 'charm'
+      ? this.inv.addCharm(it.id)
+      : (this.inv.addItem(it.id, amount) ? 'added' : 'full');
+    if (res === 'full' || res === 'max') {
+      this.audio.deny();
+      this.ui.toast('deny');
+      this.ui.guide('背包已满：按 Tab 打开背包，把物品拖到外面即可丢弃');
+      return;
+    }
+    this.loot.splice(this.loot.indexOf(it), 1);
+    this.audio.shard();
+    this.flash = 1;
+    this.refreshStones();
+    this.ui.toast('shard');
+    this.stepEcho(this.player.x, this.player.y, '255, 205, 110', { count: 26, speed: 360, life: 0.6 });
+    this.nearLoot = null;
+    this.ui.hideTip();
+    const label = it.kind === 'charm'
+      ? `${CHARMS[it.id].name} 护符`
+      : `${ITEMS[it.id].name} ×${amount}`;
+    this.ui.feed(`拾取 ${label}`);
+    if (!this.seenLoot) {
+      this.seenLoot = true;
+      this.ui.guide(['按下 Tab 打开背包', '把物品拖到对应位置以完成装配']);
+    } else {
+      this.maybeGuide('bag', '按下 Tab 键打开背包');
+    }
   }
 
   /** 1..4 map to hotkeys left-to-right; throwables arm the left mouse button. */
@@ -7162,85 +7283,15 @@ class Game {
     for (const it of this.loot) {
       if (!it.kind && dist2(p.x, p.y, it.x, it.y) < LOOT_REVEAL * LOOT_REVEAL) this.revealLoot(it);
     }
-    let near = null;
-    let nd = 46 * 46;
-    for (const it of this.loot) {
-      const d = dist2(p.x, p.y, it.x, it.y);
-      if (d < nd) { nd = d; near = it; }
-    }
-    this.nearLoot = near;
-    if (near) {
-      const txt = near.kind === 'charm' ? CHARM_TEXT[near.id] : ITEM_TEXT[near.id];
-      const r = this.renderer;
-      const sx = r.cw / 2 + (near.x - this.camX) * r.scale;
-      const sy = r.ch / 2 + (near.y - this.camY) * r.scale - 26;
-      this.ui.showTip(txt.name, `${near.kind === 'charm' ? charmText(near.id, 1) : txt.line}
 
-[ F ] 拾取`, sx + 18, sy - 30);
-    } else {
-      this.ui.hideTip();
-    }
+    // Everything you can touch answers to F: walk close, read the prompt, press it.
+    const near = this.interactAt();
+    this.nearLoot = near && near.kind === 'loot' ? near.ref : null;
+    if (near) this.showInteractTip(near);
+    else this.ui.hideTip();
     if (near && this.input.consume('KeyF')) {
-      const amount = near.kind === 'charm' ? 1 : (ITEMS[near.id].count || 1);
-      const res = near.kind === 'charm'
-        ? this.inv.addCharm(near.id)
-        : (this.inv.addItem(near.id, amount) ? 'added' : 'full');
-      if (res === 'full' || res === 'max') {
-        this.audio.deny();
-        this.ui.toast('deny');
-        this.ui.guide('背包已满：按 Tab 打开背包，把物品拖到外面即可丢弃');
-      } else {
-        const it = near;
-        this.loot.splice(this.loot.indexOf(it), 1);
-        this.audio.shard();
-        this.flash = 1;
-        this.refreshStones();
-        this.ui.toast('shard');
-        this.stepEcho(p.x, p.y, '255, 205, 110', { count: 26, speed: 360, life: 0.6 });
-        this.nearLoot = null;
-        this.ui.hideTip();
-        const label = it.kind === 'charm'
-          ? `${CHARMS[it.id].name} 护符`
-          : `${ITEMS[it.id].name} ×${amount}`;
-        this.ui.feed(`拾取 ${label}`);
-        if (!this.seenLoot) {
-          this.seenLoot = true;
-          this.ui.guide(['按下 Tab 打开背包', '把物品拖到对应位置以完成装配']);
-        } else {
-          this.maybeGuide('bag', '按下 Tab 键打开背包');
-        }
-      }
+      if (this.doInteract(near)) return;
     }
-
-    // map nodes: a key on the floor and doors that lead to another area
-    if (this.mapMode) {
-      if (this.mapKey && !this.hasKey && dist(p.x, p.y, this.mapKey.x, this.mapKey.y) < 24) {
-        this.hasKey = true;
-        this.audio.shard();
-        this.flash = 1;
-        this.shake = Math.max(this.shake, 2);
-        this.stepEcho(p.x, p.y, '255, 205, 110', { count: 28, speed: 360, life: 0.6 });
-      }
-      for (const ex of this.mapExits) {
-        if (dist(p.x, p.y, ex.x, ex.y) < 20) {
-          if (this.enterMapExit(ex)) return;
-        }
-      }
-      if (this.castleKey) this.maybeGuide('castle', '城堡钥匙');
-    }
-
-    // exit
-    if (this.exitOpen && dist(p.x, p.y, L.exit.x, L.exit.y) < 30) {
-      this.complete();
-      return;
-    } else if (!this.exitOpen && dist(p.x, p.y, L.exit.x, L.exit.y) < 34) {
-      if (this.denyCooldown <= 0) {
-        this.audio.deny();
-        if (this.shards.length > 0) this.ui.toast('deny');
-        this.denyCooldown = 2.2;
-      }
-    }
-    this.denyCooldown -= dt;
     this.alertCd -= dt;
 
     // skitters: deaf, fast, silent until they are close. No sound can warn

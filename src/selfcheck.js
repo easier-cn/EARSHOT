@@ -4,7 +4,7 @@
 import { Inventory, ITEMS } from './loot.js';
 import { ITEM_TEXT } from './desc.js';
 
-export const VERSION = '0.7.21';
+export const VERSION = '0.7.22';
 
 const SCRIPT_VERSION = () => {
   const s = [...document.scripts].map((el) => el.src).find((src) => src.includes('main.js'));

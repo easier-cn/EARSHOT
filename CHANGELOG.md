@@ -3,6 +3,24 @@
 All notable changes to HUSH. The format follows [Keep a Changelog](https://keepachangelog.com/),
 and the game follows [SemVer](https://semver.org/).
 
+## [0.7.22] - 2026-11-07
+
+### Changed
+- Every ground interaction now goes through `F`: loot, the map key, map
+  portals and the floor stair. Walking onto a key or a portal no longer does
+  anything on its own, so passing by cannot drag you into another map.
+- A portal now names its destination in the world (`迷宫`, `房间`…), dimmed
+  while far and bright up close, with `·需钥匙` or `·未开通` when it will not
+  open. The floating prompt repeats the destination and what F will do.
+- The interaction prompt is positioned with the same clamped `viewCenter()`
+  the camera and aiming use, so near a level edge it no longer drifts.
+- The floor stair asks for `F` as well and shows the remaining shard count
+  inside its prompt instead of denying on contact.
+
+### Fixed
+- Portal destination labels divide their font size by the zoom, so they stay
+  the same size on screen at every camera scale.
+
 ## [0.7.21] - 2026-11-07
 
 ### Changed

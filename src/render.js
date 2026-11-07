@@ -1,5 +1,6 @@
 import { clamp, lerp, viewCenter } from './util.js';
 import { lineOfSight } from './pathfind.js';
+import { mapNode } from './maps.js';
 
 const WALL_RGB = '150, 238, 226';
 const GLOW_RGB = '80, 210, 198';
@@ -279,6 +280,18 @@ export class Renderer {
         ctx.beginPath();
         ctx.arc(e.x, e.y, 3.2, 0, Math.PI * 2);
         ctx.fill();
+
+        // A portal should name its destination before you step in. The font is
+        // divided by the zoom so the label stays readable at every scale.
+        const dest = mapNode(e.to);
+        const suffix = !e.built ? '·未开通' : locked ? '·需钥匙' : '';
+        const near = game.player ? Math.hypot(game.player.x - e.x, game.player.y - e.y) : 999;
+        ctx.save();
+        ctx.font = `${Math.round(11 / this.scale)}px ui-monospace, monospace`;
+        ctx.textAlign = 'center';
+        ctx.fillStyle = `rgba(${col}, ${near < 170 ? 0.9 : 0.4})`;
+        ctx.fillText(`${dest ? dest.name : '未知'}${suffix}`, e.x, e.y - 30);
+        ctx.restore();
       }
     }
 
