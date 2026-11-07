@@ -8,7 +8,7 @@
 //
 // Everything works on whole tiles; the game converts to pixels with TILE.
 
-import { mulberry32 } from './util.js';
+import { mulberry32, shuffle } from './util.js';
 
 export const TILE = 32;
 
@@ -309,9 +309,10 @@ export function buildRoomMap(seed) {
   }
 
   const monsters = [];
-  const far = boxes
-    .filter((b) => Math.hypot(centerOf(b).x - spawnC.x, centerOf(b).y - spawnC.y) > 12)
-    .sort(() => rnd() - 0.5);
+  const far = shuffle(
+    boxes.filter((b) => Math.hypot(centerOf(b).x - spawnC.x, centerOf(b).y - spawnC.y) > 12),
+    rnd,
+  );
   for (const b of far) {
     if (monsters.length >= 9) break;
     const c = centerOf(b);
@@ -356,6 +357,116 @@ export function buildRoomMap(seed) {
 // ---------------------------------------------------------------- maze map --
 
 /**
+ * Loot for the maze: 8-10 spots strung along the walk from spawn to exit
+ * instead of dropped into a handful of pockets. A spot may stand in the
+ * middle of a one-tile corridor — that is a normal place to notice something.
+ * What actually sits there is rolled only when the player gets close
+ * (Game.revealLoot), so this function only picks the places.
+ */
+function mazeLoot(rnd, grid, w, h, spawnTile, exitTile, monsters) {
+  const open = (x, y) => x >= 0 && y >= 0 && x < w && y < h && grid[y * w + x] === 0;
+  const seen = reachable(grid, w, h, spawnTile.x, spawnTile.y);
+
+  // Walk depth from spawn. Bands of depth keep the spots following the route
+  // rather than clustering in whichever pocket happens to be widest.
+  const dist = new Int32Array(w * h).fill(-1);
+  dist[spawnTile.y * w + spawnTile.x] = 0;
+  const queue = [spawnTile.x, spawnTile.y];
+  let depth = 0;
+  while (queue.length) {
+    const y = queue.pop();
+    const x = queue.pop();
+    const d = dist[y * w + x];
+    if (d > depth) depth = d;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (!open(nx, ny)) continue;
+      const i = ny * w + nx;
+      if (dist[i] >= 0) continue;
+      dist[i] = d + 1;
+      queue.push(nx, ny);
+    }
+  }
+
+  // A corridor tile has at most two open neighbours (a straight run or a
+  // bend); a pocket centre has three or four.
+  const corridor = (x, y) => {
+    let n = 0;
+    if (open(x + 1, y)) n++;
+    if (open(x - 1, y)) n++;
+    if (open(x, y + 1)) n++;
+    if (open(x, y - 1)) n++;
+    return n <= 2;
+  };
+
+  const blocked = new Set((monsters || []).map((m) => m.y * w + m.x));
+  const usable = (i) => seen[i] && dist[i] >= 5 && !blocked.has(i);
+  const farFrom = (p, q, r) => Math.hypot(p.x - q.x, p.y - q.y) >= r;
+  const spots = [];
+  const taken = new Set();
+
+  const tryPlace = (i, minGap) => {
+    if (!usable(i) || taken.has(i)) return null;
+    const x = i % w;
+    const y = (i / w) | 0;
+    if (x === exitTile.x && y === exitTile.y) return null;
+    const p = { x, y };
+    if (!farFrom(p, spawnTile, 5) || !farFrom(p, exitTile, 4)) return null;
+    if (spots.some((s) => !farFrom(p, s, minGap))) return null;
+    taken.add(i);
+    spots.push(p);
+    return p;
+  };
+
+  const target = ri(rnd, 8, 10);
+  const CORRIDOR_MIN = 3;
+  let corridors = 0;
+
+  // 1. One spot per depth band, preferring a corridor tile most of the time
+  //    so "in the middle of the path" is the common case, not the exception.
+  //    The first few bands insist on corridors until the minimum is met.
+  for (let band = 0; band < target; band++) {
+    const lo = Math.max(2, Math.floor((depth * band) / target));
+    const hi = Math.max(lo, Math.floor((depth * (band + 1)) / target));
+    const pool = [];
+    for (let i = 0; i < w * h; i++) {
+      if (usable(i) && dist[i] >= lo && dist[i] <= hi) pool.push(i);
+    }
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = (rnd() * (i + 1)) | 0;
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    const wantCorridor = corridors < CORRIDOR_MIN || rnd() < 0.6;
+    // Stable sort keeps the shuffled order inside each group.
+    pool.sort((a, b) => Number(corridor(a % w, (a / w) | 0) !== wantCorridor) - Number(corridor(b % w, (b / w) | 0) !== wantCorridor));
+    for (const i of pool) {
+      const p = tryPlace(i, 5);
+      if (!p) continue;
+      if (corridor(p.x, p.y)) corridors++;
+      break;
+    }
+  }
+
+  // 2. Bands are a guide, not a quota: widen the net until the promised
+  //    8-10 spots stand. Spacing tightens a little to make room.
+  if (spots.length < target) {
+    const rest = [];
+    for (let i = 0; i < w * h; i++) if (usable(i) && !taken.has(i)) rest.push(i);
+    for (let i = rest.length - 1; i > 0; i--) {
+      const j = (rnd() * (i + 1)) | 0;
+      [rest[i], rest[j]] = [rest[j], rest[i]];
+    }
+    for (const i of rest) {
+      if (spots.length >= target) break;
+      tryPlace(i, 3);
+    }
+  }
+
+  return spots;
+}
+
+/**
  * Narrow maze: one-tile corridors, occasional 3x3 / 4x4 pockets so it never
  * dead-ends into a single blocked tile. Exit sits diagonally opposite spawn.
  */
@@ -374,7 +485,7 @@ export function buildMazeMap(seed) {
   fill(grid, w, 1, 1, 1, 1, 0);
   while (stack.length) {
     const [cx, cy] = stack[stack.length - 1];
-    const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]].sort(() => rnd() - 0.5);
+    const dirs = shuffle([[1, 0], [-1, 0], [0, 1], [0, -1]], rnd);
     let moved = false;
     for (const [dx, dy] of dirs) {
       const nx = cx + dx;
@@ -434,7 +545,7 @@ export function buildMazeMap(seed) {
     exits: [{ to: 'room', x: 0, y: 0, require: null, color: '127,227,212', silent: true }],
     absorb: [],
     monsters,
-    loot: [],
+    loot: mazeLoot(rnd, grid, w, h, spawnTile, exitTile, monsters),
     seed,
   };
 }

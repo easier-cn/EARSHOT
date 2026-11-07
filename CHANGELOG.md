@@ -3,6 +3,32 @@
 All notable changes to HUSH. The format follows [Keep a Changelog](https://keepachangelog.com/),
 and the game follows [SemVer](https://semver.org/).
 
+## [0.7.24] - 2026-11-07
+
+### Added
+- The maze now holds 8-10 loot spots; before it had none (`loot: []`), so the
+  whole area after the first door was empty. Spots are placed by walking depth
+  from spawn — one per band of the route — and a corridor tile is preferred,
+  so finding something in the middle of a one-tile path is the normal case,
+  not a pocket special. At least three spots always sit in a corridor, spots
+  keep a 5-tile gap (3 during the fill pass), never crowd the spawn or the
+  exit, and never share a tile with a lurker. What a spot is stays unknown
+  until the player comes close, as in every other area.
+
+### Tests
+- `tests/worldgen.test.js` pins the count, the corridor share, the depth
+  spread, the spacing and the wall/safety exclusions over 60 seeds, plus
+  determinism for one seed.
+
+### Fixed
+- Same seed now always grows the same maze. The generator shuffled carve
+  directions with `sort(() => rnd() - 0.5)` — a comparator that ignores the
+  values it compares. Node happened to sort consistently, but Edge could
+  return a different maze and loot for the same seed between calls (and the
+  comparator call count itself drifted after JIT warm-up). Both places now use
+  the Fisher–Yates `shuffle()` from util.js, which also covers the room map's
+  monster order.
+
 ## [0.7.23] - 2026-11-07
 
 ### Fixed
