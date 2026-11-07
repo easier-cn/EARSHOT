@@ -3,6 +3,15 @@
 All notable changes to HUSH. The format follows [Keep a Changelog](https://keepachangelog.com/),
 and the game follows [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+- Moving-maze task spec revised to **v3** after the design pass: flip cadence goes
+  back to **20 s**, every command now flips **exactly 5 of the 9 blocks** (no
+  second probability roll), the **permanent red seam** between blocks of different
+  layers is restored, and every block now holds **one hunter (18 total)**.
+  See `PROMPT-moving-maze.md`.
+
 ## [0.7.24] - 2026-11-07
 
 ### Added
