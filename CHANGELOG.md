@@ -3,6 +3,41 @@
 All notable changes to HUSH. The format follows [Keep a Changelog](https://keepachangelog.com/),
 and the game follows [SemVer](https://semver.org/).
 
+## [0.7.21] - 2026-11-07
+
+### Changed
+- Loot no longer picks its identity when the level is generated: a spot stays
+  unknown until the player comes within 190px, then rolls charm/item (and the
+  id). 绝地求生 only appears once both 应激反应 and 反击时刻 are owned, so a
+  dead roll can no longer be handed out before it is earned. Unknown spots
+  render as a faint neutral ring.
+- 无敌星 now kills on contact for its full three seconds. `hurt()` checked
+  invulnerability first, so the star's own protection blocked its kills; the
+  check order is now star → invulnerability → other shields.
+- 同类的尸骸 lies where it lands and emits a flesh-coloured sonar ring every
+  0.9s (three times a player ping's reach) for five seconds. A hunter it
+  touches is locked onto it, and that lock outranks later player pings until
+  the hunter arrives or the body expires.
+- 老旧的驱虫器 flies at 200px/s and hisses a dark-green line every 0.22s until
+  it hits a wall (or its 4.2s life runs out). Hunters the line touches flee
+  from its origin for one second; a newer line overrides the previous one.
+- 扫描仪 now draws the shortest walkable route to the key and every exit,
+  following the same pathfinder the hunters use, and refreshes it while held.
+- Every hunter death, whatever caused it, answers with exactly one purple ring
+  (the old castle-key death had its own purple line plus an amber one).
+
+### Added
+- The startup self-check now runs as a real loading bar (percentage, stage
+  label, rows revealed in order) and checks consumables: each of the eight
+  items must go into the pack, consume exactly one unit, and have a tooltip
+  line. Audio now verifies all 20 synth voices exist.
+
+### Fixed
+- `Hunter._plan` passed pixel coordinates to `nearestOpen()` (tiles), so a
+  sound inside a wall made the pathfinder return null and crashed on `open.x`.
+- Bug-spray flight no longer stops on contact: it passes through hunters and
+  only the wall ends it.
+
 ## [0.7.20] - 2026-11-07
 
 ### Fixed

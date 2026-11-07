@@ -299,8 +299,6 @@ function buildFloor(seed, depth) {
   // Loot: every branch end, the room the exit leaves from, and the room just
   // before the key.
   const loot = [];
-  const charmIds = ['sleep', 'stress', 'survive', 'stone', 'counter', 'sneakSonar', 'swift', 'home', 'rewind', 'hunt'];
-  const itemIds = ['pebbles', 'sharpStone', 'vitamin', 'totem', 'star', 'corpse', 'bugspray', 'scanner'];
   const spots = [];
   for (const r of rooms) if (r.kind === 'branch' || r.kind === 'exit') spots.push(center(r));
   const mainRooms = rooms.filter((r) => r.kind !== 'branch' && r.kind !== 'exit');
@@ -309,9 +307,8 @@ function buildFloor(seed, depth) {
   if (beforeKey) spots.push(center(beforeKey));
   if (exitMother) spots.push(center(exitMother));
   for (let i = 0; i < spots.length; i++) {
-    const charm = i % 3 !== 2;
-    const id = charm ? charmIds[Math.floor(rnd() * charmIds.length)] : itemIds[Math.floor(rnd() * itemIds.length)];
-    loot.push({ x: spots[i].x, y: spots[i].y, kind: charm ? 'charm' : 'item', id });
+    // Identity is rolled only when the player comes close (Game.revealLoot).
+    loot.push({ x: spots[i].x, y: spots[i].y });
   }
 
   return {

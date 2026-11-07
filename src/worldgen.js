@@ -285,8 +285,8 @@ export function buildRoomMap(seed) {
   });
 
   // --- 4. props and enemies -------------------------------------------------
-  const CHARM_IDS = ['sleep', 'stress', 'survive', 'stone', 'counter', 'sneakSonar', 'swift', 'home', 'rewind', 'hunt'];
-  const ITEM_IDS = ['pebbles', 'sharpStone', 'vitamin', 'totem', 'star', 'corpse', 'bugspray', 'scanner'];
+  // What sits at a spot is rolled when the player first comes near it
+  // (see Game.revealLoot), so no id is chosen here.
   const loot = [];
   const taken = new Set();
   const spotIn = (box) => {
@@ -304,10 +304,8 @@ export function buildRoomMap(seed) {
     if (rnd() > 0.42) continue;
     const p = spotIn(b);
     if (!p) continue;
-    const charm = rnd() < 0.55;
-    loot.push(charm
-      ? { kind: 'charm', id: CHARM_IDS[ri(rnd, 0, CHARM_IDS.length - 1)], x: p.x, y: p.y }
-      : { kind: 'item', id: ITEM_IDS[ri(rnd, 0, ITEM_IDS.length - 1)], x: p.x, y: p.y });
+    // Identity is deferred to pickup range; a spot is just a place for now.
+    loot.push({ x: p.x, y: p.y });
   }
 
   const monsters = [];

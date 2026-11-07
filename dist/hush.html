@@ -976,8 +976,10 @@ kbd {
 .boot-mark { width: 34px; height: 34px; margin: 0 auto 18px; border: 1px solid rgba(127, 227, 212, .55); border-radius: 50%; position: relative; }
 .boot-mark::before, .boot-mark::after { content: ''; position: absolute; inset: -7px; border: 1px solid rgba(127, 227, 212, .22); border-radius: 50%; }
 .boot-mark::after { inset: -14px; opacity: .5; }
-.boot-bar { height: 2px; background: rgba(127, 227, 212, .12); margin: 0 0 18px; overflow: hidden; }
-.boot-bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, rgba(127, 227, 212, .35), #7fe3d4); transition: width .18s linear; }
+.boot-head { display: flex; align-items: baseline; justify-content: space-between; margin: 0 0 8px; font-size: 10px; letter-spacing: .22em; color: rgba(210, 236, 233, .5); }
+.boot-pct { color: #7fe3d4; font-variant-numeric: tabular-nums; }
+.boot-bar { height: 3px; background: rgba(127, 227, 212, .12); margin: 0 0 18px; overflow: hidden; }
+.boot-bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, rgba(127, 227, 212, .35), #7fe3d4); box-shadow: 0 0 12px rgba(127, 227, 212, .45); transition: width .22s ease-out; }
 .boot-rows { list-style: none; margin: 0; padding: 0; font-size: 12px; letter-spacing: .08em; }
 .boot-rows li { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; color: rgba(210, 236, 233, .55); }
 .boot-rows li b { width: 12px; font-weight: 400; }
@@ -1893,8 +1895,6 @@ function buildFloor(seed, depth) {
   // Loot: every branch end, the room the exit leaves from, and the room just
   // before the key.
   const loot = [];
-  const charmIds = ['sleep', 'stress', 'survive', 'stone', 'counter', 'sneakSonar', 'swift', 'home', 'rewind', 'hunt'];
-  const itemIds = ['pebbles', 'sharpStone', 'vitamin', 'totem', 'star', 'corpse', 'bugspray', 'scanner'];
   const spots = [];
   for (const r of rooms) if (r.kind === 'branch' || r.kind === 'exit') spots.push(center(r));
   const mainRooms = rooms.filter((r) => r.kind !== 'branch' && r.kind !== 'exit');
@@ -1903,9 +1903,8 @@ function buildFloor(seed, depth) {
   if (beforeKey) spots.push(center(beforeKey));
   if (exitMother) spots.push(center(exitMother));
   for (let i = 0; i < spots.length; i++) {
-    const charm = i % 3 !== 2;
-    const id = charm ? charmIds[Math.floor(rnd() * charmIds.length)] : itemIds[Math.floor(rnd() * itemIds.length)];
-    loot.push({ x: spots[i].x, y: spots[i].y, kind: charm ? 'charm' : 'item', id });
+    // Identity is rolled only when the player comes close (Game.revealLoot).
+    loot.push({ x: spots[i].x, y: spots[i].y });
   }
 
   return {
@@ -2285,8 +2284,8 @@ function buildRoomMap(seed) {
   });
 
   // --- 4. props and enemies -------------------------------------------------
-  const CHARM_IDS = ['sleep', 'stress', 'survive', 'stone', 'counter', 'sneakSonar', 'swift', 'home', 'rewind', 'hunt'];
-  const ITEM_IDS = ['pebbles', 'sharpStone', 'vitamin', 'totem', 'star', 'corpse', 'bugspray', 'scanner'];
+  // What sits at a spot is rolled when the player first comes near it
+  // (see Game.revealLoot), so no id is chosen here.
   const loot = [];
   const taken = new Set();
   const spotIn = (box) => {
@@ -2304,10 +2303,8 @@ function buildRoomMap(seed) {
     if (rnd() > 0.42) continue;
     const p = spotIn(b);
     if (!p) continue;
-    const charm = rnd() < 0.55;
-    loot.push(charm
-      ? { kind: 'charm', id: CHARM_IDS[ri(rnd, 0, CHARM_IDS.length - 1)], x: p.x, y: p.y }
-      : { kind: 'item', id: ITEM_IDS[ri(rnd, 0, ITEM_IDS.length - 1)], x: p.x, y: p.y });
+    // Identity is deferred to pickup range; a spot is just a place for now.
+    loot.push({ x: p.x, y: p.y });
   }
 
   const monsters = [];
@@ -2585,6 +2582,13 @@ class Hunter {
     this.path = [];
     this.searchT = 0;
     this.pending = null;
+    // A corpse's lure owns this body until it arrives; a bugspray's line
+    // repels it for one second. Neither may be overwritten by the player's
+    // own sonar (the whole point of the corpse).
+    this.lureLock = null;
+    this.repelT = 0;
+    this.repelFrom = null;
+    this.repelTag = -1;
     this.lastTag = -1;
     this.face = Math.random() * Math.PI * 2;
     this.speed = 0;
@@ -2607,6 +2611,8 @@ class Hunter {
   }
 
   hear(x, y, delay = 0.25) {
+    // A lure (corpse) or a repulsion (bugspray) is already in charge.
+    if (this.lureLock || this.repelT > 0) return;
     this.pending = { x, y, t: delay };
   }
 
@@ -2624,9 +2630,10 @@ class Hunter {
     let tx = Math.floor(x / L.tile);
     let ty = Math.floor(y / L.tile);
     if (isSolid(L.grid, L.w, L.h, tx, ty)) {
-      const open = nearestOpen(L.grid, L.w, L.h, tx * L.tile, ty * L.tile);
-      tx = Math.floor(open.x / L.tile);
-      ty = Math.floor(open.y / L.tile);
+      const open = nearestOpen(L.grid, L.w, L.h, tx, ty);
+      if (!open) return false;
+      tx = open.x;
+      ty = open.y;
     }
     const path = findPath(L.grid, L.w, L.h, sx, sy, tx, ty);
     if (path && path.length) {
@@ -2692,6 +2699,22 @@ class Hunter {
           if (this.state !== 'windup' && this.state !== 'charge') this.state = 'chase';
         } else if (this.type === 'hunter') this.state = 'investigate';
       }
+    }
+
+    // Bugspray: keep fleeing the newest line for a second.
+    if (this.repelT > 0) {
+      this.repelT -= dt;
+      if (this.repelT <= 0) {
+        this.repelT = 0;
+        this.repelFrom = null;
+      } else if (!this.path || this.path.length === 0) {
+        const a = Math.atan2(this.y - this.repelFrom.y, this.x - this.repelFrom.x) || 0;
+        this._plan(game, this.repelFrom.x + Math.cos(a) * 340, this.repelFrom.y + Math.sin(a) * 340);
+      }
+    }
+    // The corpse keeps a body until it physically reaches it.
+    if (this.lureLock && (!this.path || this.path.length === 0)) {
+      if (Math.hypot(this.x - this.lureLock.x, this.y - this.lureLock.y) < 30) this.lureLock = null;
     }
 
     if (this.type === 'patroller') return this._patrol(dt, game, speed);
@@ -3926,7 +3949,9 @@ const ITEM_GLYPH = {
 // Startup self-check: proves the build the browser actually loaded is intact.
 // This exists because a stale module cache once made bug fixes look absent
 // until Ctrl+F5 — so the boot screen now shows what loaded and what works.
-const VERSION = '0.7.20';
+
+
+const VERSION = '0.7.21';
 
 const SCRIPT_VERSION = () => {
   const s = [...document.scripts].map((el) => el.src).find((src) => src.includes('main.js'));
@@ -3935,9 +3960,16 @@ const SCRIPT_VERSION = () => {
   return m ? m[1] : null;
 };
 
+/** The engine synthesises everything, so "loaded" means every voice exists. */
+const AUDIO_VOICES = [
+  'tone', 'noise', 'setSector', 'ping', 'echo', 'skitterTick', 'gateHum',
+  'deny', 'alert', 'footstep', 'hunterStep', 'shard', 'shardEcho', 'gateOpen',
+  'heartbeat', 'death', 'clear', 'click', 'update', 'setMuted',
+];
+
 function collectChecks(game) {
   const rows = [];
-  const add = (name, ok, detail = '') => rows.push({ name, ok, detail });
+  const add = (name, ok, detail = '', warn = false) => rows.push({ name, ok, detail, warn });
 
   add('脚本', typeof window.__hush !== 'undefined' && typeof game?.update === 'function', `v${VERSION}`);
 
@@ -3963,12 +3995,37 @@ function collectChecks(game) {
     add('背包与快捷键', false, String(e.message || e));
   }
 
-  const a = game.audio;
+  // Consumables are the most bug-prone part of the inventory: every one must
+  // consume exactly one unit and have a name/line to show in the tooltip.
+  try {
+    const inv = new Inventory();
+    let thrown = 0;
+    let used = 0;
+    for (const [id, def] of Object.entries(ITEMS)) {
+      if (!ITEM_TEXT[id]) throw new Error(`${id} 缺少描述`);
+      inv.addItem(id, 2);
+      const before = inv.count(id);
+      if (before !== 2) throw new Error(`${id} 未能入包`);
+      if (!inv.consume(id) || inv.count(id) !== 1) throw new Error(`${id} 消耗异常`);
+      if (def.kind === 'throw') thrown++;
+      else used++;
+    }
+    add('消耗品', true, `${thrown} 投掷 · ${used} 使用`);
+  } catch (e) {
+    add('消耗品', false, String(e.message || e));
+  }
+
+  const a = game?.audio;
+  const missing = AUDIO_VOICES.filter((m) => typeof a?.[m] !== 'function');
   const audioState = a && a.ctx ? a.ctx.state : '未初始化';
-  // A suspended context is not a failure: browsers require a gesture first.
-  const audioRow = { name: '音效', ok: audioState === 'running', detail: audioState === 'running' ? '已就绪' : '点击画面启用' };
-  if (audioState !== 'running') audioRow.warn = true;
-  rows.push(audioRow);
+  if (missing.length) {
+    add('音效', false, `缺少 ${missing.length} 个音色`);
+  } else if (audioState === 'running') {
+    add('音效', true, `已就绪 · ${AUDIO_VOICES.length} 音色`);
+  } else {
+    // A suspended context is not a failure: browsers require a gesture first.
+    add('音效', false, audioState === '未初始化' ? '等待启动' : '点击画面启用', true);
+  }
 
   const sv = SCRIPT_VERSION();
   add('版本', sv === VERSION, sv ? `脚本 ${sv}` : '无版本号');
@@ -3981,6 +4038,7 @@ function runSelfCheck(game, { onDone } = {}) {
   wrap.innerHTML = `
     <div class="boot-panel">
       <div class="boot-mark"></div>
+      <div class="boot-head"><span class="boot-stage">载入声呐</span><span class="boot-pct">0%</span></div>
       <div class="boot-bar"><i></i></div>
       <ul class="boot-rows"></ul>
       <div class="boot-actions"></div>
@@ -3988,9 +4046,12 @@ function runSelfCheck(game, { onDone } = {}) {
   document.body.appendChild(wrap);
 
   const bar = wrap.querySelector('.boot-bar i');
+  const pct = wrap.querySelector('.boot-pct');
+  const stage = wrap.querySelector('.boot-stage');
   const list = wrap.querySelector('.boot-rows');
   const actions = wrap.querySelector('.boot-actions');
 
+  const all = collectChecks(game);
   const rows = [];
   const paint = () => {
     list.innerHTML = rows
@@ -4001,35 +4062,39 @@ function runSelfCheck(game, { onDone } = {}) {
       .join('');
   };
 
+  // One row per stage, with a cumulative weight: the bar only ever moves
+  // forward, the way a loading bar is supposed to.
   const steps = [
-    ['脚本', 0.25],
-    ['关卡', 0.2],
-    ['背包与快捷键', 0.25],
-    ['音效', 0.15],
-    ['版本', 0.15],
+    ['脚本', '载入模块', 0.14],
+    ['关卡', '构筑关卡', 0.3],
+    ['背包与快捷键', '校验背包', 0.52],
+    ['消耗品', '检查消耗品', 0.72],
+    ['音效', '载入音效', 0.9],
+    ['版本', '核对版本', 1],
   ];
 
-  let p = 0;
   let i = 0;
   const tick = () => {
     if (i < steps.length) {
-      const [name] = steps[i];
-      const all = collectChecks(game);
+      const [name, label, at] = steps[i];
       const row = all.find((r) => r.name === name);
       if (row) rows.push(row);
-      p += steps[i][1];
-      bar.style.width = `${Math.round(p * 100)}%`;
+      stage.textContent = label;
+      const p = Math.round(at * 100);
+      bar.style.width = `${p}%`;
+      pct.textContent = `${p}%`;
       paint();
       i++;
-      setTimeout(tick, 130);
+      setTimeout(tick, 150);
       return;
     }
 
-    // Final verdict on the complete set, so nothing is judged out of order.
     rows.length = 0;
-    rows.push(...collectChecks(game));
+    rows.push(...all);
     paint();
-    const bad = rows.filter((r) => !r.ok && r.name !== '音效');
+    stage.textContent = '完成';
+    const bad = all.filter((r) => !r.ok && !r.warn);
+    const warn = all.filter((r) => r.warn);
 
     if (bad.length) {
       actions.innerHTML = '<button class="boot-retry">重新载入（跳过缓存）</button>';
@@ -4038,11 +4103,11 @@ function runSelfCheck(game, { onDone } = {}) {
       };
       wrap.classList.add('has-errors');
     } else {
-      actions.innerHTML = '<span class="boot-hint">点击画面启用音效</span>';
+      actions.innerHTML = `<span class="boot-hint">${warn.length ? '点击画面启用音效' : '按任意键开始'}</span>`;
       setTimeout(() => {
         wrap.classList.add('done');
         setTimeout(() => wrap.remove(), 420);
-      }, 420);
+      }, 460);
     }
     onDone?.(rows);
   };
@@ -4263,17 +4328,19 @@ class Renderer {
 
     // ---- shards -------------------------------------------------------------
     for (const l of game.loot || []) {
+      // Until the player is close, a spot is only a faint, colourless echo.
+      const unknown = !l.kind;
       const k = Math.max(0, 1 - (now - (l.seenAt ?? -9)) / 2.2);
-      const glow = Math.max(0.16, k);
-      const col = l.kind === 'charm' ? '170,225,255' : '255,205,110';
+      const glow = unknown ? 0.09 + 0.03 * Math.sin(now * 1.5 + l.x * 0.01) : Math.max(0.16, k);
+      const col = unknown ? '170, 220, 210' : l.kind === 'charm' ? '170,225,255' : '255,205,110';
       ctx.strokeStyle = `rgba(${col}, ${glow * 0.8})`;
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.arc(l.x, l.y, 5.5, 0, Math.PI * 2);
+      ctx.arc(l.x, l.y, unknown ? 3.4 : 5.5, 0, Math.PI * 2);
       ctx.stroke();
       ctx.fillStyle = `rgba(${col}, ${glow * 0.55})`;
       ctx.beginPath();
-      ctx.arc(l.x, l.y, 1.6, 0, Math.PI * 2);
+      ctx.arc(l.x, l.y, unknown ? 1 : 1.6, 0, Math.PI * 2);
       ctx.fill();
     }
     for (const sh of game.shards) {
@@ -4336,6 +4403,20 @@ class Renderer {
     if (vision) {
       const eSeen = now - (level.exit.seenAt ?? -99);
       if (game.scanT > 0 && game.level) {
+        // The route is a real path around walls, drawn only while it lasts.
+        for (const rt of game.scanRoutes || []) {
+          if (!rt.pts || rt.pts.length < 2) continue;
+          ctx.save();
+          ctx.setLineDash([6, 6]);
+          ctx.lineDashOffset = -now * 16;
+          ctx.strokeStyle = `rgba(${rt.col}, 0.62)`;
+          ctx.lineWidth = 1.6;
+          ctx.beginPath();
+          ctx.moveTo(rt.pts[0].x, rt.pts[0].y);
+          for (let i = 1; i < rt.pts.length; i++) ctx.lineTo(rt.pts[i].x, rt.pts[i].y);
+          ctx.stroke();
+          ctx.restore();
+        }
         const pulse = 0.5 + 0.5 * Math.sin(now * 4);
         const marks = [];
         if (game.mapMode) {
@@ -4440,34 +4521,25 @@ class Renderer {
         ctx.stroke();
         ctx.restore();
       }
-      // lingering scent / gas clouds
-      for (const rp of game.repels || []) {
-        const k = Math.max(0, Math.min(1, rp.t / 4.5));
-        const g = ctx.createRadialGradient(rp.x, rp.y, 8, rp.x, rp.y, 330);
-        g.addColorStop(0, `rgba(160, 240, 180, ${0.26 * k})`);
-        g.addColorStop(0.55, `rgba(130, 225, 160, ${0.12 * k})`);
-        g.addColorStop(1, 'rgba(120, 220, 150, 0)');
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.arc(rp.x, rp.y, 330, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = `rgba(160, 240, 180, ${0.3 * k})`;
-        ctx.lineWidth = 1;
-        ctx.setLineDash([3, 9]);
-        ctx.beginPath();
-        ctx.arc(rp.x, rp.y, 330, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
+      // a corpse keeps calling: the long rings are its rays, this marks the body
       for (const lu of game.lures || []) {
         const k = Math.max(0, Math.min(1, lu.t / 5));
-        ctx.strokeStyle = `rgba(255, 150, 120, ${0.20 * k})`;
-        ctx.lineWidth = 1.2;
-        ctx.setLineDash([2, 7]);
+        const pulse = 0.6 + 0.4 * Math.sin(now * 2.2);
+        ctx.strokeStyle = `rgba(232, 178, 148, ${0.34 * k * pulse})`;
+        ctx.lineWidth = 1.4;
         ctx.beginPath();
-        ctx.arc(lu.x, lu.y, 120, 0, Math.PI * 2);
+        ctx.arc(lu.x, lu.y, 9, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([2, 8]);
+        ctx.strokeStyle = `rgba(232, 178, 148, ${0.18 * k})`;
+        ctx.beginPath();
+        ctx.arc(lu.x, lu.y, 34 + pulse * 4, 0, Math.PI * 2);
         ctx.stroke();
         ctx.setLineDash([]);
+        ctx.fillStyle = `rgba(232, 178, 148, ${0.5 * k})`;
+        ctx.beginPath();
+        ctx.arc(lu.x, lu.y, 2.2, 0, Math.PI * 2);
+        ctx.fill();
       }
       for (const t of game.throws || []) {
         if (!t.trail || t.trail.length < 2) continue;
@@ -5635,6 +5707,15 @@ const RAY_SPEED = 560;
 const RAY_LIFE = 0.95;
 const START_CHARGES = 3;
 
+/** A corpse's ring is three times as long as a sonar ping (720 * 0.9). */
+const LURE_SPEED = 600;
+const LURE_LIFE = 3.24;
+const LURE_T = 5;
+/** Loot identity is rolled only once the player is this close. */
+const LOOT_REVEAL = 190;
+const LOOT_CHARMS = ['sleep', 'stress', 'survive', 'stone', 'counter', 'sneakSonar', 'swift', 'home', 'rewind', 'hunt'];
+const LOOT_ITEMS = ['pebbles', 'sharpStone', 'vitamin', 'totem', 'star', 'corpse', 'bugspray', 'scanner'];
+
 function makeDust(level, count = 130) {
   const dust = [];
   const rng = Math.random;
@@ -5716,7 +5797,7 @@ class Game {
     this.speedMul = 1;
     this.invulnT = 0;
     this.stressCharges = 0;
-    this.starKills = 0;
+    this.starT = 0;
     this.counterReady = false;
     this.rewindUsed = false;
     this.denyCooldown = 0;
@@ -5728,8 +5809,9 @@ class Game {
     this.aimX = null;
     this.aimY = null;
     this.lures = [];
-    this.repels = [];
     this.scanT = 0;
+    this.scanRoutes = [];
+    this.scanTick = 0;
     canvas.addEventListener('mousemove', (e) => {
       const r = canvas.getBoundingClientRect();
       this.msx = e.clientX - r.left;
@@ -5861,12 +5943,12 @@ class Game {
     this.activeItem = null;
     this.throws = [];
     this.lures = [];
-    this.repels = [];
     this.stressCharges = 0;
-    this.starKills = 0;
+    this.starT = 0;
     this.invulnT = 0;
     this.speedT = 0;
     this.scanT = 0;
+    this.scanRoutes = [];
     this.listenT = 0;
     this.stressUsed = false;
     this.counterUsed = false;
@@ -5904,7 +5986,6 @@ class Game {
     if (this.mapMode && this.mapId === 'room' && !this.castleKey) {
       this.castleKey = true;
       this.flash = 1;
-      this.stepEcho(h.x, h.y, '200, 170, 255', { count: 30, speed: 380, life: 0.7 });
     }
     const i = this.hunters.indexOf(h);
     if (i < 0) return false;
@@ -5916,7 +5997,8 @@ class Game {
     this.flash = 1;
     this.shake = Math.max(this.shake, 5);
     this.audio.shard();
-    this.stepEcho(h.x, h.y, '255, 200, 120', { count: 40, speed: 420, life: 0.8 });
+    // Every death, however it was caused, answers once in purple.
+    this.stepEcho(h.x, h.y, '190, 130, 255', { count: 40, speed: 420, life: 0.8 });
     return true;
   }
 
@@ -5956,13 +6038,9 @@ class Game {
     }
     this.skitters = [];
     this.shards = [{ x: level.key.x, y: level.key.y, key: true, id: 0 }];
-    this.loot = (level.loot || []).map((l) => {
-      // 绝地求生 only exists for builds that can already cheat death.
-      if (l.id === 'survive' && !this.inv.level('stress') && !this.inv.level('counter')) {
-        return { ...l, id: 'stone', seenAt: -9 };
-      }
-      return { ...l, seenAt: -9 };
-    });
+    // Identity is rolled when the player gets close (see revealLoot); until
+    // then a spot is only a faint mark.
+    this.loot = (level.loot || []).map((l) => ({ ...l, seenAt: -9 }));
     this.totalShards = 1;
     this.pings = [];
     this.rays = [];
@@ -5997,7 +6075,7 @@ class Game {
     this.speedMul = 1;
     this.invulnT = 0;
     this.lives = this.maxLives();
-    this.starKills = 0;
+    this.starT = 0;
     this.stressUsed = false;
     this.counterUsed = false;
     this.stoneGranted = false;
@@ -6055,6 +6133,7 @@ class Game {
       y: l.y * level.tile + level.tile / 2,
       kind: l.kind,
       id: l.id,
+      seenAt: -9,
     }));
     this.throws = [];
     this.pings = [];
@@ -6166,7 +6245,7 @@ class Game {
     } else if (id === 'star') {
       if (!take()) { this.audio.deny(); return false; }
       this.invulnT = 3;
-      this.starKills = 3;
+      this.starT = 3;
       this.audio.gateOpen();
       this.flash = 1;
       this.ui.feed('无敌星：撞上你的会死');
@@ -6178,6 +6257,8 @@ class Game {
     } else if (id === 'scanner') {
       if (!take()) { this.audio.deny(); return false; }
       this.scanT = 6;
+      this.scanTick = 0;
+      this.refreshScan();
       this.audio.gateOpen();
       this.ui.feed('扫描仪：钥匙与门的位置亮了');
       this.audio.ping();
@@ -6243,6 +6324,62 @@ class Game {
     };
   }
 
+  /** The spot decides what it is only once you are close enough to notice it. */
+  revealLoot(it) {
+    if (!it || it.kind) return;
+    const charm = Math.random() < 0.55;
+    let pool = charm ? LOOT_CHARMS.slice() : LOOT_ITEMS.slice();
+    if (charm) {
+      // 绝地求生 only exists for builds that can already cheat death.
+      const canSurvive = this.inv.level('stress') > 0 && this.inv.level('counter') > 0;
+      if (!canSurvive) pool = pool.filter((id) => id !== 'survive');
+    }
+    it.kind = charm ? 'charm' : 'item';
+    it.id = pool[(Math.random() * pool.length) | 0] || 'stone';
+    it.seenAt = this.now;
+  }
+
+  /** Where the scanner wants to lead: the key and the way out. */
+  scanTargets() {
+    const L = this.level;
+    if (!L) return [];
+    const out = [];
+    if (this.mapMode) {
+      if (this.mapKey && !this.hasKey) out.push({ x: this.mapKey.x, y: this.mapKey.y, col: '255,205,110' });
+      for (const e of this.mapExits || []) out.push({ x: e.x, y: e.y, col: '140,240,170' });
+    } else {
+      if (L.key) out.push({ x: L.key.x, y: L.key.y, col: '255,205,110' });
+      if (L.exit) out.push({ x: L.exit.x, y: L.exit.y, col: '140,240,170' });
+    }
+    return out;
+  }
+
+  /** Recompute real walking routes, so the line is a path, not a straight hint. */
+  refreshScan() {
+    const L = this.level;
+    const p = this.player;
+    this.scanRoutes = [];
+    if (!L || !p) return;
+    const sx = clamp(Math.floor(p.x / L.tile), 0, L.w - 1);
+    const sy = clamp(Math.floor(p.y / L.tile), 0, L.h - 1);
+    for (const t of this.scanTargets()) {
+      let tx = clamp(Math.floor(t.x / L.tile), 0, L.w - 1);
+      let ty = clamp(Math.floor(t.y / L.tile), 0, L.h - 1);
+      if (isSolid(L.grid, L.w, L.h, tx, ty)) {
+        const open = nearestOpen(L.grid, L.w, L.h, tx, ty);
+        if (!open) continue;
+        tx = open.x;
+        ty = open.y;
+      }
+      const path = findPath(L.grid, L.w, L.h, sx, sy, tx, ty);
+      if (!path || !path.length) continue;
+      this.scanRoutes.push({
+        col: t.col,
+        pts: path.map((q) => ({ x: (q.x + 0.5) * L.tile, y: (q.y + 0.5) * L.tile })),
+      });
+    }
+  }
+
   throwItem(id, opts = {}) {
     const p = this.player;
     const aim = this.aimPoint();
@@ -6255,7 +6392,7 @@ class Game {
       return;
     }
     this.ui.feed(`掷出 ${def.name}`);
-    const speed = id === 'bugspray' ? 260 : 420;
+    const speed = id === 'bugspray' ? 200 : 420;
     // start a little in front of the body: hugging a wall must not eat the throw
     let sx = p.x + Math.cos(a) * 14;
     let sy = p.y + Math.sin(a) * 14;
@@ -6268,7 +6405,7 @@ class Game {
     this.throws.push({
       x: sx, y: sy, trail: [],
       dx: Math.cos(a), dy: Math.sin(a),
-      speed, life: 1.6, id,
+      speed, life: id === 'bugspray' ? 4.2 : 1.6, id,
       kills: !!def.kills, noise: def.noise || 1,
     });
     if (opts.noise) this.throws[this.throws.length - 1].noise = opts.noise;
@@ -6299,31 +6436,61 @@ class Game {
         }
         for (const h of this.hunters) {
           if (dist(t.x, t.y, h.x, h.y) < 15) {
-            if (t.kills) this.killHunter(h);
+            if (t.kills) {
+              this.killHunter(h);
+              hitWall = true;
+              break;
+            }
+            // The bugspray drifts straight through and keeps humming until
+            // a wall stops it; its own lines do the repelling.
+            if (t.id === 'bugspray') continue;
             hitWall = true;
             break;
           }
         }
         if (hitWall) break;
       }
+      // The spray keeps emitting while it flies, one dark-green line every
+      // heartbeat. A newer line replaces the previous line's hold.
+      if (t.id === 'bugspray') {
+        t.emitT = (t.emitT ?? 0) - dt;
+        if (t.emitT <= 0) {
+          t.emitT = 0.22;
+          this.spawnRays(t.x, t.y, {
+            count: 18,
+            speed: 430,
+            life: 1.5,
+            tint: '64, 132, 92',
+            kind: 'repel',
+            tag: { x: t.x, y: t.y, t: this.now, kind: 'repel' },
+          });
+        }
+      }
       if (hitWall || t.life <= 0) {
-        this.stepEcho(t.x, t.y, null, { count: 30, speed: 380, life: 0.7 * (t.noise || 1), tagged: false });
+        if (t.id !== 'bugspray') {
+          this.stepEcho(t.x, t.y, null, { count: 30, speed: 380, life: 0.7 * (t.noise || 1), tagged: false });
+        }
         const def = ITEMS[t.id] || {};
         if (def.lure) {
-          this.lures.push({ x: t.x, y: t.y, t: def.lure, tick: 0 });
+          this.lures.push({ x: t.x, y: t.y, t: LURE_T, emitT: 0 });
           this.ui.feed(`尸骸的气味散开了`);
         }
         if (def.repel) {
-          this.repels.push({ x: t.x, y: t.y, t: 4.5 });
-          for (const h of this.hunters) {
-            if (dist(h.x, h.y, t.x, t.y) > 330) continue;
-            const a = Math.atan2(h.y - t.y, h.x - t.x);
-            h.hear(t.x + Math.cos(a) * 260, t.y + Math.sin(a) * 260, 0.05);
-          }
-          this.ui.feed(`驱虫器喷出一阵刺鼻的雾`);
+          // Stop the spray where the wall stopped it: a final, short hiss.
+          this.spawnRays(t.x, t.y, {
+            count: 22,
+            speed: 380,
+            life: 1.1,
+            tint: '64, 132, 92',
+            kind: 'repel',
+            tag: { x: t.x, y: t.y, t: this.now, kind: 'repel' },
+          });
+          this.ui.feed(`驱虫器撞上墙壁`);
         }
-        for (const h of this.hunters) {
-          if (dist(t.x, t.y, h.x, h.y) < 620) this.alertHunter(h, t.x, t.y, 0.1);
+        if (!def.lure) {
+          for (const h of this.hunters) {
+            if (dist(t.x, t.y, h.x, h.y) < 620) this.alertHunter(h, t.x, t.y, 0.1);
+          }
         }
         this.audio.noise({ dur: 0.22, gain: 0.06, type: 'bandpass', freq: 900, send: 0.5 });
         this.throws.splice(i, 1);
@@ -6339,12 +6506,14 @@ class Game {
   /** Everything that can hurt you comes through here: charms get a say first. */
   hurt(source) {
     if (this.state !== 'playing') return;
-    if (this.debugInvincible || this.invulnT > 0) return;
-    if (this.starKills > 0) {
+    // The star kills on contact, so its own invulnerability must not swallow
+    // the contact first (that made it behave like a plain shield).
+    if (this.starT > 0) {
       if (source && source.x != null) this.killHunter(source);
       this.invulnT = Math.max(this.invulnT, 0.6);
       return;
     }
+    if (this.debugInvincible || this.invulnT > 0) return;
     if (this.stressCharges > 0) {
       this.stressCharges -= 1;
       this.enterStress();
@@ -6445,6 +6614,7 @@ class Game {
     o.shared = o.shared || new Set();
     for (const h of this.hunters) {
       if (h === o || o.shared.has(h.id)) continue;
+      if (h.lureLock || h.repelT > 0) continue;
       if (dist2(nx, ny, h.x, h.y) < 14 * 14) {
         o.shared.add(h.id);
         h.pending = { x: o.target.x, y: o.target.y, t: 0.15 };
@@ -6914,22 +7084,45 @@ class Game {
     this.aimY = aim.y;
 
     // timed items and thrown lures
-    if (this.scanT > 0) this.scanT -= dt;
+    if (this.starT > 0) this.starT = Math.max(0, this.starT - dt);
+    if (this.scanT > 0) {
+      this.scanT -= dt;
+      this.scanTick -= dt;
+      if (this.scanTick <= 0) {
+        this.scanTick = 0.5;
+        this.refreshScan();
+      }
+      if (this.scanT <= 0) this.scanRoutes = [];
+    }
     for (let i = this.lures.length - 1; i >= 0; i--) {
       const lu = this.lures[i];
       lu.t -= dt;
-      lu.tick -= dt;
-      if (lu.tick <= 0) {
-        lu.tick = 1.1;
-        for (const h of this.hunters) {
-          if (dist(h.x, h.y, lu.x, lu.y) < 760) this.alertHunter(h, lu.x, lu.y, 0.1);
-        }
+      lu.emitT = (lu.emitT ?? 0) - dt;
+      if (lu.emitT <= 0) {
+        lu.emitT = 0.9;
+        // Three times a ping's reach, flesh-coloured, and it can touch bodies.
+        this.spawnRays(lu.x, lu.y, {
+          count: 28,
+          speed: LURE_SPEED,
+          life: LURE_LIFE,
+          tint: '232, 178, 148',
+          kind: 'lure',
+          tag: { x: lu.x, y: lu.y, t: this.now, kind: 'lure', lock: true },
+        });
+        this.audio.echo(clamp((lu.x - p.x) / 480, -1, 1), 'ping');
+      }
+      // The first body to physically reach the corpse ends the call.
+      let touched = null;
+      for (const h of this.hunters) {
+        if (dist(h.x, h.y, lu.x, lu.y) < 22) { touched = h; break; }
+      }
+      if (touched) {
+        touched.lureLock = null;
+        this.lures.splice(i, 1);
+        this.ui.feed('尸骸被发现了');
+        continue;
       }
       if (lu.t <= 0) this.lures.splice(i, 1);
-    }
-    for (let i = this.repels.length - 1; i >= 0; i--) {
-      this.repels[i].t -= dt;
-      if (this.repels[i].t <= 0) this.repels.splice(i, 1);
     }
 
     // charge regen
@@ -6965,6 +7158,10 @@ class Game {
     }
 
     // loot: charms and items sit at the end of side branches
+    // A spot only becomes an item or a charm at the moment you come near it.
+    for (const it of this.loot) {
+      if (!it.kind && dist2(p.x, p.y, it.x, it.y) < LOOT_REVEAL * LOOT_REVEAL) this.revealLoot(it);
+    }
     let near = null;
     let nd = 46 * 46;
     for (const it of this.loot) {
@@ -7051,6 +7248,12 @@ class Game {
     for (const sk of this.skitters) {
       sk.update(dt, this);
       if (dist(p.x, p.y, sk.x, sk.y) < p.r + sk.r - 1) {
+        // The star's light kills anything that touches it, skitters included.
+        if (this.starT > 0) {
+          this.skitters.splice(this.skitters.indexOf(sk), 1);
+          this.stepEcho(sk.x, sk.y, '190, 130, 255', { count: 18, speed: 300, life: 0.5, tagged: false });
+          continue;
+        }
         this.die();
         return;
       }
@@ -7172,9 +7375,6 @@ class Game {
   }
 
   alertHunter(h, x, y, delay) {
-    for (const rp of this.repels || []) {
-      if (dist(x, y, rp.x, rp.y) < 240) return;
-    }
     this.maybeGuide('sneak', '按下 Shift 潜行');
     const tracking = h.state === 'investigate';
     h.hear(x, y, delay);
@@ -7182,6 +7382,28 @@ class Game {
     this.alertCd = 0.75;
     const pan = clamp((h.x - this.player.x) / 420, -1, 1) * 0.8;
     this.audio.alert(pan);
+  }
+
+  /** A bugspray line: flee its origin for one second. A newer line wins. */
+  repelHunter(h, tag) {
+    if (!h) return;
+    if (tag.t < (h.repelTag ?? -1)) return;
+    h.repelTag = tag.t;
+    h.lureLock = null;
+    h.repelT = 1;
+    h.repelFrom = { x: tag.x, y: tag.y };
+    const a = Math.atan2(h.y - tag.y, h.x - tag.x) || Math.random() * Math.PI * 2;
+    let fx = tag.x + Math.cos(a) * 300;
+    let fy = tag.y + Math.sin(a) * 300;
+    const L = this.level;
+    if (L) {
+      fx = clamp(fx, L.tile, L.size.w - L.tile);
+      fy = clamp(fy, L.tile, L.size.h - L.tile);
+    }
+    h.target = { x: fx, y: fy };
+    h.pending = { x: fx, y: fy, t: 0.02 };
+    h.path = [];
+    if (h.type === 'patroller' || h.type === 'stalker') h.state = 'chase';
   }
 
   maybeGuide(key, text) {
@@ -7202,6 +7424,22 @@ class Game {
   onRayTouch(e, tag) {
     if (!e || !tag) return;
     if (e instanceof Hunter) {
+      if (tag.kind === 'lure') {
+        // The corpse's call owns the body until it physically arrives, and a
+        // player ping must not be able to redirect it in the meantime.
+        e.lureLock = { x: tag.x, y: tag.y };
+        e.lastTag = Math.max(e.lastTag ?? -1, tag.t);
+        e.target = { x: tag.x, y: tag.y };
+        e.pending = { x: tag.x, y: tag.y, t: 0.1 };
+        e.path = [];
+        if (e.type === 'patroller' || e.type === 'stalker') e.state = 'chase';
+        else if (e.type === 'hunter') e.state = 'investigate';
+        return;
+      }
+      if (tag.kind === 'repel') {
+        this.repelHunter(e, tag);
+        return;
+      }
       if (tag.t <= (e.lastTag ?? -1)) return;
       e.lastTag = tag.t;
       this.alertHunter(e, tag.x, tag.y, 0.14);

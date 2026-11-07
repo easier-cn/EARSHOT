@@ -962,8 +962,10 @@ kbd {
 .boot-mark { width: 34px; height: 34px; margin: 0 auto 18px; border: 1px solid rgba(127, 227, 212, .55); border-radius: 50%; position: relative; }
 .boot-mark::before, .boot-mark::after { content: ''; position: absolute; inset: -7px; border: 1px solid rgba(127, 227, 212, .22); border-radius: 50%; }
 .boot-mark::after { inset: -14px; opacity: .5; }
-.boot-bar { height: 2px; background: rgba(127, 227, 212, .12); margin: 0 0 18px; overflow: hidden; }
-.boot-bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, rgba(127, 227, 212, .35), #7fe3d4); transition: width .18s linear; }
+.boot-head { display: flex; align-items: baseline; justify-content: space-between; margin: 0 0 8px; font-size: 10px; letter-spacing: .22em; color: rgba(210, 236, 233, .5); }
+.boot-pct { color: #7fe3d4; font-variant-numeric: tabular-nums; }
+.boot-bar { height: 3px; background: rgba(127, 227, 212, .12); margin: 0 0 18px; overflow: hidden; }
+.boot-bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, rgba(127, 227, 212, .35), #7fe3d4); box-shadow: 0 0 12px rgba(127, 227, 212, .45); transition: width .22s ease-out; }
 .boot-rows { list-style: none; margin: 0; padding: 0; font-size: 12px; letter-spacing: .08em; }
 .boot-rows li { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; color: rgba(210, 236, 233, .55); }
 .boot-rows li b { width: 12px; font-weight: 400; }

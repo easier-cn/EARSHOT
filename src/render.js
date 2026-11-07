@@ -211,17 +211,19 @@ export class Renderer {
 
     // ---- shards -------------------------------------------------------------
     for (const l of game.loot || []) {
+      // Until the player is close, a spot is only a faint, colourless echo.
+      const unknown = !l.kind;
       const k = Math.max(0, 1 - (now - (l.seenAt ?? -9)) / 2.2);
-      const glow = Math.max(0.16, k);
-      const col = l.kind === 'charm' ? '170,225,255' : '255,205,110';
+      const glow = unknown ? 0.09 + 0.03 * Math.sin(now * 1.5 + l.x * 0.01) : Math.max(0.16, k);
+      const col = unknown ? '170, 220, 210' : l.kind === 'charm' ? '170,225,255' : '255,205,110';
       ctx.strokeStyle = `rgba(${col}, ${glow * 0.8})`;
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.arc(l.x, l.y, 5.5, 0, Math.PI * 2);
+      ctx.arc(l.x, l.y, unknown ? 3.4 : 5.5, 0, Math.PI * 2);
       ctx.stroke();
       ctx.fillStyle = `rgba(${col}, ${glow * 0.55})`;
       ctx.beginPath();
-      ctx.arc(l.x, l.y, 1.6, 0, Math.PI * 2);
+      ctx.arc(l.x, l.y, unknown ? 1 : 1.6, 0, Math.PI * 2);
       ctx.fill();
     }
     for (const sh of game.shards) {
@@ -284,6 +286,20 @@ export class Renderer {
     if (vision) {
       const eSeen = now - (level.exit.seenAt ?? -99);
       if (game.scanT > 0 && game.level) {
+        // The route is a real path around walls, drawn only while it lasts.
+        for (const rt of game.scanRoutes || []) {
+          if (!rt.pts || rt.pts.length < 2) continue;
+          ctx.save();
+          ctx.setLineDash([6, 6]);
+          ctx.lineDashOffset = -now * 16;
+          ctx.strokeStyle = `rgba(${rt.col}, 0.62)`;
+          ctx.lineWidth = 1.6;
+          ctx.beginPath();
+          ctx.moveTo(rt.pts[0].x, rt.pts[0].y);
+          for (let i = 1; i < rt.pts.length; i++) ctx.lineTo(rt.pts[i].x, rt.pts[i].y);
+          ctx.stroke();
+          ctx.restore();
+        }
         const pulse = 0.5 + 0.5 * Math.sin(now * 4);
         const marks = [];
         if (game.mapMode) {
@@ -388,34 +404,25 @@ export class Renderer {
         ctx.stroke();
         ctx.restore();
       }
-      // lingering scent / gas clouds
-      for (const rp of game.repels || []) {
-        const k = Math.max(0, Math.min(1, rp.t / 4.5));
-        const g = ctx.createRadialGradient(rp.x, rp.y, 8, rp.x, rp.y, 330);
-        g.addColorStop(0, `rgba(160, 240, 180, ${0.26 * k})`);
-        g.addColorStop(0.55, `rgba(130, 225, 160, ${0.12 * k})`);
-        g.addColorStop(1, 'rgba(120, 220, 150, 0)');
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.arc(rp.x, rp.y, 330, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = `rgba(160, 240, 180, ${0.3 * k})`;
-        ctx.lineWidth = 1;
-        ctx.setLineDash([3, 9]);
-        ctx.beginPath();
-        ctx.arc(rp.x, rp.y, 330, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
+      // a corpse keeps calling: the long rings are its rays, this marks the body
       for (const lu of game.lures || []) {
         const k = Math.max(0, Math.min(1, lu.t / 5));
-        ctx.strokeStyle = `rgba(255, 150, 120, ${0.20 * k})`;
-        ctx.lineWidth = 1.2;
-        ctx.setLineDash([2, 7]);
+        const pulse = 0.6 + 0.4 * Math.sin(now * 2.2);
+        ctx.strokeStyle = `rgba(232, 178, 148, ${0.34 * k * pulse})`;
+        ctx.lineWidth = 1.4;
         ctx.beginPath();
-        ctx.arc(lu.x, lu.y, 120, 0, Math.PI * 2);
+        ctx.arc(lu.x, lu.y, 9, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([2, 8]);
+        ctx.strokeStyle = `rgba(232, 178, 148, ${0.18 * k})`;
+        ctx.beginPath();
+        ctx.arc(lu.x, lu.y, 34 + pulse * 4, 0, Math.PI * 2);
         ctx.stroke();
         ctx.setLineDash([]);
+        ctx.fillStyle = `rgba(232, 178, 148, ${0.5 * k})`;
+        ctx.beginPath();
+        ctx.arc(lu.x, lu.y, 2.2, 0, Math.PI * 2);
+        ctx.fill();
       }
       for (const t of game.throws || []) {
         if (!t.trail || t.trail.length < 2) continue;

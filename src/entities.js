@@ -128,6 +128,13 @@ export class Hunter {
     this.path = [];
     this.searchT = 0;
     this.pending = null;
+    // A corpse's lure owns this body until it arrives; a bugspray's line
+    // repels it for one second. Neither may be overwritten by the player's
+    // own sonar (the whole point of the corpse).
+    this.lureLock = null;
+    this.repelT = 0;
+    this.repelFrom = null;
+    this.repelTag = -1;
     this.lastTag = -1;
     this.face = Math.random() * Math.PI * 2;
     this.speed = 0;
@@ -150,6 +157,8 @@ export class Hunter {
   }
 
   hear(x, y, delay = 0.25) {
+    // A lure (corpse) or a repulsion (bugspray) is already in charge.
+    if (this.lureLock || this.repelT > 0) return;
     this.pending = { x, y, t: delay };
   }
 
@@ -167,9 +176,10 @@ export class Hunter {
     let tx = Math.floor(x / L.tile);
     let ty = Math.floor(y / L.tile);
     if (isSolid(L.grid, L.w, L.h, tx, ty)) {
-      const open = nearestOpen(L.grid, L.w, L.h, tx * L.tile, ty * L.tile);
-      tx = Math.floor(open.x / L.tile);
-      ty = Math.floor(open.y / L.tile);
+      const open = nearestOpen(L.grid, L.w, L.h, tx, ty);
+      if (!open) return false;
+      tx = open.x;
+      ty = open.y;
     }
     const path = findPath(L.grid, L.w, L.h, sx, sy, tx, ty);
     if (path && path.length) {
@@ -235,6 +245,22 @@ export class Hunter {
           if (this.state !== 'windup' && this.state !== 'charge') this.state = 'chase';
         } else if (this.type === 'hunter') this.state = 'investigate';
       }
+    }
+
+    // Bugspray: keep fleeing the newest line for a second.
+    if (this.repelT > 0) {
+      this.repelT -= dt;
+      if (this.repelT <= 0) {
+        this.repelT = 0;
+        this.repelFrom = null;
+      } else if (!this.path || this.path.length === 0) {
+        const a = Math.atan2(this.y - this.repelFrom.y, this.x - this.repelFrom.x) || 0;
+        this._plan(game, this.repelFrom.x + Math.cos(a) * 340, this.repelFrom.y + Math.sin(a) * 340);
+      }
+    }
+    // The corpse keeps a body until it physically reaches it.
+    if (this.lureLock && (!this.path || this.path.length === 0)) {
+      if (Math.hypot(this.x - this.lureLock.x, this.y - this.lureLock.y) < 30) this.lureLock = null;
     }
 
     if (this.type === 'patroller') return this._patrol(dt, game, speed);
