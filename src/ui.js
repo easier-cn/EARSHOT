@@ -478,6 +478,16 @@ export class UI {
     const inv = this.game.inv;
     // dropped outside the panel: the thing is gone, on purpose
     if (!target) return true;
+    // Binding a hotkey must not move the stack out of the pack, or the key
+    // becomes the only owner of the stack and the first press deletes it.
+    if (target.kind === 'hot' && drag.from && drag.from.kind === 'pack') {
+      inv.pack[drag.from.i] = drag.obj;
+      if (!inv.place('hot', target.i, drag.obj)) {
+        inv.pack[drag.from.i] = null;
+        return false;
+      }
+      return true;
+    }
     if (inv.place(target.kind, target.i, drag.obj)) return true;
     // nothing accepted: put it back
     const back = drag.from;
@@ -517,7 +527,7 @@ export class UI {
     const push = (kind, i, o, cls = '') => {
       const t = this.cellTip(o);
       const tip = t.tip ? `data-tip="${t.tip.replace(/"/g, '&quot;')}" data-title="${t.title.replace(/"/g, '&quot;')}"` : '';
-      cells.push(`<div class="inv-cell ${cls}${o ? ' filled' : ''}" data-kind="${kind}" data-i="${i}" ${tip}>${this.cellBody(o)}</div>`);
+      cells.push(`<div class="inv-cell ${cls}${o ? ' filled' : ''}" data-kind="${kind}" data-i="${i}"${o ? ` data-id="${o.id}"` : ''} ${tip}>${this.cellBody(o)}</div>`);
     };
     for (let i = 0; i < 2; i++) push('work', i, inv.work[i], 'work');
     cells.push('<div class="inv-cell arrow">→</div>');
@@ -528,7 +538,7 @@ export class UI {
       const o = inv.hot[i];
       const t = this.cellTip(o);
       const tip = o ? `data-tip="${t.tip.replace(/"/g, '&quot;')}" data-title="${t.title.replace(/"/g, '&quot;')}"` : '';
-      cells.push(`<div class="inv-cell hot${o ? ' filled' : ''}" data-kind="hot" data-i="${i}" ${tip}>${this.cellBody(o)}<b class="key">${['1', '2', '3', '4'][i]}</b></div>`);
+      cells.push(`<div class="inv-cell hot${o ? ' filled' : ''}" data-kind="hot" data-i="${i}"${o ? ` data-id="${o.id}"` : ''} ${tip}>${this.cellBody(o)}<b class="key">${['1', '2', '3', '4'][i]}</b></div>`);
     }
     cells.push('<div class="inv-cut hot"><span>快捷键</span></div>');
     for (let i = 0; i < 4; i++) push('charm', i, inv.charms[i], 'charm');

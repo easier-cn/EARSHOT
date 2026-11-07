@@ -215,6 +215,9 @@ export class Inventory {
       if (this.hot[i] || !o || o.kind !== 'item') return false;
       const def = ITEMS[o.id];
       if (!def) return false;
+      // A hotkey is a pointer into the pack, never a second home for the stack:
+      // if the object is not in the pack, the caller must put it back first.
+      if (!this.pack.includes(o)) return false;
       this.hot[i] = o;
       return true;
     }

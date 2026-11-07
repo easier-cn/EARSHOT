@@ -3699,6 +3699,9 @@ class Inventory {
       if (this.hot[i] || !o || o.kind !== 'item') return false;
       const def = ITEMS[o.id];
       if (!def) return false;
+      // A hotkey is a pointer into the pack, never a second home for the stack:
+      // if the object is not in the pack, the caller must put it back first.
+      if (!this.pack.includes(o)) return false;
       this.hot[i] = o;
       return true;
     }
@@ -5209,6 +5212,16 @@ class UI {
     const inv = this.game.inv;
     // dropped outside the panel: the thing is gone, on purpose
     if (!target) return true;
+    // Binding a hotkey must not move the stack out of the pack, or the key
+    // becomes the only owner of the stack and the first press deletes it.
+    if (target.kind === 'hot' && drag.from && drag.from.kind === 'pack') {
+      inv.pack[drag.from.i] = drag.obj;
+      if (!inv.place('hot', target.i, drag.obj)) {
+        inv.pack[drag.from.i] = null;
+        return false;
+      }
+      return true;
+    }
     if (inv.place(target.kind, target.i, drag.obj)) return true;
     // nothing accepted: put it back
     const back = drag.from;
@@ -5248,7 +5261,7 @@ class UI {
     const push = (kind, i, o, cls = '') => {
       const t = this.cellTip(o);
       const tip = t.tip ? `data-tip="${t.tip.replace(/"/g, '&quot;')}" data-title="${t.title.replace(/"/g, '&quot;')}"` : '';
-      cells.push(`<div class="inv-cell ${cls}${o ? ' filled' : ''}" data-kind="${kind}" data-i="${i}" ${tip}>${this.cellBody(o)}</div>`);
+      cells.push(`<div class="inv-cell ${cls}${o ? ' filled' : ''}" data-kind="${kind}" data-i="${i}"${o ? ` data-id="${o.id}"` : ''} ${tip}>${this.cellBody(o)}</div>`);
     };
     for (let i = 0; i < 2; i++) push('work', i, inv.work[i], 'work');
     cells.push('<div class="inv-cell arrow">→</div>');
@@ -5259,7 +5272,7 @@ class UI {
       const o = inv.hot[i];
       const t = this.cellTip(o);
       const tip = o ? `data-tip="${t.tip.replace(/"/g, '&quot;')}" data-title="${t.title.replace(/"/g, '&quot;')}"` : '';
-      cells.push(`<div class="inv-cell hot${o ? ' filled' : ''}" data-kind="hot" data-i="${i}" ${tip}>${this.cellBody(o)}<b class="key">${['1', '2', '3', '4'][i]}</b></div>`);
+      cells.push(`<div class="inv-cell hot${o ? ' filled' : ''}" data-kind="hot" data-i="${i}"${o ? ` data-id="${o.id}"` : ''} ${tip}>${this.cellBody(o)}<b class="key">${['1', '2', '3', '4'][i]}</b></div>`);
     }
     cells.push('<div class="inv-cut hot"><span>快捷键</span></div>');
     for (let i = 0; i < 4; i++) push('charm', i, inv.charms[i], 'charm');
@@ -5934,6 +5947,15 @@ class Game {
       if (idx >= 0) {
         this.inv.hot[i] = this.inv.pack[idx];
         slot = this.inv.hot[i];
+      } else if (slot.n > 0) {
+        // orphaned stack: put it back into the pack so it cannot be lost
+        const free = this.inv.pack.indexOf(null);
+        if (free >= 0) {
+          this.inv.pack[free] = slot;
+        } else {
+          this.inv.hot[i] = null;
+          slot = null;
+        }
       } else {
         this.inv.hot[i] = null;
         slot = null;
@@ -6455,8 +6477,9 @@ class Game {
       return;
     }
     if (this.mapMode) {
+      // Retry = a fresh layout of the same place, not a replay of the same rooms.
       this.resetRunState();
-      this.startMap(this.mapId, this.mapSeed);
+      this.startMap(this.mapId, (Math.random() * 1e9) | 0);
       if (this.state !== 'playing') this.state = 'playing';
       return;
     }
@@ -7370,6 +7393,16 @@ if (params.has('static')) document.documentElement.classList.add('no-anim');
 const canvas = document.getElementById('game');
 const game = new Game(canvas, document.getElementById('ui'));
 window.__hush = game;
+
+// Chrome can suspend/interrupt the audio context after a reload or device change.
+const resumeAudio = () => {
+  const a = game.audio;
+  if (!a || !a.ready || !a.ctx) return;
+  if (a.ctx.state === 'suspended' || a.ctx.state === 'interrupted') a.ctx.resume();
+};
+window.addEventListener('pointerdown', resumeAudio, true);
+window.addEventListener('keydown', resumeAudio, true);
+document.addEventListener('visibilitychange', resumeAudio);
 if (params.has('edit')) setTimeout(() => game.openEditor(), 60);
 if (params.has('hunt')) {
   setTimeout(() => {

@@ -18,6 +18,16 @@ if (params.has('static')) document.documentElement.classList.add('no-anim');
 const canvas = document.getElementById('game');
 const game = new Game(canvas, document.getElementById('ui'));
 window.__hush = game;
+
+// Chrome can suspend/interrupt the audio context after a reload or device change.
+const resumeAudio = () => {
+  const a = game.audio;
+  if (!a || !a.ready || !a.ctx) return;
+  if (a.ctx.state === 'suspended' || a.ctx.state === 'interrupted') a.ctx.resume();
+};
+window.addEventListener('pointerdown', resumeAudio, true);
+window.addEventListener('keydown', resumeAudio, true);
+document.addEventListener('visibilitychange', resumeAudio);
 if (params.has('edit')) setTimeout(() => game.openEditor(), 60);
 if (params.has('hunt')) {
   setTimeout(() => {

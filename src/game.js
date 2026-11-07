@@ -506,6 +506,15 @@ export class Game {
       if (idx >= 0) {
         this.inv.hot[i] = this.inv.pack[idx];
         slot = this.inv.hot[i];
+      } else if (slot.n > 0) {
+        // orphaned stack: put it back into the pack so it cannot be lost
+        const free = this.inv.pack.indexOf(null);
+        if (free >= 0) {
+          this.inv.pack[free] = slot;
+        } else {
+          this.inv.hot[i] = null;
+          slot = null;
+        }
       } else {
         this.inv.hot[i] = null;
         slot = null;
@@ -1027,8 +1036,9 @@ export class Game {
       return;
     }
     if (this.mapMode) {
+      // Retry = a fresh layout of the same place, not a replay of the same rooms.
       this.resetRunState();
-      this.startMap(this.mapId, this.mapSeed);
+      this.startMap(this.mapId, (Math.random() * 1e9) | 0);
       if (this.state !== 'playing') this.state = 'playing';
       return;
     }
