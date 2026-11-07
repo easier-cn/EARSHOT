@@ -367,7 +367,7 @@ export class Renderer {
     // ---- throwables: aiming fan and flight trails ---------------------------
     if (game.player) {
       const p = game.player;
-      const showAim = !!game.activeItem || (game.inv && game.stoneCount && game.stoneCount() > 0) || !!(game.inv && (game.inv.count('pebbles') + game.inv.count('sharpStone')) > 0);
+      const showAim = !!game.activeItem;
       if (showAim) {
         const r = this;
         const ax = game.aimX ?? p.x + Math.cos(p.face || 0) * 160;

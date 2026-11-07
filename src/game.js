@@ -522,7 +522,12 @@ export class Game {
       const id = slot.id;
       this.activeItem = this.activeItem === id ? null : id;
       this.audio.click(0.4);
-      if (this.activeItem) this.maybeGuide('throw2', '用鼠标左键瞄准，再点击掷出');
+      if (this.activeItem) {
+        this.maybeGuide('throw2', '用鼠标左键瞄准，再点击掷出');
+        this.ui.feed(`已握紧 ${def.name} · 左键掷出`);
+      } else {
+        this.ui.feed(`已松开 ${def.name}`);
+      }
       return;
     }
     if (!this.useItem(slot.id)) this.ui.feed(`${def.name}：已经没有了`);
@@ -1274,9 +1279,10 @@ export class Game {
     }
 
     // pinging
+    // The left button only throws what a hotkey has bound to the cursor;
+    // without a bound throwable it is just the sonar.
     if (this.input.consume('Mouse0')) {
       if (this.activeItem) this.throwItem(this.activeItem);
-      else if (this.stoneCount() > 0) this.throwStone();
       else this.tryPing();
     }
     if (this.input.consume('Space') || this.input.consume('KeyJ')) this.firePing();
