@@ -3,11 +3,22 @@
 All notable changes to HUSH. The format follows [Keep a Changelog](https://keepachangelog.com/),
 and the game follows [SemVer](https://semver.org/).
 
-## [Unreleased]
+## [0.8.7] - 2026-11-08
 
 ### Changed
-- 传送门靠近才变大：远处只保留 30% 的环，`460px → 120px` 之间平滑放大到 100%；
-  线条粗细按缩放补偿，远处仍清晰，标签字号不变。见 `src/render.js` 的 `mapExits` 循环。
+- 每一扇地图传送门（房间、迷宫、移动迷宫、机械地牢、实验室，含去草原/城堡的门）
+  都换成同一套粒子涡旋：暗井、薄膜、旋臂、断口外圈与上百颗带拖尾的轨道微粒，
+  颜色随门的颜色/上锁状态变化。**平时是两条旋臂的小传送门**（半径约 14 世界像素），
+  走近后第三条旋臂淡入、涡旋整体放大；不再有“只有环”的远处版本。
+- 涡旋转速提高约一倍（旋臂自转、微粒公转、外圈刻度与锥形光刃同步加快），并新增
+  `spin` 转速倍率（可在调参页 0.2–3 之间拖拽）。
+- 两条臂严格相隔 180°；靠近过渡时收拢到 120° 并淡入第三条臂。
+- 靠近才变大，但**两臂阶段尺寸固定**：距离 `> d3` 时保持 11（两条臂，不再一路长大），
+  从 `d3=110` 起第三条臂淡入、半径同时在 `fade=30` 内从 11 长到 23，第三条臂齐时
+  半径也到最大；粒子数量随半径增加，线宽与标签字号不跟着变。
+- 参数集中在 `src/portal-config.js`（`PORTAL = { far, near, d3, fade }`），并新增
+  `tools/portal-tune.html` 拖拽试运行页；保存的参数写到 `tools/portal-tune.saved.json`，
+  确认后抄回配置并重建。见 `src/render.js` 的 `mapExits` 循环与 `drawPortalFx()`。
 
 ## [0.8.6] - 2026-11-08
 

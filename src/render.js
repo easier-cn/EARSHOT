@@ -1,6 +1,8 @@
 import { clamp, lerp, smoothstep, viewCenter } from './util.js';
 import { lineOfSight } from './pathfind.js';
 import { mapNode } from './maps.js';
+import { drawPortalFx } from './portal-fx.js';
+import { PORTAL } from './portal-config.js';
 
 const WALL_RGB = '150, 238, 226';
 const GLOW_RGB = '80, 210, 198';
@@ -11,6 +13,7 @@ const GOLD = '255, 205, 110';
 const GREEN = '140, 240, 170';
 
 const BUCKETS = 12;
+const TAU = Math.PI * 2;
 
 /**
  * Sonar renderer.
@@ -270,24 +273,26 @@ export class Renderer {
         const near = game.player ? Math.hypot(game.player.x - e.x, game.player.y - e.y) : 999;
         // Far away a door is only a small signal; the ring opens up as you walk
         // closer, so a room reads before you are standing on top of it.
-        const k = 0.30 + 0.70 * smoothstep(460, 120, near);
-        const a = (locked ? 0.5 : 0.55 + 0.35 * pulse) * (0.55 + 0.45 * k);
+        // Two-arm phase keeps its size; growth runs in the same window as
+        // the third arm's fade-in, so full size arrives with the full triad.
+        const prox = smoothstep(PORTAL.d3, Math.max(60, PORTAL.d3 - PORTAL.fade), near);
+        const R = lerp(PORTAL.far, PORTAL.near, prox);
+        const arm3 = smoothstep(PORTAL.d3, PORTAL.d3 - PORTAL.fade, near);
+        const a = (locked ? 0.5 : 0.55 + 0.35 * pulse) * (0.55 + 0.45 * prox);
+        // Even a far door is a small living vortex; it opens up as you walk
+        // closer, so the same door reads at both ends of the room.
+        drawPortalFx(ctx, e.x, e.y, R, now, col, locked, 1, e.x * 0.017 + e.y * 0.011, arm3, PORTAL.spin);
         ctx.save();
         ctx.translate(e.x, e.y);
-        ctx.scale(k, k);
         ctx.strokeStyle = `rgba(${col}, ${a})`;
-        // Keep the stroke crisp at every zoom: the scale changes the radius,
-        // not the ink weight the player sees.
-        ctx.lineWidth = 1.6 / k;
+        // Radius scales; the ink weight does not, so distant doors stay crisp.
+        ctx.lineWidth = 1.6;
         ctx.beginPath();
-        ctx.arc(0, 0, 13, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.arc(0, 0, 20, Math.PI * 0.15, Math.PI * 0.85);
+        ctx.arc(0, 0, R, 0, Math.PI * 2);
         ctx.stroke();
         ctx.fillStyle = `rgba(${col}, ${a * 0.7})`;
         ctx.beginPath();
-        ctx.arc(0, 0, 3.2, 0, Math.PI * 2);
+        ctx.arc(0, 0, Math.max(1.6, R * 0.22), 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
 
@@ -300,7 +305,7 @@ export class Renderer {
         ctx.font = `${Math.round(11 / this.scale)}px ui-monospace, monospace`;
         ctx.textAlign = 'center';
         ctx.fillStyle = `rgba(${col}, ${near < 170 ? 0.9 : 0.4})`;
-        ctx.fillText(`${dest ? dest.name : '未知'}${suffix}`, e.x, e.y - (13 + 17 * k));
+        ctx.fillText(`${dest ? dest.name : '未知'}${suffix}`, e.x, e.y - (R + 17 * prox));
         ctx.restore();
       }
     }

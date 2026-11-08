@@ -1,6 +1,6 @@
 # HUSH 开发交接文档
 
-> 最后更新：v0.8.6（2026-11-08）
+> 最后更新：v0.8.7（2026-11-08）
 
 ## 交接约定（每次改动都必须遵守）
 
@@ -176,6 +176,7 @@ ni/
 | 工具 | 命令 | 用途 |
 |---|---|---|
 | 构建 | `node tools/build.mjs` | 把 `src/` 里全部模块内联成单文件 |
+| 传送门调参 | `python tools/serve.py 8080` 后打开 `/tools/portal-tune.html` | 拖滑块实时预览；保存写 `tools/portal-tune.saved.json`，再抄进 `src/portal-config.js` |
 | 单测 | `npm test` | 73 项：连通性、AI、背包、地图生成、迷宫道具分布、投掷瞄准、六项道具效果、交互提示、移动迷宫 |
 | 端到端 | `node tools/playtest.mjs` | CDP 真实按键：开局→移动→投掷→通关→编辑器 |
 | 单表达式 | `node tools/probe.mjs "<js>"` | 在真实页面执行一段代码并回值（最常用） |
@@ -259,7 +260,7 @@ ni/
 - 尸骸与驱虫器都在抢 `h.pending`：玩家 ping 一到就把猎手拉走，诱饵/驱离等于没有（已修：`Hunter.lureLock` / `repelT` 期间 `hear()` 直接拒绝玩家声源；驱离按 tag 时间戳新盖旧）。
 - `Hunter._plan` 把**像素**坐标传给 `nearestOpen()`（它只收 tile）→ 目标落进墙里时返回 `null`，随后读 `open.x` 崩溃（已修：传 tile 并判空）。
 - 交互曾经"靠近即触发"：钥匙自动入袋、传送门自动传送、梯口自动下行，路过就被带走；靠近未开通的门还只会刷 deny。已统一为 `interactAt()` 选最近目标 → `showInteractTip()` 浮窗 → `doInteract()` 执行，**只认 F**。浮窗位置改用 `viewCenter()` 换算（与相机同一夹紧中心），贴边不偏；传送门目的地标签的字号要除以 `scale`，否则放大/缩小后忽大忽小。
-- 传送门环之前固定 13/20px：远处和近处一样大，房间一多就分不清主次。现在按 `smoothstep(460, 120, dist)` 缩到 30%–100%；**线宽要除以缩放系数 k 补偿**，否则远处细到看不见；标签字号不变、y 只随 k 轻微移动。
+- 传送门之前固定 13/20px：远处和近处一样大，房间一多就分不清主次。现在半径 `prox = smoothstep(PORTAL.d3, max(60, PORTAL.d3 - PORTAL.fade), dist)`、`R = lerp(PORTAL.far, PORTAL.near, prox)`（当前 11 → 23 世界像素）；**两臂阶段半径恒为 far**，只有第三条臂开始淡入后才一起长大，**每一扇门在任何距离都是完整的 `drawPortalFx()` 涡旋**，粒子数随 R 从 10 加到 110（`clamp(10 + R * 1.9, 10, 110)`），旋臂用 30 段渐变细描边；第三条臂由 `arm3 = smoothstep(PORTAL.d3, PORTAL.d3 - PORTAL.fade, dist)` 淡入（当前 110/30），臂间距 `Math.PI + (TAU/3 - Math.PI) * arm3`（180° → 120°）；全局转速乘 `PORTAL.spin`（当前 3）。线宽保持 1.6（不要再乘/除 k），标签字号不变、y 用 `R + 17 * prox`。参数在 `src/portal-config.js`，改动后用 `tools/portal-tune.html` 预览；八扇门同屏实测仍 60fps，但别把原型那 300 颗粒子照搬进游戏。
 - 启动自检的「消耗品」行曾复用同一个背包逐件检查 8 种道具：6 格装满后第 7 件（`bugspray`）必然报"未能入包"，开机就假红。**每件道具用一个新的 `Inventory`**，检查的才是"能不能入包/能不能消耗"，而不是"背包还有没有空格"。
 
 ### UI

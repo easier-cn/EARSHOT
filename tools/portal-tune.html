@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>传送门试运行 · 参数调整</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #04070a; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  .panel {
+    position: fixed; left: 18px; bottom: 18px; width: 360px;
+    padding: 16px 18px 14px; border: 1px solid rgba(120,255,225,.18);
+    background: rgba(6,14,16,.9); border-radius: 10px;
+    font: 12px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace;
+    color: #bfe9e0; backdrop-filter: blur(4px);
+    box-shadow: 0 10px 40px rgba(0,0,0,.55);
+  }
+  .panel h1 { margin: 0 0 10px; font-size: 13px; letter-spacing: .08em; color: #8ef0d8; font-weight: 600; }
+  .row { margin: 10px 0 12px; }
+  .row label { display: flex; justify-content: space-between; color: #9dc9c2; }
+  .row b { color: #eafff8; font-weight: 600; }
+  input[type=range] { width: 100%; margin: 6px 0 0; -webkit-appearance: none; background: transparent; }
+  input[type=range]::-webkit-slider-runnable-track { height: 3px; background: #17322f; border-radius: 3px; }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 14px; height: 14px; margin-top: -5.5px;
+    border-radius: 50%; background: #7ff0d4; box-shadow: 0 0 10px rgba(127,240,212,.55);
+    border: 0; cursor: grab;
+  }
+  .hint { color: #6f908b; font-size: 11px; margin: 2px 0 8px; }
+  .actions { display: flex; gap: 8px; margin-top: 12px; }
+  button {
+    flex: 1; padding: 8px 10px; font: 12px ui-monospace, monospace; cursor: pointer;
+    color: #d9fff6; background: #0d2220; border: 1px solid rgba(127,240,212,.35);
+    border-radius: 6px;
+  }
+  button:hover { background: #123430; }
+  button.primary { background: #174a40; border-color: #7ff0d4; }
+  .saved { color: #7ff0d4; min-height: 18px; margin-top: 8px; font-size: 11px; }
+  .out { margin: 8px 0 0; padding: 8px; background: rgba(0,0,0,.35); border: 1px solid rgba(120,255,225,.12);
+         border-radius: 6px; color: #8fb8b2; font-size: 10px; white-space: pre-wrap; word-break: break-all; }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<div class="panel">
+  <h1>传送门试运行 · 拖拽调整</h1>
+
+  <div class="row">
+    <label>两臂时半径（世界像素） <b><span id="vFar">14</span></b></label>
+    <input id="far" type="range" min="6" max="40" step="1" value="14" />
+  </div>
+
+  <div class="row">
+    <label>三臂时最大半径 <b><span id="vNear">46</span></b></label>
+    <input id="near" type="range" min="16" max="90" step="1" value="46" />
+  </div>
+
+  <div class="row">
+    <label>变成三臂的距离 <b><span id="vD3">300</span> px</b></label>
+    <input id="d3" type="range" min="80" max="520" step="5" value="300" />
+  </div>
+
+  <div class="row">
+    <label>三臂过渡区 <b><span id="vFade">120</span> px</b></label>
+    <input id="fade" type="range" min="30" max="240" step="5" value="120" />
+  </div>
+
+  <div class="row">
+    <label>旋转速度 <b>×<span id="vSpin">1.00</span></b></label>
+    <input id="spin" type="range" min="0.2" max="3" step="0.05" value="1" />
+  </div>
+
+  <div class="row">
+    <label>预览距离 <b><span id="vDist">300</span> px</b></label>
+    <input id="dist" type="range" min="60" max="520" step="1" value="300" />
+  </div>
+
+  <div class="hint">距离 ≤ “三臂距离” 开始出现第三条；再近 “过渡区” 后完全三臂。
+    两臂阶段半径固定；从“变成三臂的距离”起第三条臂淡入、半径同时长大，过渡区结束处达到三臂最大半径。
+    两条臂相隔 180°，过渡时收拢到 120° 并把第三条臂淡入。</div>
+
+  <div class="actions">
+    <button id="pFar">看两臂（520）</button>
+    <button id="pNear">看三臂（70）</button>
+  </div>
+
+  <div class="actions">
+    <button class="primary" id="save">保存参数</button>
+    <button id="reset">恢复默认</button>
+  </div>
+  <div class="saved" id="saved"></div>
+  <pre class="out" id="out"></pre>
+</div>
+
+<script type="module">
+import { drawPortalFx } from '../src/portal-fx.js';
+import { PORTAL } from '../src/portal-config.js';
+
+const DEFAULTS = { ...PORTAL, dist: 300 };
+const ZOOM = 1.522;              // same camera zoom as the game at 1370x705
+const COL = '140, 240, 170';     // meadow green
+
+const $ = (id) => document.getElementById(id);
+const canvas = $('stage');
+const ctx = canvas.getContext('2d');
+
+const state = { ...DEFAULTS };
+const q = new URLSearchParams(location.search);
+if (q.has('dist')) state.dist = Math.max(60, Math.min(520, Number(q.get('dist')) || 300));
+try {
+  const saved = JSON.parse(localStorage.getItem('portalTune') || 'null');
+  if (saved && Number.isFinite(saved.far)) Object.assign(state, saved);
+} catch { /* ignore */ }
+
+const fields = ['far', 'near', 'd3', 'fade', 'spin', 'dist'];
+for (const f of fields) {
+  $(f).value = state[f];
+  $(f).addEventListener('input', () => {
+    state[f] = Number($(f).value);
+    if (f === 'far' && state.near < state.far + 2) { state.near = state.far + 2; $('near').value = state.near; }
+    if (f === 'near' && state.near < state.far + 2) { state.far = state.near - 2; $('far').value = state.far; }
+    syncLabels();
+  });
+}
+
+function syncLabels() {
+  $('vFar').textContent = state.far;
+  $('vNear').textContent = state.near;
+  $('vD3').textContent = state.d3;
+  $('vFade').textContent = state.fade;
+  $('vSpin').textContent = state.spin.toFixed(2);
+  $('vDist').textContent = state.dist;
+  $('out').textContent = JSON.stringify(payload(), null, 1).replace(/\n\s*/g, ' ');
+}
+syncLabels();
+
+function payload() {
+  return {
+    far: state.far, near: state.near, d3: state.d3, fade: state.fade, spin: state.spin,
+    savedAt: new Date().toISOString(),
+  };
+}
+
+const smooth = (a, b, x) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+
+let W = 0, H = 0, DPR = 1;
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = Math.round(W * DPR);
+  canvas.height = Math.round(H * DPR);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+addEventListener('resize', resize);
+resize();
+
+function frame(now) {
+  const t = now / 1000;
+  const dist = state.dist;
+  const prox = smooth(state.d3, Math.max(60, state.d3 - state.fade), dist);
+  const R = state.far + (state.near - state.far) * prox;
+  const arm3 = smooth(state.d3, state.d3 - state.fade, dist);
+
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.fillStyle = '#04070a';
+  ctx.fillRect(0, 0, W, H);
+
+  const px = W * 0.46;
+  const py = H * 0.54;
+
+  // dotted distance line + player dot
+  const mx = px + dist * ZOOM;
+  const pyDot = py;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(160, 220, 210, 0.20)';
+  ctx.setLineDash([2, 6]);
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(px + R * ZOOM + 8, pyDot);
+  ctx.lineTo(Math.min(W - 8, mx - 10), pyDot);
+  ctx.stroke();
+  ctx.restore();
+  ctx.fillStyle = 'rgba(220, 255, 248, 0.9)';
+  ctx.beginPath();
+  ctx.arc(Math.min(W - 14, mx), pyDot, 4.5, 0, Math.PI * 2);
+  ctx.fill();
+  const halo = ctx.createRadialGradient(Math.min(W - 14, mx), pyDot, 0, Math.min(W - 14, mx), pyDot, 26);
+  halo.addColorStop(0, 'rgba(180, 255, 240, 0.20)');
+  halo.addColorStop(1, 'rgba(180, 255, 240, 0)');
+  ctx.fillStyle = halo;
+  ctx.beginPath();
+  ctx.arc(Math.min(W - 14, mx), pyDot, 26, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Draw in world units under the game's zoom, so line weights and mote
+  // sizes match the real renderer exactly.
+  ctx.save();
+  ctx.translate(px, py);
+  ctx.scale(ZOOM, ZOOM);
+  drawPortalFx(ctx, 0, 0, R, t, COL, false, 1, 7.3, arm3, state.spin);
+  ctx.restore();
+
+  // readout
+  const arms = arm3 > 0.98 ? 3 : arm3 > 0.02 ? '2 → 3' : 2;
+  ctx.font = '12px ui-monospace, monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(150, 210, 200, 0.85)';
+  ctx.fillText(
+    `距离 ${dist}px · 半径 ${R.toFixed(1)} 世界px（屏幕 ${(R * ZOOM).toFixed(1)}px）· ${arms} 臂`,
+    W * 0.56, 84,
+  );
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+$('save').addEventListener('click', async () => {
+  const data = payload();
+  localStorage.setItem('portalTune', JSON.stringify(data));
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'portal-tune.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  let posted = false;
+  try {
+    const res = await fetch('/__portal-tune', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    posted = res.ok;
+  } catch { /* opened from file:// or another server */ }
+  $('saved').textContent = posted
+    ? `已保存到 tools/portal-tune.saved.json（${data.far} / ${data.near} / ${data.d3} / ${data.fade}）——回去跟 AI 说一声即可`
+    : `已尝试下载 portal-tune.json（${data.far} / ${data.near} / ${data.d3} / ${data.fade}）；若没有文件，请手动复制下方参数`;
+});
+
+$('pFar').addEventListener('click', () => {
+  state.dist = 520; $('dist').value = 520; syncLabels();
+});
+$('pNear').addEventListener('click', () => {
+  state.dist = 70; $('dist').value = 70; syncLabels();
+});
+
+$('reset').addEventListener('click', () => {
+  Object.assign(state, DEFAULTS);
+  for (const f of fields) $(f).value = state[f];
+  localStorage.removeItem('portalTune');
+  $('saved').textContent = '已恢复默认，预览已刷新';
+  syncLabels();
+});
+</script>
+</body>
+</html>

@@ -8,8 +8,11 @@ this server marks everything no-store and disables directory listings.
 """
 import functools
 import http.server
+import os
 import socketserver
 import sys
+
+SAVE_PATH = os.path.join("tools", "portal-tune.saved.json")
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -22,6 +25,21 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def list_directory(self, path):
         self.send_error(404, "Not found")
         return None
+
+    def do_POST(self):
+        # Only the portal tuning page uses this: park its sliders in a file the
+        # agent can read back and copy into src/portal-config.js.
+        if self.path != "/__portal-tune":
+            self.send_error(404, "Not found")
+            return
+        n = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(n)
+        target = os.path.join(self.directory, SAVE_PATH)
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        with open(target, "wb") as f:
+            f.write(body)
+        self.send_response(204)
+        self.end_headers()
 
     def log_message(self, fmt, *args):
         pass
