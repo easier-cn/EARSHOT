@@ -327,6 +327,44 @@ export class AudioEngine {
     this.tone({ freq: 900, freqEnd: 600, type: 'square', dur: 0.05, gain: 0.03, send: 0.1 });
   }
 
+  /** Which floor just arrived under your feet: 1, 2, or -1. */
+  floorChime(n = 1) {
+    const pair = n === 2 ? [660, 990] : n === -1 ? [300, 200] : [520, 780];
+    const t = this.ctx ? this.ctx.currentTime : 0;
+    this.tone({ freq: pair[0], type: 'square', dur: 0.09, gain: 0.035, send: 0.25 });
+    this.tone({ freq: pair[1], type: 'square', dur: 0.09, gain: 0.03, send: 0.3, delay: 0.06 });
+    this.tone({ freq: pair[0] * 0.5, type: 'sine', dur: 0.5, gain: 0.02, send: 0.5, delay: 0.01 });
+    void t;
+  }
+
+  /** Nine rooms moving at once: stone grinding somewhere under everything. */
+  swapRumble() {
+    this.tone({ freq: 120, freqEnd: 40, type: 'sine', dur: 1.1, gain: 0.11, send: 0.8 });
+    this.noise({ dur: 0.03, gain: 0.05, type: 'bandpass', freq: 1800, q: 1.4, send: 0.5, delay: 0.04 });
+    this.noise({ dur: 0.9, gain: 0.03, type: 'lowpass', freq: 260, send: 0.7, delay: 0.02 });
+  }
+
+  /** A core shatters. Glass, then three bright falling shards. */
+  glassBreak() {
+    this.noise({ dur: 0.04, gain: 0.08, type: 'highpass', freq: 2600, send: 0.3 });
+    for (const [f, i] of [[2400, 0], [3100, 0.045], [4200, 0.09]]) {
+      this.tone({ freq: f, freqEnd: f * 0.62, type: 'triangle', dur: 0.32, gain: 0.03, send: 0.6, delay: i });
+    }
+  }
+
+  /** b2 breaks: the whole structure drops a floor. */
+  b2Quake() {
+    this.tone({ freq: 30, type: 'sine', dur: 1.4, gain: 0.3, send: 0.9 });
+    this.noise({ dur: 1.4, gain: 0.2, type: 'lowpass', freq: 200, send: 0.8 });
+    this.noise({ dur: 0.5, gain: 0.06, type: 'bandpass', freq: 900, q: 0.9, send: 0.6, delay: 0.1 });
+  }
+
+  /** The maze stops: a long, settling exhale. */
+  mcStopped() {
+    this.tone({ freq: 220, freqEnd: 110, type: 'sine', dur: 1.6, gain: 0.08, send: 1.1 });
+    this.tone({ freq: 110, freqEnd: 55, type: 'triangle', dur: 1.8, gain: 0.035, send: 1.2, delay: 0.05 });
+  }
+
   /** Called each frame from the game loop. */
   update(dt, { danger = 0, paused = false } = {}) {
     if (!this.ready) return;

@@ -1,6 +1,6 @@
 # HUSH 开发交接文档
 
-> 最后更新：v0.7.24（2026-11-07）
+> 最后更新：v0.8.6（2026-11-08）
 
 ## 交接约定（每次改动都必须遵守）
 
@@ -16,7 +16,7 @@
 
 现在的完整形态是**肉鸽式地图探索**：
 
-- 主流程：`房间 → 迷宫 → ……` 共 21 张地图，目前建成 2 张
+- 主流程：`房间 → 迷宫 → ……` 共 21 张地图，目前建成 3 张（房间 / 迷宫 / 移动迷宫）
 - 每张图有钥匙、出口、护符/道具、被动型猎手（听见才动）
 - 护符 10 种（含 3 级升级）、道具 8 种、6 格背包 + 4 快捷键 + 4 护符槽 + 2 格工作台
 - 另有"五层肉鸽"旧模式（`startRun`）与编辑器模式
@@ -70,7 +70,7 @@ ni/
 │  ├─ pathfind.js        # A*（8 向、禁止切角）+ 视线检测
 │  ├─ levelgen.js        # 旧版"密室"关卡
 │  ├─ rooms.js           # 五层肉鸽的房间图生成（走廊优先）
-│  ├─ worldgen.js        # 地图模式：buildRoomMap / buildMazeMap
+│  ├─ worldgen.js        # 地图模式：buildRoomMap / buildMazeMap / buildMovingMap
 │  ├─ maps.js            # 21 张地图的节点表与顺序
 │  ├─ entities.js        # Player / Hunter(4 种) / Skitter
 │  ├─ loot.js            # CHARMS / ITEMS / Inventory（背包与合成）
@@ -104,7 +104,7 @@ ni/
 
 | 模式 | 入口 | 说明 |
 |---|---|---|
-| `mapMode` | `startMap(id, seed)` | 地图模式（当前主线），`mapId/mapSeed/mapKey/mapExits/mapNodes` |
+| `mapMode` | `startMap(id, seed)` | 地图模式（当前主线），`mapId/mapSeed/mapKey/mapExits/mapNodes`；移动迷宫另有 `level.moving` 与 `mcHunters` |
 | `floorMode` | `startRun(seed)` / `startFloor(depth)` | 五层肉鸽：每层是一张房间图，`depth` 1..5 |
 | `worldMode` / `customData` / 密室 | `startWorld` / `startCustom` / `startChamber` | 旧内容，保留可玩 |
 
@@ -157,7 +157,7 @@ ni/
 
 | 参数 | 作用 |
 |---|---|
-| `?map=room\|maze&seed=123` | 直接进入某张地图 |
+| `?map=room\|maze\|moving&seed=123` | 直接进入某张地图 |
 | `?run=123` | 直接开始五层肉鸽 |
 | `?c=0..7` | 旧密室 |
 | `?world=1` / `?edit=1` | 旧世界 / 编辑器 |
@@ -176,7 +176,7 @@ ni/
 | 工具 | 命令 | 用途 |
 |---|---|---|
 | 构建 | `node tools/build.mjs` | 把 `src/` 里全部模块内联成单文件 |
-| 单测 | `npm test` | 56 项：连通性、AI、背包、地图生成、迷宫道具分布、投掷瞄准、六项道具效果、交互提示 |
+| 单测 | `npm test` | 73 项：连通性、AI、背包、地图生成、迷宫道具分布、投掷瞄准、六项道具效果、交互提示、移动迷宫 |
 | 端到端 | `node tools/playtest.mjs` | CDP 真实按键：开局→移动→投掷→通关→编辑器 |
 | 单表达式 | `node tools/probe.mjs "<js>"` | 在真实页面执行一段代码并回值（最常用） |
 | 真实时间截图 | `node tools/live.mjs "<js>" out.png 800` | 注入场景、等真实毫秒、截图（抓"冻结时间看不出来"的渲染问题） |
@@ -189,7 +189,7 @@ ni/
 
 验证约定：
 
-1. 逻辑改动 → `npm test` 必须 56/56。
+1. 逻辑改动 → `npm test` 必须 73/73。
 2. 交互改动 → `node tools/playtest.mjs` 必须 `errors: []`。
 3. 视觉改动 → 至少一张 `shots/*.png` 截图，自己看一眼再提交。
 4. 改了 `dist` 相关 → 用 `file://` 再跑一次 playtest。
@@ -214,6 +214,32 @@ ni/
 - 迷宫曾把 `loot` 写死成空数组，而房间图只在 BSP 盒子里撒点 → 迷宫（以及所有走廊）永远捡不到东西。现在 `mazeLoot()` 从出生点跑 BFS 深度、按深度分带取点、优先走廊格（至少 3 个在单格走廊），点间距 5 格（补位 3 格），避开出生点 5 格 / 出口 4 格范围与猎手格；改数量或间距时 `tests/worldgen.test.js` 会挡住。
 - `sort(() => rnd() - 0.5)` **不是洗牌**：比较器忽略参数、每次返回新随机数，属于"不一致比较器"；V8/Edge 连比较器调用次数都可能变（JIT 前后不一样）→ 同一个 `seed` 在浏览器里两次生成的迷宫不同（Node 里碰巧稳定，所以单测没抓到）。一律用 `util.shuffle(arr, rng)`（Fisher–Yates）；`maze map: loot is deterministic` 测试用来挡回归。
 
+### 移动迷宫
+
+> **2026-11-08 声线返工（v0.8.3 → v0.8.6）**：这一轮连续踩了三个坑——把声线当特效画（金圈画圆、门洞画短线、核心画辐条）、`startMap` 用 `[]` 覆盖 `coreTrails` 导致核心不动、分段描边+速度快导致拖尾有节点且看不清。结论：声线必须是**粒子头+淡出拖尾**；核心是三颗粒子在正中一格内以 `RAY_SPEED/3` 反弹；渲染只用一条连续渐变路径，不批量描边。
+
+- 只有**一张物理网格**：9 个方块各自缓存两套 25×25 布局，翻转时 `z ^= 1` 后把新布局**原地**写回 `level.grid`。不要重新赋值 `level.grid`——射线、投掷物和猎手都缓存了这个引用。
+- 两套布局是**两次独立生成**的单格宽迷宫，门位、外环和中心 3×3 房间固定，只有中间 19×19 的通道不同。不要再做 `rotatePlan`/`carryTurn`：房间不是旋转，而是替换。
+- **玩家所在房间永不改写**。`doFlip()` 用 `playerBlocks()` 取当前 tile 覆盖的所有块；玩家站在共享边界 tile 上时可能同时属于两块，`protectedIds` 会把它们一起排除。被抽中的保护块换成另一块未抽中的块，尽量保持 5 块。若保护发生在最后 1 秒，仍播报另一层，但不改玩家脚下布局。
+- 方块按 `PITCH = 24` 摆放而布局是 25 格，相邻块共享一条边；角块只有 4 个门、边块 6 个、中心块 8 个，外侧边是实墙。门开在局部 5/17，两端必须同时打开才能通过；`movingDoors()` 用 `b.sides` 计算。
+- 迷宫主体：10×10 个奇数格（局部 3..21）、1 格墙、12% 编织；外环只有 1 格宽（局部 1/23），门嘴在局部 2/22；中心 3×3 房有 8 个一格入口。改布局后用 `tests/moving.test.js` 的“no 2×2 open squares outside centre”挡回宽走廊。
+- `level.exit` 是 `null`：渲染出口块、`hitEntity` 命中出口都必须先判空。曾被无条件解引用崩过。
+- `flipRings` 只在移动迷宫初始化；旧模式的更新循环也要能读它（`this.flipRings || []`）。
+- 18 只 `lurker` 数据是 9 个位置 × 2 层、每面一只，但场上始终只有 9 只活守卫：`reserve = layer !== 0` 的副本休眠，`syncMovingHunters()` 只放 9 只非 reserve 的活守卫。房间翻转时守卫不换人、不消失；只清 path，新布局脚下是墙就移到 `nearestOpenInBlock`。击杀置 `h.dead`，翻身不会复活。
+- 翻转前 1 秒 `emitFlipSoundLines()` 遍历被抽中块的所有门（`movingDoors()`），每个门洞生成 **8 条半格红声线粒子**：4 条从一侧出发、4 条从另一侧反向出发，沿门洞对穿；垂直分隔边 → 水平运动，水平分隔边 → 垂直运动；共用门按坐标+方向去重。参数是 `speed 44, life 0.55`，只在 pending 的 1 秒内存在，翻转/坍塌立即清空。不要再恢复常驻层界红线或静态短线。
+- **声线 = 粒子头 + 淡出拖尾**，不是画出来的线。现有实现只有三类：普通/ghost 的 `rays`（`spawnRays`）、短命的 `soundTrails`、核心的 `coreTrails`。看到“画一圈线、画一排短线”的写法就是特效，和声呐不是一套语言。
+- 核心：每个未碎核心 3 颗粒子，初始方向相隔 120°，其中一条从正上偏 38°；粒子从中心出发，在正中 1 格 `口` 内以 `CORE_RAY_SPEED = RAY_SPEED / 3`（≈186.7px/s）反复反弹，**粒子永不消失**，只有拖尾淡出。`updateCoreTrails()` 用 2px 子步进，四条边反弹后 `clamp`；`pts` 上限 32（约 64px）。
+- `startMap()` 必须在 `this.level = level` 之后执行 `this.coreTrails = this.makeCoreTrails(level)`；曾把 `this.coreTrails = []` 写回去，导致核心完全不动。`startFloor()` 也要重置。
+- 核心渲染用**一条连续路径 + `createLinearGradient`**（尾部透明 → 头部 0.62），并用 `quadraticCurveTo` 平滑；禁止按三段 `stroke` 或逐点 `arc`，否则拖尾会出现节点/圆点。头部另外画 1.8px 圆点；`decor[z] === 'none'`（目标块 z0）不画，`core.broken` 只画冷灰余烬。
+- `b2` 坍塌过场由 `mcBurst` 驱动：`breakCore()` 收集 `b2` 内部所有实心格（保留最外圈），`updateMcBurst()` 用线性半径逐圈把墙写 0；半径与墙距都必须用**像素**，写成 tile 会瞬间整片消失。金圈不再是 render 画的圆，而是 **96 条 ghost `rays`**（`speed 420, life .9, ghost:true`）；每面碎墙生成 **6 条淡灰 `soundTrail`**；被扫到的守卫用 `killHunter()`，自带 40 条紫 ghost。冻结与震屏同 `collapseT` 一样持续 1.45 秒；结束才调用 `collapseB2()`。
+- ghost 射线由 `spawnRays({ ghost:true })` 产生，`updateRays()` 的 ghost 分支只直线前进、穿墙穿实体、不产生接触；有 `tag` 的射线才会命中。别把 ghost 和普通声呐混在一个分支里，否则金圈会被墙弹回或把守卫提前染红。
+- 别把 `now` 换成 `levelTime`：`now` 在暂停时也走，粒子和拖尾才不会僵。
+- 玩家房间被保护时，玩家被视为随房间一起升/降：`mcFloor` 取 1/2，`movingFloor()` 负责 HUD；`mcFloorBlock` 记住这个“感知层”属于哪一块，玩家走进另一块时 `movingFloor()` 自动回落到该块真实的 `z + 1`，既不会出现“播报到了二层、HUD 还在一层”，也不会走到别的房间还挂着旧层。
+- 核心被投掷物打碎后，`writeMovingBlock` 必须强制把中心格写回 0，否则下一次翻转会把“口”重新封死；正常通关封 `b2` 时则要在写回后强制写 1。
+- 移动迷宫内部字段叫 `level.moving`（不是规范里的 `level.mc`），`rng = mulberry32(seed ^ 0x9e3779b9)`；抽翻转用这个 rng，`shuffle(pool, rng).slice(0,5)`。
+- 猎手在移动迷宫未警戒速度 64（玩家 92 的 0.7×），警戒 184（2×）；`alertT > 0` 时 `_lurk` 不再闲逛，`_footsteps` 间隔 34、射线 9 条（平时 58 / 22 条）。`hear()` 和诱饵触碰都要续 `alertT`。
+- `now` 只在 `frame()` 里推进。用 `game.update(dt)` 直接快进的探针不会让 `flipRings` 过期，这是探针现象，不是正式游玩的泄漏。
+
 ### 射线与实体
 
 - 脚步/声呐射线如果从实体中心发出，第一步就会命中自己，全部染成"命中红"并原地反弹 → 表现成"只有一坨红点"。
@@ -233,6 +259,7 @@ ni/
 - 尸骸与驱虫器都在抢 `h.pending`：玩家 ping 一到就把猎手拉走，诱饵/驱离等于没有（已修：`Hunter.lureLock` / `repelT` 期间 `hear()` 直接拒绝玩家声源；驱离按 tag 时间戳新盖旧）。
 - `Hunter._plan` 把**像素**坐标传给 `nearestOpen()`（它只收 tile）→ 目标落进墙里时返回 `null`，随后读 `open.x` 崩溃（已修：传 tile 并判空）。
 - 交互曾经"靠近即触发"：钥匙自动入袋、传送门自动传送、梯口自动下行，路过就被带走；靠近未开通的门还只会刷 deny。已统一为 `interactAt()` 选最近目标 → `showInteractTip()` 浮窗 → `doInteract()` 执行，**只认 F**。浮窗位置改用 `viewCenter()` 换算（与相机同一夹紧中心），贴边不偏；传送门目的地标签的字号要除以 `scale`，否则放大/缩小后忽大忽小。
+- 传送门环之前固定 13/20px：远处和近处一样大，房间一多就分不清主次。现在按 `smoothstep(460, 120, dist)` 缩到 30%–100%；**线宽要除以缩放系数 k 补偿**，否则远处细到看不见；标签字号不变、y 只随 k 轻微移动。
 - 启动自检的「消耗品」行曾复用同一个背包逐件检查 8 种道具：6 格装满后第 7 件（`bugspray`）必然报"未能入包"，开机就假红。**每件道具用一个新的 `Inventory`**，检查的才是"能不能入包/能不能消耗"，而不是"背包还有没有空格"。
 
 ### UI
@@ -259,9 +286,9 @@ ni/
 
 ## 8. 当前进度与下一步
 
-### 已完成（截至 v0.7.24）
+### 已完成（截至 v0.8.6）
 
-- 两张地图：房间（BSP 多房间 + 内饰 + 钥匙/出口/三扇门）、迷宫（递归回溯 + 口袋）
+- 三张地图：房间（BSP 多房间 + 内饰 + 钥匙/出口/三扇门）、迷宫（递归回溯 + 口袋）、移动迷宫（3×3×2 块、每 20 秒抽 5 块替换为另一层布局；玩家所在块被抽中则换块，脚下网格不改写；4/6/8 出口）
 - 无字 UI、护符/道具/背包/工作台、投掷与瞄准、区域名、弹幕、引导
 - 地图选择窗、调试冻结/选图、单文件构建修复
 - 消耗品/快捷键契约（投掷=绑定+左键，使用=按键立即生效）、时间逆流快照、死亡重开清空、图腾/复活原地
@@ -270,22 +297,26 @@ ni/
 - 六项道具/敌人反馈：尸骸长声线锁定、无敌星接触击杀、道具靠近才定身份、扫描仪寻路、驱虫器飞行驱离、击杀统一紫线
 - v0.7.22 交互统一：所有地面交互只认 F（拾取/钥匙/传送门/下行），传送门常驻显示目的地与上锁状态，靠近时一个浮窗说清按什么、会发生什么
 - v0.7.24 迷宫道具刷新：8-10 个点按 BFS 深度分带、走廊格优先（至少 3 个在单格走廊里）、最小间距 5 格、避开出生点/出口/猎手
+- v0.8.6 核心声线速度降为声呐的 1/3（约 186.7px/s），拖尾加长到 32 点并用连续二次曲线+渐变绘制，去掉分段节点。
+- v0.8.5 核心三条声线改为在正中一格内反复反弹的永久粒子，不再从中心向外飞。
+- v0.8.4 移动迷宫声线粒子化：核心三辐条改为在一格内反复反弹的粒子拖尾（修复 `coreTrails` 被 `startMap` 清空的问题）；坍塌金圈为 96 条 ghost 粒子、每面碎墙 6 条淡灰粒子、守卫死亡 40 条紫粒子；门洞改为 8 条反向半格红粒子
+- v0.8.3 移动迷宫表现：b2 碎核后的金色逐圈爆散过场，拆掉中央房间内墙、扫死守卫并炸紫线
+- v0.8.2 移动迷宫：3×3×2 块、20 秒一次 5/9 翻转、两层独立单格宽迷宫、玩家房间永不被改写（抽中则换另一块）、4/6/8 出口、翻转前 1 秒声音线、0.7 秒停格 + 震屏、警觉猎手 2× 速度、中心「口」/按钮、b2 彩蛋坍塌、分层 HUD 与播报
 
 ### 待做（按优先级）
 
-1. **移动迷宫**：原设定为「双层 9×2 房间、每 20 秒上下层交换、交界处画红色声线、电梯播报音、中间房特殊移动规则」；**v3 定稿**改为 3×3×2 块、20 秒指令、每次抽 5 块翻转、层界常驻红线、每块 1 只猎手（共 18），详见 `PROMPT-moving-maze.md`。
-2. **机械地牢**：左右两半、牢门钥匙、紫色反光门、猎犬/死徒/镇守者（子弹可反弹三次）。
-3. **地图连接**：`enterMapExit` 已支持 `to/require/color`，但只建了 room↔maze 两条边；补完 21 张图的图结构后，把 `BUILT_MAPS` 逐个放开。
-4. **城堡钥匙**：第一个击杀掉落（字段已留 `castleKey`，掉落逻辑未接）。
-5. **吸收门**：草原门应吸收声波不再反弹（`absorb` 集合已生成，`updateRays` 未消费）。
-6. **科技树**（用户已给格式：缩进父子、`名称 | 前置 | 价格 | 效果`；需先定"局外永久/局内"与货币量级）。
-7. 剩余道具效果细化：驱虫器对猎犬/死徒、尸骸对死徒的特殊反应。
-8. 移动端适配（触屏摇杆 + 点击发声）。
+1. **机械地牢**：左右两半、牢门钥匙、紫色反光门、猎犬/死徒/镇守者（子弹可反弹三次）。
+2. **地图连接**：`enterMapExit` 已支持 `to/require/color`，但只建了 room↔maze 两条边；移动迷宫目前从地图选择/`?map=moving` 进入。补完 21 张图的图结构后，把 `BUILT_MAPS` 逐个放开。
+3. **城堡钥匙**：第一个击杀掉落（字段已留 `castleKey`，掉落逻辑未接）。
+4. **吸收门**：草原门应吸收声波不再反弹（`absorb` 集合已生成，`updateRays` 未消费）。
+5. **科技树**（用户已给格式：缩进父子、`名称 | 前置 | 价格 | 效果`；需先定"局外永久/局内"与货币量级）。
+6. 剩余道具效果细化：驱虫器对猎犬/死徒、尸骸对死徒的特殊反应。
+7. 移动端适配（触屏摇杆 + 点击发声）。
 
 ### 新增一张地图的最小步骤
 
 1. `src/maps.js`：在 `MAPS` 里加节点（`id/name/sub/kind`），并加入 `MAP_ORDER`。
-2. `src/worldgen.js`：写 `buildXxxMap(seed)`，返回 `{w,h,grid,tile,spawn,key,exits,absorb,monsters,loot}`，保证 `mapConnected(level) === true`。
+2. `src/worldgen.js`：写 `buildXxxMap(seed)`，返回 `{w,h,grid,tile,spawn,key,exits,absorb,monsters,loot}`，保证 `mapConnected(level) === true`。移动迷宫这类自管状态的图另加 `moving`/`blocks`，并让 `writeMovingBlock` 只原地改网格。
 3. `src/game.js`：`startMap()` 里按 `node.kind` 选择生成器；把 id 加进 `BUILT_MAPS`。
 4. `node tools/printmap.mjs` 肉眼看图 + `npm test` + `node tools/playtest.mjs`。
 5. `CHANGELOG.md` 记一条，提交并打 tag。
@@ -296,7 +327,7 @@ ni/
 
 - 语义化版本 `v0.x.y`，**每个可见改动都打 tag**，并在 `CHANGELOG.md` 写"改了什么 + 为什么"。
 - 提交信息用 `fix:` / `feat:` / `docs:` / `perf:` 前缀，一句话说清根因（例：`fix: rewind revived into a stale floor`）。
-- 提交前检查：`npm test` 56/56、`playtest` 无异常、`dist` 已重建（`node tools/build.mjs`）。
+- 提交前检查：`npm test` 73/73、`playtest` 无异常、`dist` 已重建（`node tools/build.mjs`）。
 - 截图不进仓库（`.gitignore` 忽略 `shots*/`），README 用的图放 `docs/img/`。
 
 ---
@@ -305,7 +336,7 @@ ni/
 
 ```bash
 cd C:\Users\浩\Desktop\ni
-npm test                       # 56 项应全绿
+npm test                       # 73 项应全绿
 node tools/build.mjs           # 重建 dist
 play.cmd                       # 自动选端口、不缓存、带自检
 ```
@@ -315,6 +346,7 @@ play.cmd                       # 自动选端口、不缓存、带自检
 ```
 http://127.0.0.1:8080/?map=maze&seed=777&static=1
 http://127.0.0.1:8080/?map=room&seed=1234&static=1
+http://127.0.0.1:8080/?map=moving&seed=1234&static=1
 ```
 
 想在控制台里改状态：
@@ -328,3 +360,5 @@ g.debugInvincible = true;       // 调试无敌（~ 也会开）
 ```
 
 遇到"改了没反应"：先 `node tools/build.mjs`，再 Ctrl+F5，再看 `dist/hush.html` 的控制台报错。
+
+- 声线是粒子拖尾；`soundTrails`/`coreTrails`/ghost `rays` 都不是静止线。

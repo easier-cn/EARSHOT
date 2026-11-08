@@ -139,6 +139,9 @@ export class Hunter {
     this.face = Math.random() * Math.PI * 2;
     this.speed = 0;
     this.stepAcc = 0;
+    // How long this body has been chasing a sound. Calm bodies drift at 0.7×
+    // the player's pace; alerted ones close at 2×.
+    this.alertT = 0;
     this.wanderCooldown = Math.random() * 2;
     this.turn = 0;
     this.target = null;
@@ -159,6 +162,7 @@ export class Hunter {
   hear(x, y, delay = 0.25) {
     // A lure (corpse) or a repulsion (bugspray) is already in charge.
     if (this.lureLock || this.repelT > 0) return;
+    this.alertT = Math.max(this.alertT || 0, 3);
     this.pending = { x, y, t: delay };
   }
 
@@ -218,12 +222,18 @@ export class Hunter {
   _footsteps(dt, game) {
     if (this.speed <= 5) return;
     this.stepAcc += this.speed * dt;
-    if (this.stepAcc < 58) return;
+    const alert = (this.alertT || 0) > 0;
+    // An alerted body rings more often, but each burst is thinner: it knows
+    // roughly where you are and no longer needs the wide calm sweep.
+    if (this.stepAcc < (alert ? 34 : 58)) return;
     this.stepAcc = 0;
     const rel = this.x - game.player.x;
     const d = Math.hypot(rel, this.y - game.player.y);
     if (d < 620) game.audio.hunterStep(Math.max(-1, Math.min(1, rel / 380)), Math.min(1, 1.15 - d / 640));
-    game.stepEcho?.(this.x, this.y, this.type === 'butcher' ? '255, 90, 60' : '255, 70, 70', { tagged: false });
+    game.stepEcho?.(this.x, this.y, this.type === 'butcher' ? '255, 90, 60' : '255, 70, 70', {
+      tagged: false,
+      count: alert ? 9 : 22,
+    });
   }
 
   _burst(game, tint = '255, 110, 90', count = 12) {
@@ -231,7 +241,18 @@ export class Hunter {
   }
 
   update(dt, game) {
-    const speed = this.speedCap || (game.hunterSpeed ? game.hunterSpeed() : 126);
+    if (this.alertT > 0) {
+      this.alertT = Math.max(0, this.alertT - dt);
+      if (this.alertT === 0 && this.type === 'lurker') {
+        this.state = 'idle';
+        this.path = [];
+        this.target = null;
+      }
+    }
+    const alert = (this.alertT || 0) > 0;
+    const speed = game.level && game.level.moving
+      ? (alert ? 184 : 64)
+      : (this.speedCap || (game.hunterSpeed ? game.hunterSpeed() : 126));
     if (this.pending) {
       this.pending.t -= dt;
       if (this.pending.t <= 0) {
@@ -275,21 +296,28 @@ export class Hunter {
   /** A slow drifter used on the room and maze maps: wanders when it hears nothing. */
   _lurk(dt, game, speed) {
     const L = game.level;
+    const alert = (this.alertT || 0) > 0;
     this.lurkT = (this.lurkT ?? 0) - dt;
-    if (this.lurkT <= 0 && (!this.path || this.path.length === 0)) {
+    if (!alert && this.lurkT <= 0 && (!this.path || this.path.length === 0)) {
       this.lurkT = 2.2 + Math.random() * 2.8;
       const t = L.tile;
+      const blk = this.block != null && L.blocks ? L.blocks[this.block] : null;
+      const x0 = blk ? blk.ox + 1 : 1;
+      const y0 = blk ? blk.oy + 1 : 1;
+      const x1 = blk ? blk.ox + 23 : L.w - 2;
+      const y1 = blk ? blk.oy + 23 : L.h - 2;
       for (let i = 0; i < 60; i++) {
-        const tx = 1 + Math.floor(Math.random() * (L.w - 2));
-        const ty = 1 + Math.floor(Math.random() * (L.h - 2));
+        const tx = x0 + Math.floor(Math.random() * (x1 - x0 + 1));
+        const ty = y0 + Math.floor(Math.random() * (y1 - y0 + 1));
         if (isSolid(L.grid, L.w, L.h, tx, ty)) continue;
+        if (blk && tx >= blk.ox + 11 && tx <= blk.ox + 13 && ty >= blk.oy + 11 && ty <= blk.oy + 13) continue;
         this._plan(game, (tx + 0.5) * t, (ty + 0.5) * t);
         break;
       }
     }
-    const moving = speed * (this.moving ? 1 : 0.55);
-    const arrived = this._walk(dt, game, moving);
-    if (arrived) this.state = 'idle';
+    // Calm drift is already 0.7× in `speed`; alerted bodies get the full 2×.
+    const arrived = this._walk(dt, game, speed);
+    if (arrived && !alert) this.state = 'idle';
     return arrived;
   }
 

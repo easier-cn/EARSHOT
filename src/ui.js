@@ -108,7 +108,9 @@ export class UI {
         <div class="hud-left">
           <span class="hud-num" id="hud-num" data-sector="I"></span>
           <span class="hud-sector" id="hud-sector"></span>
+          <span class="hud-floor" id="hud-floor"></span>
         </div>
+        <div class="hud-announce" id="hud-announce"></div>
         <div class="hud-right">
           <span class="diamond"></span>
           <span class="shard-bar" id="hud-shards"></span>
@@ -139,6 +141,8 @@ export class UI {
     this.foot = $('title-foot');
     this.hudNum = $('hud-num');
     this.hudSector = $('hud-sector');
+    this.hudFloor = $('hud-floor');
+    this.hudAnnounce = $('hud-announce');
     this.hudShards = $('hud-shards');
     this.hudCharges = $('hud-charges');
     this.hudLoot = $('hud-loot');
@@ -640,7 +644,32 @@ export class UI {
     this.mapSel = null;
   }
 
-  updateHUD({ shards = 0, total = 1, charges = 0, listen = false, danger = 0, depth = 0, diamonds = 0, gold = 0, hot = null, active = null, name = null } = {}) {
+  /** The moving maze's floor readout, kept apart from the sector glyphs. */
+  setFloor(floor = 0) {
+    if (!this.hudFloor) return;
+    if (!floor) {
+      this.hudFloor.textContent = '';
+      this.hudFloor.classList.remove('on', 'under');
+      return;
+    }
+    this.hudFloor.textContent = floor < 0 ? '-1 层' : `第 ${floor} 层`;
+    this.hudFloor.classList.add('on');
+    this.hudFloor.classList.toggle('under', floor < 0);
+  }
+
+  /** A big two-second floor stamp when the room under you moves. */
+  announceFloor(floor = 1) {
+    if (!this.hudAnnounce) return;
+    this.hudAnnounce.textContent = `已到达 ${floor} 层`;
+    this.feed(`已到达 ${floor} 层`);
+    this.hudAnnounce.classList.remove('show');
+    void this.hudAnnounce.offsetWidth;
+    this.hudAnnounce.classList.add('show');
+    clearTimeout(this.floorTimer);
+    this.floorTimer = setTimeout(() => this.hudAnnounce.classList.remove('show'), 2200);
+  }
+
+  updateHUD({ shards = 0, total = 1, charges = 0, listen = false, danger = 0, depth = 0, diamonds = 0, gold = 0, hot = null, active = null, name = null, floor = 0 } = {}) {
     if (name && this.hudNum && this.hudNum.dataset.mode !== 'name') {
       this.hudNum.dataset.mode = 'name';
       this.hudNum.classList.add('hud-name');
@@ -685,6 +714,7 @@ export class UI {
     this.hudCharges.innerHTML = ch;
     this.hudListen.classList.toggle('on', !!listen);
     this.hud.classList.toggle('sneaking', !!this.game.sneak);
+    this.setFloor(floor);
     this.root.style.setProperty('--danger', String(danger || 0));
     this.syncMute();
   }

@@ -9,14 +9,28 @@ import { UI } from './ui.js';
 import { Editor } from './editor.js';
 import { CHAMBERS } from './chambers.js';
 import { generateFloor } from './rooms.js';
-import { buildRoomMap, buildMazeMap } from './worldgen.js';
+import {
+  buildRoomMap,
+  buildMazeMap,
+  buildMovingMap,
+  blockAt,
+  MOVING,
+  flipMoving,
+  pickMovingFlips,
+  flipMovingBlock,
+  coreHitAt,
+  clearMoving,
+  collapseB2,
+  movingDoors,
+  nearestOpenInBlock,
+} from './worldgen.js';
 import { mapNode, MAP_ORDER } from './maps.js';
 import { CHARMS, ITEMS, Inventory, HOTKEY_ORDER } from './loot.js';
 import { CHARM_TEXT, ITEM_TEXT, charmText } from './desc.js';
 
 const SAVE_KEY = 'hush.save.v1';
 const FLOORS = 5;
-const BUILT_MAPS = new Set(['room', 'maze']);
+const BUILT_MAPS = new Set(['room', 'maze', 'moving', 'mech', 'lab']);
 const PING_MAX = 3;
 const PING_REGEN = 2.4;
 const PING_SPEED = 720;
@@ -30,6 +44,7 @@ const STEP_RANGE = 215;
 const SHARD_NOISE = 330;
 const RAY_COUNT = 96;
 const RAY_SPEED = 560;
+const CORE_RAY_SPEED = RAY_SPEED / 3;
 const RAY_LIFE = 0.95;
 const START_CHARGES = 3;
 
@@ -308,7 +323,7 @@ export class Game {
   }
 
   /** Killing a hunter pays 2 diamonds and 10 gold. 亡命猎屠 multiplies this. */
-  killHunter(h) {
+  killHunter(h, { ghost = false } = {}) {
     if (this.mapMode && this.mapId === 'room' && !this.castleKey) {
       this.castleKey = true;
       this.flash = 1;
@@ -316,6 +331,7 @@ export class Game {
     const i = this.hunters.indexOf(h);
     if (i < 0) return false;
     this.hunters.splice(i, 1);
+    h.dead = true;
     const lvl = this.charmLevel ? this.charmLevel('hunt') : 0;
     const mult = lvl ? 2 ** lvl : 1;
     this.diamonds += 2 * mult;
@@ -324,7 +340,7 @@ export class Game {
     this.shake = Math.max(this.shake, 5);
     this.audio.shard();
     // Every death, however it was caused, answers once in purple.
-    this.stepEcho(h.x, h.y, '190, 130, 255', { count: 40, speed: 420, life: 0.8 });
+    this.stepEcho(h.x, h.y, '190, 130, 255', { count: 40, speed: 420, life: 0.8, ghost });
     return true;
   }
 
@@ -372,6 +388,12 @@ export class Game {
     this.rays = [];
     this.contacts = [];
     this.echoRings = [];
+    this.flipRings = [];
+    this.flipSoundLines = [];
+    this.flipFreeze = 0;
+    this.mcBurst = null;
+    this.soundTrails = [];
+    this.coreTrails = this.makeCoreTrails(level);
     this.particles = makeDust(level, 220);
     this.camX = this.player.x;
     this.camY = this.player.y;
@@ -415,7 +437,11 @@ export class Game {
   startMap(id = 'room', seed = (Math.random() * 1e9) | 0) {
     this._entryPending = true;
     const node = mapNode(id) || mapNode('room');
-    const level = node.kind === 'maze' ? buildMazeMap(seed) : buildRoomMap(seed);
+    const level = node.kind === 'maze'
+      ? buildMazeMap(seed)
+      : node.kind === 'moving'
+        ? buildMovingMap(seed)
+        : buildRoomMap(seed);
     this.mapMode = true;
     this.mapId = node.id;
     this.mapSeed = seed;
@@ -445,12 +471,23 @@ export class Game {
     this.camX = this.player.x;
     this.camY = this.player.y;
     this.mapNodes = level.monsters || [];
+    this.mcHunters = null;
     this.hunters = this.mapNodes.map((m) => {
       const h = new Hunter(m.x * level.tile + level.tile / 2, m.y * level.tile + level.tile / 2, m.type);
-      h.speedCap = m.speed || (node.kind === 'maze' ? 76 : 84);
+      h.speedCap = m.speed || (node.kind === 'maze' ? 76 : node.kind === 'moving' ? 184 : 84);
+      h.block = m.block;
+      h.layer = m.layer ?? 0;
+      h.reserve = !!level.moving && m.layer !== 0;
       h.state = 'idle';
       return h;
     });
+    if (level.moving) {
+      // Both faces exist in the data, but the guard that rides the room is
+      // always the same body. It never blinks out when the room turns over;
+      // the reserve face stays asleep.
+      this.mcHunters = this.hunters;
+      this.syncMovingHunters();
+    }
     this.skitters = [];
     this.shards = [];
     this.totalShards = 0;
@@ -467,6 +504,12 @@ export class Game {
     this.rays = [];
     this.contacts = [];
     this.echoRings = [];
+    this.flipRings = [];
+    this.flipSoundLines = [];
+    this.flipFreeze = 0;
+    this.mcBurst = null;
+    this.soundTrails = [];
+    this.coreTrails = this.makeCoreTrails(level);
     this.particles = [];
     this.charges = PING_MAX;
     this.pingsUsed = 0;
@@ -474,7 +517,11 @@ export class Game {
     this.activeItem = null;
     this.state = 'playing';
     this.ui.showGame();
-    this.ui.updateHUD({ chamber: 0, title: node.name, shards: 0, total: 0, charges: this.charges, listen: false, muted: this.audio.muted, danger: 0, depth: 0, diamonds: this.diamonds, gold: this.gold });
+    const startBlock = level.moving ? blockAt(level, Math.floor(this.player.x / level.tile), Math.floor(this.player.y / level.tile)) : null;
+    this.mcFloorBlock = startBlock ? startBlock.i : -1;
+    this.mcFloor = level.moving ? (startBlock ? startBlock.z + 1 : 1) : 0;
+    this.ui.updateHUD({ chamber: 0, title: node.name, shards: 0, total: 0, charges: this.charges, listen: false, muted: this.audio.muted, danger: 0, depth: 0, diamonds: this.diamonds, gold: this.gold, floor: level.moving ? this.movingFloor() : 0 });
+    if (level.moving) this.maybeGuide('moving', '这些房间都在动。去对角那一间的二层。');
     return true;
   }
 
@@ -505,6 +552,440 @@ export class Game {
     return true;
   }
 
+  /** The moving block the player currently stands in. */
+  playerBlock() {
+    const L = this.level;
+    if (!L || !L.moving) return null;
+    return blockAt(L, Math.floor(this.player.x / L.tile), Math.floor(this.player.y / L.tile));
+  }
+
+  /** Every block whose 25x25 area covers the player's tile. A tile on a
+   *  shared border belongs to two rooms, and either one could rewrite it. */
+  playerBlocks() {
+    const L = this.level;
+    if (!L || !L.moving) return [];
+    const tx = Math.floor(this.player.x / L.tile);
+    const ty = Math.floor(this.player.y / L.tile);
+    const cols = [Math.floor(tx / MOVING.PITCH)];
+    const rows = [Math.floor(ty / MOVING.PITCH)];
+    if (tx % MOVING.PITCH === 0) cols.push(cols[0] - 1);
+    if (ty % MOVING.PITCH === 0) rows.push(rows[0] - 1);
+    const out = [];
+    for (const r of rows) {
+      for (const c of cols) {
+        if (r < 0 || r > 2 || c < 0 || c > 2) continue;
+        out.push(L.blocks[r * 3 + c]);
+      }
+    }
+    return out;
+  }
+
+  /** Rebuild the map-exit list after the moving maze opens or seal it. */
+  rebuildMapExits() {
+    const L = this.level;
+    this.mapExits = (L.exits || []).map((e) => ({
+      x: e.x * L.tile + L.tile / 2,
+      y: e.y * L.tile + L.tile / 2,
+      to: e.to,
+      require: e.require || null,
+      color: e.color || '140,240,170',
+      built: BUILT_MAPS.has(e.to),
+    }));
+  }
+
+  /** 1 / 2 / -1 for the HUD floor readout. */
+  movingFloor() {
+    const L = this.level;
+    if (!L || !L.moving) return 0;
+    if (L.moving.state === 'collapsed' || L.moving.state === 'collapsing') return -1;
+    const pb = this.playerBlock ? this.playerBlock() : null;
+    if (pb && pb.i !== this.mcFloorBlock) {
+      this.mcFloorBlock = pb.i;
+      this.mcFloor = pb.z + 1;
+    }
+    return this.mcFloor || 1;
+  }
+
+  /** Keep the nine guards that actually ride the rooms. The second face is a
+   *  dormant copy; it never pops in or out when a room turns over. */
+  syncMovingHunters() {
+    const L = this.level;
+    if (!L || !L.moving || !this.mcHunters) return;
+    if (L.moving.state === 'collapsed') {
+      this.hunters = this.mcHunters.filter((h) => !h.dead && !h.reserve && h.block === 4);
+      return;
+    }
+    this.hunters = this.mcHunters.filter((h) => !h.dead && !h.reserve);
+  }
+
+  /** One actual sound line: a particle with a fading point trail. */
+  spawnSoundTrail(x, y, dx, dy, { speed = 38, life = 0.95, tint = '255, 70, 70', width = 1.1, kind = 'door' } = {}) {
+    this.soundTrails.push({ x, y, dx, dy, age: 0, life, speed, tint, width, kind, trail: [{ x, y }] });
+  }
+
+  /** Advance every free-flying sound particle and prune finished tails. */
+  updateSoundTrails(dt) {
+    const out = [];
+    for (const t of this.soundTrails || []) {
+      t.age += dt;
+      if (t.age > t.life) continue;
+      t.x += t.dx * t.speed * dt;
+      t.y += t.dy * t.speed * dt;
+      t.trail.push({ x: t.x, y: t.y });
+      if (t.trail.length > 40) t.trail.shift();
+      out.push(t);
+    }
+    this.soundTrails = out;
+  }
+
+  /** Three real sound particles per active core. They are born at the centre
+   *  and bounce forever inside the one-tile 口, at the same speed as sonar. */
+  makeCoreTrails(level) {
+    const out = [];
+    const tile = level.tile;
+    for (const b of level.blocks || []) {
+      if (!b.core || b.core.broken) continue;
+      const cx = (b.ox + 12.5) * tile;
+      const cy = (b.oy + 12.5) * tile;
+      for (let k = 0; k < 3; k++) {
+        const ang = -Math.PI / 2 + (38 * Math.PI) / 180 + (k * Math.PI * 2) / 3;
+        out.push({ block: b.i, x: cx, y: cy, dx: Math.cos(ang), dy: Math.sin(ang), pts: [{ x: cx, y: cy }] });
+      }
+    }
+    return out;
+  }
+
+  updateCoreTrails(dt) {
+    const L = this.level;
+    if (!L || !L.moving) return;
+    const tile = L.tile;
+    for (const t of this.coreTrails || []) {
+      const b = L.blocks[t.block];
+      if (!b || b.gone || b.core.broken || b.decor[b.z] === 'none') {
+        t.pts.length = 0;
+        continue;
+      }
+      // The particle lives inside the one-tile 口 and reflects off its edges.
+      const x0 = (b.ox + 12) * tile + 1;
+      const x1 = (b.ox + 13) * tile - 1;
+      const y0 = (b.oy + 12) * tile + 1;
+      const y1 = (b.oy + 13) * tile - 1;
+      let left = CORE_RAY_SPEED * dt;
+      while (left > 0) {
+        const step = Math.min(2, left);
+        left -= step;
+        let nx = t.x + t.dx * step;
+        let ny = t.y + t.dy * step;
+        if (nx < x0) {
+          nx = x0 + (x0 - nx);
+          t.dx = Math.abs(t.dx);
+        } else if (nx > x1) {
+          nx = x1 - (nx - x1);
+          t.dx = -Math.abs(t.dx);
+        }
+        if (ny < y0) {
+          ny = y0 + (y0 - ny);
+          t.dy = Math.abs(t.dy);
+        } else if (ny > y1) {
+          ny = y1 - (ny - y1);
+          t.dy = -Math.abs(t.dy);
+        }
+        t.x = clamp(nx, x0, x1);
+        t.y = clamp(ny, y0, y1);
+        const last = t.pts[t.pts.length - 1];
+        if (!last || Math.abs(t.x - last.x) + Math.abs(t.y - last.y) >= 2) {
+          t.pts.push({ x: t.x, y: t.y });
+          if (t.pts.length > 32) t.pts.shift();
+        }
+      }
+    }
+  }
+
+  /** A room about to move shows it only in the last second: at each door,
+   *  eight red sound particles cross the one-tile opening, alternating ways. */
+  emitFlipSoundLines(picked) {
+    const L = this.level;
+    const tile = L.tile;
+    const seen = new Set();
+    for (const i of picked) {
+      const b = L.blocks[i];
+      if (!b || b.gone) continue;
+      for (const d of movingDoors(b)) {
+        const verticalDivider = d.x === b.ox || d.x === b.ox + 24;
+        const key = `${d.x},${d.y},${verticalDivider ? 'v' : 'h'}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        for (let j = 0; j < 8; j++) {
+          const u = (j + 0.5) / 8 * tile - tile / 2;
+          const dir = j % 2 ? -1 : 1;
+          let x;
+          let y;
+          let dx = 0;
+          let dy = 0;
+          if (verticalDivider) {
+            x = (d.x + (dir > 0 ? 0 : 1)) * tile;
+            y = (d.y + 0.5) * tile + u;
+            dx = dir;
+          } else {
+            x = (d.x + 0.5) * tile + u;
+            y = (d.y + (dir > 0 ? 0 : 1)) * tile;
+            dy = dir;
+          }
+          this.spawnSoundTrail(x, y, dx, dy, { speed: 44, life: 0.55, tint: '255, 70, 70', width: 1 });
+        }
+      }
+    }
+    this.flipSoundLines = [];
+  }
+
+  /** Run the moving-maze clock: five rooms swap every twenty seconds. */
+  updateMoving(dt) {
+    const L = this.level;
+    const m = L && L.moving;
+    if (!m) return;
+    this.updateCoreTrails(dt);
+    this.updateSoundTrails(dt);
+    if (m.state === 'running') {
+      m.clock += dt;
+      if (m.clock >= m.nextFlip) {
+        m.nextFlip += m.period;
+        const picked = m.pending;
+        m.pending = null;
+        this.flipSoundLines = [];
+        this.doFlip(picked);
+      } else if (m.nextFlip - m.clock <= 1 && !m.pending) {
+        m.pending = pickMovingFlips(L, this.playerBlock() ? this.playerBlock().i : -1);
+        this.emitFlipSoundLines(m.pending);
+      }
+    } else if (m.state === 'collapsing') {
+      m.collapseT -= dt;
+      this.updateMcBurst(dt);
+      if (m.collapseT <= 0) {
+        this.mcBurst = null;
+        collapseB2(L);
+        this.syncMovingHunters();
+        this.rebuildMapExits();
+        const b2 = L.blocks[4];
+        this.player.x = (b2.ox + 12.5) * L.tile;
+        this.player.y = (b2.oy + 13.5) * L.tile;
+        this.camX = this.player.x;
+        this.camY = this.player.y;
+        this.flash = 1;
+        this.shake = Math.max(this.shake, 10);
+        this.ui.feed('脚下空了。');
+        this.ui.setFloor(-1);
+        this.audio.mcStopped();
+      }
+    }
+  }
+
+  /** After a swap, any guard whose new tile is solid is nudged to the
+   *  nearest open tile of the same room. Nothing rotates, so the player's
+   *  room and everything inside it stays exactly where it was. */
+  relocateMoved(movedIds) {
+    const L = this.level;
+    const tile = L.tile;
+    for (const h of this.mcHunters || []) {
+      if (h.dead || h.reserve || !movedIds.has(h.block)) continue;
+      const b = L.blocks[h.block];
+      h.layer = b.z;
+      h.path = [];
+      h.pending = null;
+      h.target = null;
+      h.state = 'idle';
+      if (!isSolid(L.grid, L.w, L.h, Math.floor(h.x / tile), Math.floor(h.y / tile))) continue;
+      const spot = nearestOpenInBlock(L, b, h.x, h.y);
+      if (spot) {
+        h.x = spot.x;
+        h.y = spot.y;
+      }
+    }
+    this.syncMovingHunters();
+  }
+
+  /** One swap: five unbroken rooms. The room the player is standing in is
+   *  never rewritten; its slot is swapped out for another room instead. */
+  doFlip(picked = null) {
+    const L = this.level;
+    const tile = L.tile;
+    const m = L.moving;
+    this.flipSoundLines = [];
+    this.soundTrails = (this.soundTrails || []).filter((t) => t.kind !== 'door');
+    const pb = this.playerBlock();
+    const protectedIds = new Set(this.playerBlocks().map((b) => b.i));
+    let ids = (picked || pickMovingFlips(L, pb ? pb.i : -1)).slice();
+    let spared = false;
+    if (ids.some((i) => protectedIds.has(i))) {
+      spared = true;
+      ids = ids.filter((i) => !protectedIds.has(i));
+      const pool = L.blocks.filter((b) => !b.core.broken && !b.gone && !protectedIds.has(b.i) && !ids.includes(b.i));
+      while (ids.length < 5 && pool.length) ids.push(pool.splice(Math.floor(m.rng() * pool.length), 1)[0].i);
+    }
+    const moved = flipMoving(L, ids);
+    if (!moved.length) return;
+    const movedIds = new Set(moved.map((b) => b.i));
+    this.flipRings = this.flipRings || [];
+    for (const b of moved) {
+      this.flipRings.push({ x: (b.ox + 12.5) * tile, y: (b.oy + 12.5) * tile, t: this.now });
+    }
+
+    this.relocateMoved(movedIds);
+
+    for (const c of this.contacts) {
+      const blk = blockAt(L, Math.floor(c.x / tile), Math.floor(c.y / tile));
+      if (blk && movedIds.has(blk.i)) c.tint = '255, 70, 70';
+    }
+    this.flipFreeze = 0.7;
+    this.shakeT = 0.7;
+    this.shake = Math.max(this.shake, 9);
+    this.audio.swapRumble();
+    if (spared && pb) {
+      // The room stayed, but the player rose or fell with it. HUD and
+      // announcement both follow the perceived floor.
+      this.mcFloor = this.mcFloor === 1 ? 2 : 1;
+      this.mcFloorBlock = pb.i;
+    }
+    this.ui.setFloor(this.movingFloor());
+    if (spared && pb) {
+      this.audio.floorChime(this.mcFloor);
+      this.ui.announceFloor(this.mcFloor);
+    }
+  }
+
+  /** Drive the b2 wall-breaking cutscene. The ring only exists for ~1.2 s;
+   *  walls it reaches turn to open floor and throw one short gray line. */
+  updateMcBurst(dt) {
+    const B = this.mcBurst;
+    if (!B || B.done) return;
+    const L = this.level;
+    const tile = L.tile;
+    B.t += dt;
+    const k = Math.min(1, B.t / B.dur);
+    B.r = B.max * k;
+    for (const w of B.walls) {
+      if (w.broken || w.d > B.r) continue;
+      w.broken = true;
+      L.grid[w.y * L.w + w.x] = 0;
+      // Every broken wall answers with a tiny ring of its own.
+      for (let j = 0; j < 6; j++) {
+        const a = w.ang + (j * Math.PI) / 3 + 0.2;
+        this.spawnSoundTrail((w.x + 0.5) * tile, (w.y + 0.5) * tile, Math.cos(a), Math.sin(a), {
+          speed: 42,
+          life: 0.18,
+          tint: '210, 216, 220',
+          width: 0.9,
+          kind: 'spall',
+        });
+      }
+    }
+    for (const h of this.mcHunters || []) {
+      if (h.dead || h.reserve || h.block !== 4) continue;
+      if (Math.hypot(h.x - B.x, h.y - B.y) > B.r) continue;
+      this.killHunter(h, { ghost: true });
+    }
+    if (k >= 1 && !B.done) {
+      B.done = true;
+      B.doneAt = this.now;
+    }
+  }
+
+  /** A thrown thing hit a core. b2 is the egg; every other spark just stops. */
+  breakCore(b) {
+    const L = this.level;
+    const m = L.moving;
+    if (!b || !b.core || b.core.broken) return false;
+    if (b.core.kind === 'button') {
+      this.audio.deny();
+      return false;
+    }
+    b.core.broken = true;
+    // The 口 itself is gone: from now on that centre tile is walkable, and
+    // writeMovingBlock keeps it open even if the variant still says solid.
+    L.grid[(b.oy + 12) * L.w + b.ox + 12] = 0;
+    b.variants[b.z][12 * 25 + 12] = 0;
+    this.audio.glassBreak();
+    this.shake = Math.max(this.shake, 3);
+    this.stepEcho((b.ox + 12.5) * L.tile, (b.oy + 12.5) * L.tile, b.i === 4 ? '255, 200, 90' : '200, 220, 230', {
+      count: b.i === 4 ? 96 : 26,
+      speed: b.i === 4 ? 420 : 340,
+      life: b.i === 4 ? 0.9 : 0.6,
+      ghost: b.i === 4,
+    });
+    if (b.i === 4) {
+      m.state = 'collapsing';
+      // The cutscene happens at the core, even if the player threw from afar.
+      this.camX = (b.ox + 12.5) * L.tile;
+      this.camY = (b.oy + 12.5) * L.tile;
+      m.collapseT = 1.45;
+      m.pending = null;
+      this.flipSoundLines = [];
+      this.soundTrails = (this.soundTrails || []).filter((t) => t.kind !== 'door');
+      const protectedIds = new Set(this.playerBlocks().map((o) => o.i));
+      const allIds = new Set(L.blocks.filter((o) => !protectedIds.has(o.i)).map((o) => o.i));
+      // The one command that moves even shattered rooms, except the room the
+      // player is standing in.
+      for (const o of L.blocks) if (allIds.has(o.i)) flipMovingBlock(L, o);
+      this.relocateMoved(allIds);
+      // Cutscene: a golden sound ring flies out from the broken core and
+      // breaks every interior wall of b2 (the outer wall stays). Characters
+      // are frozen while it travels; anything caught by the ring dies.
+      const cx = (b.ox + 12.5) * L.tile;
+      const cy = (b.oy + 12.5) * L.tile;
+      this.camX = cx;
+      this.camY = cy;
+      const walls = [];
+      for (let ly = 1; ly < 24; ly++) {
+        for (let lx = 1; lx < 24; lx++) {
+          const tx = b.ox + lx;
+          const ty = b.oy + ly;
+          if (L.grid[ty * L.w + tx] !== 1) continue;
+          const dx = tx + 0.5 - (b.ox + 12.5);
+          const dy = ty + 0.5 - (b.oy + 12.5);
+          walls.push({ x: tx, y: ty, d: Math.hypot(dx, dy) * L.tile, ang: Math.atan2(dy, dx), broken: false });
+        }
+      }
+      this.mcBurst = { x: cx, y: cy, t: 0, dur: 1.15, max: 600, r: 0, walls, debris: [], done: false, doneAt: 0 };
+      this.flipFreeze = 1.45;
+      this.shakeT = 1.45;
+      this.shake = 14;
+      this.audio.b2Quake();
+      this.ui.announceFloor(-1);
+      this.ui.setFloor(-1);
+      this.ui.feed('你打碎了那一颗。');
+    } else {
+      this.ui.feed('中心碎了。这一间不再动了。');
+    }
+    return true;
+  }
+
+  /** The target button: seal the centre and open eight ways out. */
+  clearMovingMaze() {
+    const L = this.level;
+    const m = L && L.moving;
+    if (!m || m.state !== 'running') {
+      this.audio.deny();
+      return false;
+    }
+    clearMoving(L);
+    m.pending = null;
+    this.flipSoundLines = [];
+    this.rebuildMapExits();
+    this.flash = 1;
+    this.shake = Math.max(this.shake, 6);
+    this.audio.mcStopped();
+    this.ui.feed('整座迷宫停下来了。');
+    if (this.playerBlock() && this.playerBlock().i === 4) {
+      const t = L.blocks[m.target];
+      const spot = nearestOpenInBlock(L, t, this.player.x, this.player.y) || { x: (t.ox + 12.5) * L.tile, y: (t.oy + 13.5) * L.tile };
+      this.player.x = spot.x;
+      this.player.y = spot.y;
+      this.camX = this.player.x;
+      this.camY = this.player.y;
+    }
+    this.ui.setFloor(this.movingFloor());
+    return true;
+  }
+
   /** Nearest thing the player can press F on: loot, key, portal or stair. */
   interactAt() {
     const p = this.player;
@@ -517,6 +998,15 @@ export class Game {
     for (const it of this.loot) if (it.kind) take('loot', it, it.x, it.y, 46);
     if (this.mapMode) {
       if (this.mapKey && !this.hasKey) take('key', this.mapKey, this.mapKey.x, this.mapKey.y, 42);
+      const mv = this.level && this.level.moving;
+      if (mv && mv.state === 'running') {
+        const tb = this.level.blocks[mv.target];
+        if (tb && tb.z === mv.targetLayer && tb.core && !tb.core.broken && tb.decor[tb.z] === 'button') {
+          const cx = (tb.ox + 12.5) * this.level.tile;
+          const cy = (tb.oy + 12.5) * this.level.tile;
+          take('button', tb, cx, cy, 56);
+        }
+      }
       for (const e of this.mapExits) take('exit', e, e.x, e.y, 50);
     } else if (this.level && this.level.exit) {
       const e = this.level.exit;
@@ -545,6 +1035,9 @@ export class Game {
     } else if (near.kind === 'key') {
       title = '地图钥匙';
       body = '按 [ F ] 拾取。\n取得之后，上锁的门才会回应你。';
+    } else if (near.kind === 'button') {
+      title = '楼层开关';
+      body = '按 [ F ] 停下整座迷宫。\\n走遍九间屋子，只有这一颗在发金光。';
     } else if (near.kind === 'exit') {
       const ex = near.ref;
       const dest = mapNode(ex.to);
@@ -573,6 +1066,10 @@ export class Game {
       this.ui.feed('取得地图钥匙');
       this.ui.hideTip();
       return false;
+    }
+    if (near.kind === 'button') {
+      this.ui.hideTip();
+      return this.clearMovingMaze();
     }
     if (near.kind === 'exit') { this.ui.hideTip(); return this.enterMapExit(near.ref); }
     if (this.exitOpen) { this.complete(); return true; }
@@ -859,6 +1356,12 @@ export class Game {
         const ny = t.y + t.dy * 6;
         const tx = Math.floor(nx / TILE);
         const ty = Math.floor(ny / TILE);
+        const core = this.level.moving ? coreHitAt(this.level, nx, ny, 32) : null;
+        if (core) {
+          this.breakCore(core);
+          hitWall = true;
+          break;
+        }
         if (tx < 0 || ty < 0 || tx >= this.level.w || ty >= this.level.h || this.level.grid[ty * this.level.w + tx]) {
           hitWall = true;
           break;
@@ -1444,6 +1947,43 @@ export class Game {
       return;
     }
     this.levelTime += dt;
+    this.updateMoving(dt);
+
+    // A moving room takes the whole cast with it. For 0.7 s nobody but a thrown
+    // object moves: no steps, no hunter paths, no contact damage.
+    if (this.flipFreeze > 0) {
+      this.flipFreeze = Math.max(0, this.flipFreeze - dt);
+      this.updateThrows(dt);
+      this.updateRays(dt);
+      this.updateParticles(dt);
+      if (this.shakeT > 0) {
+        this.shakeT = Math.max(0, this.shakeT - dt);
+        this.shake = Math.max(this.shake, 9);
+        if (this.shakeT === 0) this.shake = 0;
+      } else {
+        this.shake = Math.max(0, this.shake - dt * 24);
+      }
+      this.flash = Math.max(0, this.flash - dt * 3.4);
+      this.audio.update(dt, { danger: this.danger });
+      this.ui.updateHUD({
+        chamber: this.chamberIndex,
+        shards: this.shards.length,
+        total: this.totalShards || (this.floorMode ? 1 : CHAMBERS[this.chamberIndex].shards),
+        depth: this.floorMode ? this.depth : 0,
+        charges: this.charges,
+        listen: this.listen,
+        muted: this.audio.muted,
+        danger: this.danger,
+        diamonds: this.diamonds,
+        gold: this.gold,
+        charms: this.inv.charms.length,
+        hot: this.inv.hot,
+        active: this.activeItem,
+        name: this.mapMode && this.mapNode ? this.mapNode.name : null,
+        floor: this.level.moving ? this.movingFloor() : 0,
+      });
+      return;
+    }
 
     // Shift is HELD, not toggled: silent and blind while the key is down.
     const sneaking = this.input.down('ShiftLeft') || this.input.down('ShiftRight');
@@ -1655,6 +2195,10 @@ export class Game {
     for (let i = this.echoRings.length - 1; i >= 0; i--) {
       if (this.now - this.echoRings[i].t > 1.4) this.echoRings.splice(i, 1);
     }
+    this.flipRings = this.flipRings || [];
+    for (let i = this.flipRings.length - 1; i >= 0; i--) {
+      if (this.now - this.flipRings[i].t > 1.2) this.flipRings.splice(i, 1);
+    }
     if (this.echoRequired && !this.echoHeard && this.shards.length === 0) {
       this.humT -= dt;
       if (this.humT <= 0) {
@@ -1669,7 +2213,14 @@ export class Game {
     this.audio.update(dt, { danger: this.danger });
     this.updateRays(dt);
     this.updateParticles(dt);
-    this.shake = Math.max(0, this.shake - dt * 24);
+    this.flipFreeze = Math.max(0, (this.flipFreeze || 0) - dt);
+    if (this.shakeT > 0) {
+      this.shakeT = Math.max(0, this.shakeT - dt);
+      this.shake = Math.max(this.shake, 9);
+      if (this.shakeT === 0) this.shake = 0;
+    } else {
+      this.shake = Math.max(0, this.shake - dt * 24);
+    }
     this.flash = Math.max(0, this.flash - dt * 3.4);
     this.ui.updateHUD({
       chamber: this.chamberIndex,
@@ -1686,6 +2237,7 @@ export class Game {
       hot: this.inv.hot,
       active: this.activeItem,
       name: this.mapMode && this.mapNode ? this.mapNode.name : null,
+      floor: this.level.moving ? this.movingFloor() : 0,
     });
     this.homeMarkers = [];
     const homeLvl = this.inv.level('home');
@@ -1793,6 +2345,7 @@ export class Game {
         // The corpse's call owns the body until it physically arrives, and a
         // player ping must not be able to redirect it in the meantime.
         e.lureLock = { x: tag.x, y: tag.y };
+        e.alertT = Math.max(e.alertT || 0, 3);
         e.lastTag = Math.max(e.lastTag ?? -1, tag.t);
         e.target = { x: tag.x, y: tag.y };
         e.pending = { x: tag.x, y: tag.y, t: 0.1 };
@@ -1823,7 +2376,7 @@ export class Game {
       if (dist(x, y, sh.x, sh.y) < 13) return { e: sh, kind: 'shard', tint: '255,205,110' };
     }
     const ex = this.level.exit;
-    if (dist(x, y, ex.x, ex.y) < 17) return { e: ex, kind: 'exit', tint: '140,240,170' };
+    if (ex && dist(x, y, ex.x, ex.y) < 17) return { e: ex, kind: 'exit', tint: '140,240,170' };
     for (const h of this.hunters) {
       if (dist(x, y, h.x, h.y) < 15) return { e: h, kind: 'hunter', tint: '255,58,58', hot: true };
     }
@@ -1842,10 +2395,10 @@ export class Game {
     const speed = opts.speed ?? 330;
     const life = opts.life ?? 0.58;
     const tag = opts.tagged === false ? null : undefined;
-    this.spawnRays(x, y, { count, speed, life, tint, tag, kind: opts.kind || 'step' });
+    this.spawnRays(x, y, { count, speed, life, tint, tag, kind: opts.kind || 'step', ghost: !!opts.ghost });
   }
 
-  spawnRays(x, y, { count = RAY_COUNT, speed = RAY_SPEED, life = RAY_LIFE, tint = null, kind = 'ping', tag = undefined, sweep = null } = {}) {
+  spawnRays(x, y, { count = RAY_COUNT, speed = RAY_SPEED, life = RAY_LIFE, tint = null, kind = 'ping', tag = undefined, sweep = null, ghost = false } = {}) {
     const stamp = tag === null ? null : tag || { x, y, t: this.now, kind };
     for (let i = 0; i < count; i++) {
       const a = (i / count) * Math.PI * 2 + Math.random() * 0.035;
@@ -1865,6 +2418,7 @@ export class Game {
         tint,
         tag: stamp,
         sweep,
+        ghost,
         pts: [{ x: ox, y: oy }],
       });
     }
@@ -1880,6 +2434,18 @@ export class Game {
       const r = this.rays[i];
       r.age += dt;
       if (r.age > r.life + 1.5) continue;
+      if (r.ghost && r.age <= r.life) {
+        const step = (r.speed || RAY_SPEED) * dt;
+        r.x += r.dx * step;
+        r.y += r.dy * step;
+        const lastG = r.pts[r.pts.length - 1];
+        if (Math.abs(r.x - lastG.x) + Math.abs(r.y - lastG.y) >= 5) {
+          r.pts.push({ x: r.x, y: r.y });
+          if (r.pts.length > 14) r.pts.shift();
+        }
+        alive.push(r);
+        continue;
+      }
       if (r.age <= r.life) {
         let move = (r.speed || RAY_SPEED) * dt;
         while (move > 0.001) {
@@ -1924,7 +2490,8 @@ export class Game {
               break;
             }
             r.bounce++;
-            this.contacts.push({ x: r.x, y: r.y, t: this.now, tint: r.tint });
+            const cb = blockAt(this.level, Math.floor(r.x / this.level.tile), Math.floor(r.y / this.level.tile));
+            this.contacts.push({ x: r.x, y: r.y, t: this.now, tint: r.tint, block: cb ? cb.i : -1 });
           }
           r.x = hitX ? r.x : nx;
           r.y = hitY ? r.y : ny;

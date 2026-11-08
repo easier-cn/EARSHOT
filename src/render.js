@@ -1,4 +1,4 @@
-import { clamp, lerp, viewCenter } from './util.js';
+import { clamp, lerp, smoothstep, viewCenter } from './util.js';
 import { lineOfSight } from './pathfind.js';
 import { mapNode } from './maps.js';
 
@@ -267,36 +267,161 @@ export class Renderer {
         const locked = e.require === 'key' && !game.hasKey;
         const col = locked ? '255, 110, 110' : e.color;
         const pulse = 0.6 + 0.4 * Math.sin(now * 2.2);
-        const a = locked ? 0.5 : 0.55 + 0.35 * pulse;
+        const near = game.player ? Math.hypot(game.player.x - e.x, game.player.y - e.y) : 999;
+        // Far away a door is only a small signal; the ring opens up as you walk
+        // closer, so a room reads before you are standing on top of it.
+        const k = 0.30 + 0.70 * smoothstep(460, 120, near);
+        const a = (locked ? 0.5 : 0.55 + 0.35 * pulse) * (0.55 + 0.45 * k);
+        ctx.save();
+        ctx.translate(e.x, e.y);
+        ctx.scale(k, k);
         ctx.strokeStyle = `rgba(${col}, ${a})`;
-        ctx.lineWidth = 1.6;
+        // Keep the stroke crisp at every zoom: the scale changes the radius,
+        // not the ink weight the player sees.
+        ctx.lineWidth = 1.6 / k;
         ctx.beginPath();
-        ctx.arc(e.x, e.y, 13, 0, Math.PI * 2);
+        ctx.arc(0, 0, 13, 0, Math.PI * 2);
         ctx.stroke();
         ctx.beginPath();
-        ctx.arc(e.x, e.y, 20, Math.PI * 0.15, Math.PI * 0.85);
+        ctx.arc(0, 0, 20, Math.PI * 0.15, Math.PI * 0.85);
         ctx.stroke();
         ctx.fillStyle = `rgba(${col}, ${a * 0.7})`;
         ctx.beginPath();
-        ctx.arc(e.x, e.y, 3.2, 0, Math.PI * 2);
+        ctx.arc(0, 0, 3.2, 0, Math.PI * 2);
         ctx.fill();
+        ctx.restore();
 
         // A portal should name its destination before you step in. The font is
-        // divided by the zoom so the label stays readable at every scale.
+        // divided by the zoom so the label stays readable at every scale; it
+        // keeps its size while the ring breathes with proximity.
         const dest = mapNode(e.to);
         const suffix = !e.built ? '·未开通' : locked ? '·需钥匙' : '';
-        const near = game.player ? Math.hypot(game.player.x - e.x, game.player.y - e.y) : 999;
         ctx.save();
         ctx.font = `${Math.round(11 / this.scale)}px ui-monospace, monospace`;
         ctx.textAlign = 'center';
         ctx.fillStyle = `rgba(${col}, ${near < 170 ? 0.9 : 0.4})`;
-        ctx.fillText(`${dest ? dest.name : '未知'}${suffix}`, e.x, e.y - 30);
+        ctx.fillText(`${dest ? dest.name : '未知'}${suffix}`, e.x, e.y - (13 + 17 * k));
         ctx.restore();
       }
     }
 
+    // ---- moving maze: sound particles, cores, flip rings --------------------
+    // A sound line is a moving particle with a fading point trail, exactly like
+    // the sonar rays. Nothing here is a static stroke.
+    if (level.moving) {
+      const tile = level.tile;
+      ctx.save();
+
+      // Door warning: four red particles per door, two crossing each way.
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.lineCap = 'round';
+      for (const t of game.soundTrails || []) {
+        const pts = t.trail;
+        if (!pts || pts.length < 2) continue;
+        const life = Math.max(0, 1 - t.age / t.life);
+        if (life <= 0) continue;
+        const n = pts.length;
+        const start = Math.max(0, n - 10);
+        const segs = n - 1 - start;
+        if (segs <= 0) continue;
+        for (let b = 0; b < 3; b++) {
+          const i0 = start + Math.floor((segs * b) / 3);
+          const i1 = start + Math.max(1, Math.floor((segs * (b + 1)) / 3));
+          if (i1 <= i0) continue;
+          const f = (b + 1) / 3;
+          ctx.strokeStyle = `rgba(${t.tint}, ${life * (0.08 + 0.62 * f)})`;
+          ctx.lineWidth = t.width * (0.6 + f * 0.8);
+          ctx.beginPath();
+          ctx.moveTo(pts[i0].x, pts[i0].y);
+          for (let i = i0 + 1; i <= i1; i++) ctx.lineTo(pts[i].x, pts[i].y);
+          ctx.stroke();
+        }
+        ctx.fillStyle = `rgba(${t.tint}, ${0.85 * life})`;
+        ctx.beginPath();
+        ctx.arc(pts[n - 1].x, pts[n - 1].y, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Core: three real sonar particles bouncing inside the one-tile 口.
+      for (const t of game.coreTrails || []) {
+        const blk = level.blocks[t.block];
+        if (!blk || blk.gone || blk.core.broken || blk.decor[blk.z] === 'none') continue;
+        const pts = t.pts;
+        if (!pts || pts.length < 2) continue;
+        const col = blk.i === 4 ? '255, 200, 90' : blk.z === 1 ? '70, 150, 160' : '127, 227, 212';
+        const n = pts.length;
+        const start = Math.max(0, n - 32);
+        const tail = pts[start];
+        const grad = ctx.createLinearGradient(tail.x, tail.y, t.x, t.y);
+        grad.addColorStop(0, `rgba(${col}, 0)`);
+        grad.addColorStop(0.45, `rgba(${col}, 0.14)`);
+        grad.addColorStop(1, `rgba(${col}, 0.62)`);
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = 1.5;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(pts[start].x, pts[start].y);
+        for (let i = start + 1; i < n - 1; i++) {
+          const mx = (pts[i].x + pts[i + 1].x) / 2;
+          const my = (pts[i].y + pts[i + 1].y) / 2;
+          ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, my);
+        }
+        ctx.lineTo(pts[n - 1].x, pts[n - 1].y);
+        ctx.stroke();
+        ctx.fillStyle = `rgba(${col}, 0.9)`;
+        ctx.beginPath();
+        ctx.arc(t.x, t.y, 1.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalCompositeOperation = 'source-over';
+      for (const blk of level.blocks) {
+        if (blk.gone) continue;
+        const kind = blk.decor[blk.z];
+        if (kind === 'none') continue;
+        const cx = (blk.ox + 12.5) * tile;
+        const cy = (blk.oy + 12.5) * tile;
+        if (blk.core.broken) {
+          // The 口 is gone; only a cold ember is left.
+          const flick = 0.25 + 0.1 * Math.sin(now * 7.1 + blk.i);
+          ctx.fillStyle = `rgba(180, 190, 195, ${flick})`;
+          ctx.beginPath();
+          ctx.arc(cx, cy, 2.2, 0, Math.PI * 2);
+          ctx.fill();
+          continue;
+        }
+        const col = blk.i === 4 ? '255, 200, 90' : blk.z === 1 ? '70, 150, 160' : '127, 227, 212';
+        // The sealed cell's four edges, faint enough to read without a pulse.
+        ctx.strokeStyle = blk.i === 4 ? 'rgba(255, 200, 90, 0.16)' : 'rgba(255, 255, 255, 0.10)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect((blk.ox + 12) * tile, (blk.oy + 12) * tile, tile, tile);
+        if (kind === 'button') {
+          const pulse = 0.5 + 0.5 * Math.sin(now * (Math.PI * 2 / 1.2));
+          ctx.strokeStyle = `rgba(255, 240, 200, ${0.35 + 0.5 * pulse})`;
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.arc(cx, cy, 6, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(cx, cy - 10);
+          ctx.lineTo(cx, cy - 3);
+          ctx.stroke();
+        }
+      }
+      for (const fr of level.moving.state === 'running' ? game.flipRings || [] : []) {
+        const k = (now - fr.t) / 0.5;
+        if (k < 0 || k > 1) continue;
+        ctx.strokeStyle = `rgba(255, 70, 70, ${0.5 * (1 - k)})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(fr.x, fr.y, 18 + 362 * k, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
     // ---- exit ---------------------------------------------------------------
-    if (vision) {
+    if (vision && level.exit) {
       const eSeen = now - (level.exit.seenAt ?? -99);
       if (game.scanT > 0 && game.level) {
         // The route is a real path around walls, drawn only while it lasts.
