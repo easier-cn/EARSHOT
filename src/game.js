@@ -2429,7 +2429,7 @@ export class Game {
       if (dist(x, y, sh.x, sh.y) < 13) return { e: sh, kind: 'shard', tint: '255,205,110' };
     }
     const ex = this.level.exit;
-    if (ex && dist(x, y, ex.x, ex.y) < 17) return { e: ex, kind: 'exit', tint: '140,240,170' };
+    if (!this.mapMode && ex && dist(x, y, ex.x, ex.y) < 17) return { e: ex, kind: 'exit', tint: '140,240,170' };
     for (const h of this.hunters) {
       if (dist(x, y, h.x, h.y) < 15) return { e: h, kind: 'hunter', tint: '255,58,58', hot: true };
     }

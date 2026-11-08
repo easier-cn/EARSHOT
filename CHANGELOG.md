@@ -3,6 +3,16 @@
 All notable changes to HUSH. The format follows [Keep a Changelog](https://keepachangelog.com/),
 and the game follows [SemVer](https://semver.org/).
 
+## [0.8.11] - 2026-11-09
+
+### Changed
+- 传送门统一为粒子涡旋：地图节点不再绘制旧版绿色拱门；普通楼层的
+  楼梯仍保留拱门标记，地图内的旧出口也不再参与声线碰撞。
+
+### Removed
+- 迷宫中返回房间的传送门。所有传送门都是单向向前的；迷宫现在只通过
+  右下角台阶旁的移动迷宫门离开。
+
 ## [0.8.10] - 2026-11-09
 
 ### Changed

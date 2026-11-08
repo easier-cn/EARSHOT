@@ -396,7 +396,9 @@ export class Renderer {
     }
 
     // ---- exit ---------------------------------------------------------------
-    if (vision && level.exit) {
+    // Map nodes now leave through portals; the old arch only marks the stair
+    // on ordinary floors, where there is no portal to read instead.
+    if (vision && level.exit && !game.mapMode) {
       const eSeen = now - (level.exit.seenAt ?? -99);
       if (game.scanT > 0 && game.level) {
         // The route is a real path around walls, drawn only while it lasts.

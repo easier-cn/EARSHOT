@@ -66,6 +66,8 @@ test('maze map: moving-maze portal sits beside the diagonal exit', () => {
       `seed ${seed} portal is not beside the exit`,
     );
     assert.equal(level.grid[portal.y * level.w + portal.x], 0, `seed ${seed} portal tile is solid`);
+    // Portals are one-way: nothing may lead back to the room it came from.
+    assert.equal(level.exits.some((e) => e.to === 'room'), false, `seed ${seed} has a way back`);
   }
 });
 

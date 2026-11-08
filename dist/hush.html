@@ -2826,7 +2826,7 @@ function buildMazeMap(seed) {
     exit: { x: exitTile.x * TILE + TILE / 2, y: exitTile.y * TILE + TILE / 2 },
     exitTile,
     exits: [
-      { to: 'room', x: 0, y: 0, require: null, color: '127,227,212', silent: true },
+      // Portals only go forward: the maze never offers a way back to the room.
       // The diagonal corner already holds the stair; put the moving-maze
       // portal on the open cell beside it so both stay usable.
       { to: 'moving', x: exitTile.x - 1, y: exitTile.y, require: null, color: '200,160,255', silent: true },
@@ -4864,7 +4864,7 @@ const ITEM_GLYPH = {
 // Startup self-check: proves the build the browser actually loaded is intact.
 // This exists because a stale module cache once made bug fixes look absent
 // until Ctrl+F5 — so the boot screen now shows what loaded and what works.
-const VERSION = '0.8.10';
+const VERSION = '0.8.11';
 
 const SCRIPT_VERSION = () => {
   const s = [...document.scripts].map((el) => el.src).find((src) => src.includes('main.js'));
@@ -5426,7 +5426,9 @@ class Renderer {
     }
 
     // ---- exit ---------------------------------------------------------------
-    if (vision && level.exit) {
+    // Map nodes now leave through portals; the old arch only marks the stair
+    // on ordinary floors, where there is no portal to read instead.
+    if (vision && level.exit && !game.mapMode) {
       const eSeen = now - (level.exit.seenAt ?? -99);
       if (game.scanT > 0 && game.level) {
         // The route is a real path around walls, drawn only while it lasts.
@@ -9157,7 +9159,7 @@ class Game {
       if (dist(x, y, sh.x, sh.y) < 13) return { e: sh, kind: 'shard', tint: '255,205,110' };
     }
     const ex = this.level.exit;
-    if (ex && dist(x, y, ex.x, ex.y) < 17) return { e: ex, kind: 'exit', tint: '140,240,170' };
+    if (!this.mapMode && ex && dist(x, y, ex.x, ex.y) < 17) return { e: ex, kind: 'exit', tint: '140,240,170' };
     for (const h of this.hunters) {
       if (dist(x, y, h.x, h.y) < 15) return { e: h, kind: 'hunter', tint: '255,58,58', hot: true };
     }

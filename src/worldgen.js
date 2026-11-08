@@ -547,7 +547,7 @@ export function buildMazeMap(seed) {
     exit: { x: exitTile.x * TILE + TILE / 2, y: exitTile.y * TILE + TILE / 2 },
     exitTile,
     exits: [
-      { to: 'room', x: 0, y: 0, require: null, color: '127,227,212', silent: true },
+      // Portals only go forward: the maze never offers a way back to the room.
       // The diagonal corner already holds the stair; put the moving-maze
       // portal on the open cell beside it so both stay usable.
       { to: 'moving', x: exitTile.x - 1, y: exitTile.y, require: null, color: '200,160,255', silent: true },
