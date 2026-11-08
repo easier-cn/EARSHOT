@@ -1,6 +1,6 @@
 # HUSH 开发交接文档
 
-> 最后更新：v0.8.8（2026-11-08）
+> 最后更新：v0.8.9（2026-11-09）
 
 ## 交接约定（每次改动都必须遵守）
 
@@ -177,7 +177,7 @@ ni/
 |---|---|---|
 | 构建 | `node tools/build.mjs` | 把 `src/` 里全部模块内联成单文件 |
 | 传送门调参 | `python tools/serve.py 8080` 后打开 `/tools/portal-tune.html` | 拖滑块实时预览；保存写 `tools/portal-tune.saved.json`，再抄进 `src/portal-config.js` |
-| 单测 | `npm test` | 73 项：连通性、AI、背包、地图生成、迷宫道具分布、投掷瞄准、六项道具效果、交互提示、移动迷宫 |
+| 单测 | `npm test` | 79 项：连通性、AI、背包、地图生成、迷宫道具分布、投掷瞄准、六项道具效果、交互提示、移动迷宫、首次引导 |
 | 端到端 | `node tools/playtest.mjs` | CDP 真实按键：开局→移动→投掷→通关→编辑器 |
 | 单表达式 | `node tools/probe.mjs "<js>"` | 在真实页面执行一段代码并回值（最常用） |
 | 真实时间截图 | `node tools/live.mjs "<js>" out.png 800` | 注入场景、等真实毫秒、截图（抓"冻结时间看不出来"的渲染问题） |
@@ -190,7 +190,7 @@ ni/
 
 验证约定：
 
-1. 逻辑改动 → `npm test` 必须 73/73。
+1. 逻辑改动 → `npm test` 必须 79/79。
 2. 交互改动 → `node tools/playtest.mjs` 必须 `errors: []`。
 3. 视觉改动 → 至少一张 `shots/*.png` 截图，自己看一眼再提交。
 4. 改了 `dist` 相关 → 用 `file://` 再跑一次 playtest。
@@ -268,6 +268,10 @@ ni/
 - 无字 UI 重写时按钮绑定表写成 `g.retry`，而方法叫 `restart` → 三个按钮全炸（已修，并补了"五屏按钮逐个点"回归）。
 - 护符副本漏了 `kind:'charm'` → `ITEM_TEXT[sleep]` 未定义 → 读取 `.name` 崩溃。
 - HUD 的 SVG 图标曾因缺少 `stroke` 规则而完全不可见。
+- 引导只走 `maybeGuide(key, text)`（按 `this.guides` 一局一次），**不要**直接调 `ui.guide()`；否则重开/换图会重复刷屏。
+- 需要「先 A 再 B」的两段提示用 `laterGuide(key, text, ms)`（存在 `guideTimers` 里）；条件提前满足时要 `cancelGuide(key)`，`resetRunState()` 会统一 `clearGuideTimers()`。
+- 标题只认空格 / 回车：`onAnyKey` 的 keyup 分支没有 event，必须判空。开局后 `beginTutorial()` 会从 `input.pressed` 删掉 Space/Enter，防止开局那一下立刻放声呐。
+- 投掷引导跨背包与游戏两层 UI：绑定发生在 `ui.dropDragged()`（回调 `game.onHotkeyBound(obj)`），提示必须等 `toggleInventory` 关闭时由 `game.onInventoryClosed()` 发出——背包打开时 `.guide` 是 `visibility:hidden`，拖完就弹会被盖住。
 
 ### 启动与缓存（2026-11 新增，**这组坑最坑人**）
 
@@ -287,7 +291,7 @@ ni/
 
 ## 8. 当前进度与下一步
 
-### 已完成（截至 v0.8.6）
+### 已完成（截至 v0.8.9）
 
 - 三张地图：房间（BSP 多房间 + 内饰 + 钥匙/出口/三扇门）、迷宫（递归回溯 + 口袋）、移动迷宫（3×3×2 块、每 20 秒抽 5 块替换为另一层布局；玩家所在块被抽中则换块，脚下网格不改写；4/6/8 出口）
 - 无字 UI、护符/道具/背包/工作台、投掷与瞄准、区域名、弹幕、引导
@@ -303,6 +307,7 @@ ni/
 - v0.8.4 移动迷宫声线粒子化：核心三辐条改为在一格内反复反弹的粒子拖尾（修复 `coreTrails` 被 `startMap` 清空的问题）；坍塌金圈为 96 条 ghost 粒子、每面碎墙 6 条淡灰粒子、守卫死亡 40 条紫粒子；门洞改为 8 条反向半格红粒子
 - v0.8.3 移动迷宫表现：b2 碎核后的金色逐圈爆散过场，拆掉中央房间内墙、扫死守卫并炸紫线
 - v0.8.2 移动迷宫：3×3×2 块、20 秒一次 5/9 翻转、两层独立单格宽迷宫、玩家房间永不被改写（抽中则换另一块）、4/6/8 出口、翻转前 1 秒声音线、0.7 秒停格 + 震屏、警觉猎手 2× 速度、中心「口」/按钮、b2 彩蛋坍塌、分层 HUD 与播报
+- v0.8.9 首次引导：标题常驻「摁下空格键以开始」；进入后提示声呐、第一次发声后提示左下角充能；第一次惊扰猎手提示潜行与声音；拾取护符/可用道具分别提示 Tab 装配/绑定；投掷物拖上快捷键并关背包后提示选中，选中后提示左键掷出、再按取消
 
 ### 待做（按优先级）
 
@@ -328,7 +333,7 @@ ni/
 
 - 语义化版本 `v0.x.y`，**每个可见改动都打 tag**，并在 `CHANGELOG.md` 写"改了什么 + 为什么"。
 - 提交信息用 `fix:` / `feat:` / `docs:` / `perf:` 前缀，一句话说清根因（例：`fix: rewind revived into a stale floor`）。
-- 提交前检查：`npm test` 73/73、`playtest` 无异常、`dist` 已重建（`node tools/build.mjs`）。
+- 提交前检查：`npm test` 79/79、`playtest` 无异常、`dist` 已重建（`node tools/build.mjs`）。
 - 截图不进仓库（`.gitignore` 忽略 `shots*/`），README 用的图放 `docs/img/`。
 
 ---
@@ -337,7 +342,7 @@ ni/
 
 ```bash
 cd C:\Users\浩\Desktop\ni
-npm test                       # 73 项应全绿
+npm test                       # 79 项应全绿
 node tools/build.mjs           # 重建 dist
 play.cmd                       # 自动选端口、不缓存、带自检
 ```

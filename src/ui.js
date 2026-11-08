@@ -189,6 +189,7 @@ export class UI {
   showTitle(progress = {}) {
     this.showScreen('title');
     this.hideHUD();
+    this.guide('摁下空格键以开始', { sticky: true });
     this.grid.innerHTML = '';
     const unlocked = progress.unlocked || 1;
     const cleared = new Set(progress.cleared || []);
@@ -330,7 +331,11 @@ export class UI {
     this.invPanel.classList.toggle('hidden');
     const open = !this.invPanel.classList.contains('hidden');
     if (open) this.renderInventory(game);
-    else this.hideTip();
+    else {
+      this.hideTip();
+      // Closing the bag is the moment the hotkey row becomes usable again.
+      this.game.onInventoryClosed();
+    }
     if (this.guideEl) this.guideEl.style.visibility = open ? 'hidden' : '';
   }
 
@@ -490,6 +495,7 @@ export class UI {
         inv.pack[drag.from.i] = null;
         return false;
       }
+      this.game.onHotkeyBound(drag.obj);
       return true;
     }
     if (inv.place(target.kind, target.i, drag.obj)) return true;
@@ -575,8 +581,9 @@ export class UI {
     if (this.tip) this.tip.classList.add('hidden');
   }
 
-  /** Bottom-of-screen guidance: plain words, only the first time. */
-  guide(text) {
+  /** Bottom-of-screen guidance: plain words, only the first time.
+   *  `sticky` keeps it up until something else replaces it (title screen). */
+  guide(text, { sticky = false } = {}) {
     if (!this.guideEl) {
       this.guideEl = document.createElement('div');
       this.guideEl.className = 'guide';
@@ -587,7 +594,12 @@ export class UI {
     this.guideEl.classList.toggle('multi', lines.length > 1);
     this.guideEl.classList.add('show');
     clearTimeout(this.guideT);
-    this.guideT = setTimeout(() => this.guideEl.classList.remove('show'), 7200);
+    this.guideT = sticky ? 0 : setTimeout(() => this.guideEl.classList.remove('show'), 7200);
+  }
+
+  hideGuide() {
+    clearTimeout(this.guideT);
+    if (this.guideEl) this.guideEl.classList.remove('show');
   }
 
   feed(text) {

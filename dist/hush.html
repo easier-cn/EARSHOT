@@ -4864,7 +4864,7 @@ const ITEM_GLYPH = {
 // Startup self-check: proves the build the browser actually loaded is intact.
 // This exists because a stale module cache once made bug fixes look absent
 // until Ctrl+F5 — so the boot screen now shows what loaded and what works.
-const VERSION = '0.8.8';
+const VERSION = '0.8.9';
 
 const SCRIPT_VERSION = () => {
   const s = [...document.scripts].map((el) => el.src).find((src) => src.includes('main.js'));
@@ -6212,6 +6212,7 @@ class UI {
   showTitle(progress = {}) {
     this.showScreen('title');
     this.hideHUD();
+    this.guide('摁下空格键以开始', { sticky: true });
     this.grid.innerHTML = '';
     const unlocked = progress.unlocked || 1;
     const cleared = new Set(progress.cleared || []);
@@ -6353,7 +6354,11 @@ class UI {
     this.invPanel.classList.toggle('hidden');
     const open = !this.invPanel.classList.contains('hidden');
     if (open) this.renderInventory(game);
-    else this.hideTip();
+    else {
+      this.hideTip();
+      // Closing the bag is the moment the hotkey row becomes usable again.
+      this.game.onInventoryClosed();
+    }
     if (this.guideEl) this.guideEl.style.visibility = open ? 'hidden' : '';
   }
 
@@ -6513,6 +6518,7 @@ class UI {
         inv.pack[drag.from.i] = null;
         return false;
       }
+      this.game.onHotkeyBound(drag.obj);
       return true;
     }
     if (inv.place(target.kind, target.i, drag.obj)) return true;
@@ -6598,8 +6604,9 @@ class UI {
     if (this.tip) this.tip.classList.add('hidden');
   }
 
-  /** Bottom-of-screen guidance: plain words, only the first time. */
-  guide(text) {
+  /** Bottom-of-screen guidance: plain words, only the first time.
+   *  `sticky` keeps it up until something else replaces it (title screen). */
+  guide(text, { sticky = false } = {}) {
     if (!this.guideEl) {
       this.guideEl = document.createElement('div');
       this.guideEl.className = 'guide';
@@ -6610,7 +6617,12 @@ class UI {
     this.guideEl.classList.toggle('multi', lines.length > 1);
     this.guideEl.classList.add('show');
     clearTimeout(this.guideT);
-    this.guideT = setTimeout(() => this.guideEl.classList.remove('show'), 7200);
+    this.guideT = sticky ? 0 : setTimeout(() => this.guideEl.classList.remove('show'), 7200);
+  }
+
+  hideGuide() {
+    clearTimeout(this.guideT);
+    if (this.guideEl) this.guideEl.classList.remove('show');
   }
 
   feed(text) {
@@ -6890,6 +6902,9 @@ class Game {
     this.denyCooldown = 0;
     this.alertCd = 0;
     this.titlePingTimer = 0;
+    this.guideTimers = new Map();
+    this.tutorialStarted = false;
+    this.throwBound = false;
 
     this.msx = null;
     this.msy = null;
@@ -6909,8 +6924,10 @@ class Game {
     this.ui.showTitle(this.progress);
     this.loadDemo();
 
-    this.input.onAnyKey = () => {
-      if (this.state === 'title') {
+    this.input.onAnyKey = (e) => {
+      if (this.state !== 'title') return;
+      // Space is the game's one gesture; Enter is the polite alternative.
+      if (e && (e.code === 'Space' || e.code === 'Enter')) {
         this.audio.unlock();
         this.startBest();
       }
@@ -7042,30 +7059,35 @@ class Game {
     this.rewindUsed = false;
     this.lives = this.maxLives();
     this.guides = {};
+    this.clearGuideTimers();
+    this.tutorialStarted = false;
+    this.throwBound = false;
   }
 
   startBest() {
     this.resetRunState();
-    if (this.startMap('room', (Math.random() * 1e9) | 0)) return;
-    if (this.state !== 'title') return;
-    if (this.startRun()) return;
-    if (this.startWorld()) return;
+    if (this.startMap('room', (Math.random() * 1e9) | 0)) { this.beginTutorial(); return; }
+    if (this.state !== 'title') { this.beginTutorial(); return; }
+    if (this.startRun()) { this.beginTutorial(); return; }
+    if (this.startWorld()) { this.beginTutorial(); return; }
     const idx = clamp((this.progress.unlocked || 1) - 1, 0, CHAMBERS.length - 1);
     this.startChamber(idx);
+    this.beginTutorial();
   }
 
   /** Roguelike run: five floors, each one a room-graph floor. */
   startRun(seed = (Math.random() * 1e9) | 0) {
     this.guides = {};
+    this.clearGuideTimers();
+    this.tutorialStarted = false;
+    this.throwBound = false;
     this.rewindUsed = false;
     this.runSeed = seed;
     this.diamonds = 0;
     this.gold = 0;
     this.charms = [];
     this.inv = new Inventory();
-    const ok = this.startFloor(1);
-    this.maybeGuide('start', '按下空格键以开启');
-    return ok;
+    return this.startFloor(1);
   }
 
   /** Killing a hunter pays 2 diamonds and 10 gold. 亡命猎屠 multiplies this. */
@@ -7848,11 +7870,11 @@ class Game {
       ? `${CHARMS[it.id].name} 护符`
       : `${ITEMS[it.id].name} ×${amount}`;
     this.ui.feed(`拾取 ${label}`);
-    if (!this.seenLoot) {
-      this.seenLoot = true;
-      this.ui.guide(['按下 Tab 打开背包', '把物品拖到对应位置以完成装配']);
-    } else {
-      this.maybeGuide('bag', '按下 Tab 键打开背包');
+    // One introduction per kind: charms are socketed, usable items are bound
+    // to the hotkey row, throwables are taught when they are first bound.
+    if (it.kind === 'charm') this.maybeGuide('charm', '你捡到了一个护符，摁下tab以装配');
+    else if (ITEMS[it.id].kind !== 'throw') {
+      this.maybeGuide('item', '你捡到了一个道具，摁下tab以将其绑定在快捷键上');
     }
   }
 
@@ -7891,9 +7913,13 @@ class Game {
       this.activeItem = this.activeItem === id ? null : id;
       this.audio.click(0.4);
       if (this.activeItem) {
-        this.maybeGuide('throw2', '用鼠标左键瞄准，再点击掷出');
+        if (!this.guides?.throwSelect) {
+          this.maybeGuide('throwSelect', '摁下鼠标左键可以投掷出投掷物');
+          this.laterGuide('throwCancel', '再次摁下对应快捷键以取消选中', 3600);
+        }
         this.ui.feed(`已握紧 ${def.name} · 左键掷出`);
       } else {
+        this.cancelGuide('throwCancel');
         this.ui.feed(`已松开 ${def.name}`);
       }
       return;
@@ -9038,7 +9064,10 @@ class Game {
   }
 
   alertHunter(h, x, y, delay) {
-    this.maybeGuide('sneak', '按下 Shift 潜行');
+    if (!this.guides?.hunter) {
+      this.maybeGuide('hunter', '你惊扰了一只猎手，按下shift以潜行');
+      this.laterGuide('hunterSound', '猎手可以听到你发出来的声音', 3600);
+    }
     const tracking = h.state === 'investigate';
     h.hear(x, y, delay);
     if (tracking || this.alertCd > 0) return;
@@ -9074,6 +9103,52 @@ class Game {
     if (this.guides[key]) return;
     this.guides[key] = true;
     this.ui.guide(text);
+  }
+
+  /** The first-run lesson: one line at a time, never while a screen owns input. */
+  beginTutorial() {
+    if (this.state !== 'playing' || this.tutorialStarted) return;
+    this.tutorialStarted = true;
+    // The key that started the game must not also be spent on a ping.
+    this.input.pressed.delete('Space');
+    this.input.pressed.delete('Enter');
+    this.ui.guide('空格键可以发出声呐，探索更大的范围');
+  }
+
+  /** A follow-up hint with a beat in between, skipped if the moment passed. */
+  laterGuide(key, text, ms = 3600) {
+    if (!this.guideTimers) this.guideTimers = new Map();
+    this.cancelGuide(key);
+    const t = setTimeout(() => {
+      this.guideTimers.delete(key);
+      if (this.state !== 'playing') return;
+      this.maybeGuide(key, text);
+    }, ms);
+    this.guideTimers.set(key, t);
+  }
+
+  cancelGuide(key) {
+    if (!this.guideTimers) return;
+    const t = this.guideTimers.get(key);
+    if (t) clearTimeout(t);
+    this.guideTimers.delete(key);
+  }
+
+  clearGuideTimers() {
+    if (!this.guideTimers) return;
+    for (const t of this.guideTimers.values()) clearTimeout(t);
+    this.guideTimers.clear();
+  }
+
+  /** A usable was just bound to the hotkey row. */
+  onHotkeyBound(o) {
+    if (o && o.kind === 'item' && ITEMS[o.id] && ITEMS[o.id].kind === 'throw') this.throwBound = true;
+  }
+
+  onInventoryClosed() {
+    if (!this.throwBound) return;
+    this.throwBound = false;
+    this.maybeGuide('bindThrow', '摁下对应快捷键可以选中投掷物');
   }
 
   resolve(entity, dx, dy) {
@@ -9293,7 +9368,11 @@ class Game {
       this.pingHintShown = true;
       this.ui.toast('shard');
     }
-
+    // The dots only mean something once one has gone dark: teach them on the
+    // first real ping, a beat after the shell has left the body.
+    if (this.tutorialStarted && !this.guides?.charges) {
+      this.laterGuide('charges', '左下角的点表示你还剩余多少次声呐释放机会，它会随着时间自然恢复', 900);
+    }
   }
 
   /** The shards are not silent. A pulse reaching them is answered by a bell

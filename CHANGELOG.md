@@ -3,6 +3,25 @@
 All notable changes to HUSH. The format follows [Keep a Changelog](https://keepachangelog.com/),
 and the game follows [SemVer](https://semver.org/).
 
+## [0.8.9] - 2026-11-09
+
+### Added
+- 首次游玩的分步引导：标题画面常驻「摁下空格键以开始」；进入后依次提示
+  声呐、左下角充能点；第一次惊扰猎手时提示潜行与「猎手听得到声音」；
+  第一次捡到护符 / 非投掷道具时分别提示用 Tab 装配、绑定快捷键；
+  第一次把投掷物拖上快捷键并关闭背包后提示按快捷键选中，
+  选中后提示左键掷出、再按一次取消。
+- `ui.guide(text, { sticky })` 支持不自动消失的提示；新增 `hideGuide()`。
+
+### Changed
+- 标题画面现在只认空格 / 回车（以及点击开始按钮），避免随便按一个键就开局；
+  开局的声呐提示会吞掉这次空格，不会立刻触发一次脉冲。
+- 声呐充能提示改在第一次真正发声后出现，避免和猎手提示互相覆盖。
+
+### Tests
+- `tests/tutorial.test.js`：拾取只提示一次、猎手两声提示按序出现、
+  投掷物绑定/关闭背包/选中/取消的提示链路。
+
 ## [0.8.8] - 2026-11-08
 
 ### Added

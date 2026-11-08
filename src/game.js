@@ -144,6 +144,9 @@ export class Game {
     this.denyCooldown = 0;
     this.alertCd = 0;
     this.titlePingTimer = 0;
+    this.guideTimers = new Map();
+    this.tutorialStarted = false;
+    this.throwBound = false;
 
     this.msx = null;
     this.msy = null;
@@ -163,8 +166,10 @@ export class Game {
     this.ui.showTitle(this.progress);
     this.loadDemo();
 
-    this.input.onAnyKey = () => {
-      if (this.state === 'title') {
+    this.input.onAnyKey = (e) => {
+      if (this.state !== 'title') return;
+      // Space is the game's one gesture; Enter is the polite alternative.
+      if (e && (e.code === 'Space' || e.code === 'Enter')) {
         this.audio.unlock();
         this.startBest();
       }
@@ -296,30 +301,35 @@ export class Game {
     this.rewindUsed = false;
     this.lives = this.maxLives();
     this.guides = {};
+    this.clearGuideTimers();
+    this.tutorialStarted = false;
+    this.throwBound = false;
   }
 
   startBest() {
     this.resetRunState();
-    if (this.startMap('room', (Math.random() * 1e9) | 0)) return;
-    if (this.state !== 'title') return;
-    if (this.startRun()) return;
-    if (this.startWorld()) return;
+    if (this.startMap('room', (Math.random() * 1e9) | 0)) { this.beginTutorial(); return; }
+    if (this.state !== 'title') { this.beginTutorial(); return; }
+    if (this.startRun()) { this.beginTutorial(); return; }
+    if (this.startWorld()) { this.beginTutorial(); return; }
     const idx = clamp((this.progress.unlocked || 1) - 1, 0, CHAMBERS.length - 1);
     this.startChamber(idx);
+    this.beginTutorial();
   }
 
   /** Roguelike run: five floors, each one a room-graph floor. */
   startRun(seed = (Math.random() * 1e9) | 0) {
     this.guides = {};
+    this.clearGuideTimers();
+    this.tutorialStarted = false;
+    this.throwBound = false;
     this.rewindUsed = false;
     this.runSeed = seed;
     this.diamonds = 0;
     this.gold = 0;
     this.charms = [];
     this.inv = new Inventory();
-    const ok = this.startFloor(1);
-    this.maybeGuide('start', '按下空格键以开启');
-    return ok;
+    return this.startFloor(1);
   }
 
   /** Killing a hunter pays 2 diamonds and 10 gold. 亡命猎屠 multiplies this. */
@@ -1102,11 +1112,11 @@ export class Game {
       ? `${CHARMS[it.id].name} 护符`
       : `${ITEMS[it.id].name} ×${amount}`;
     this.ui.feed(`拾取 ${label}`);
-    if (!this.seenLoot) {
-      this.seenLoot = true;
-      this.ui.guide(['按下 Tab 打开背包', '把物品拖到对应位置以完成装配']);
-    } else {
-      this.maybeGuide('bag', '按下 Tab 键打开背包');
+    // One introduction per kind: charms are socketed, usable items are bound
+    // to the hotkey row, throwables are taught when they are first bound.
+    if (it.kind === 'charm') this.maybeGuide('charm', '你捡到了一个护符，摁下tab以装配');
+    else if (ITEMS[it.id].kind !== 'throw') {
+      this.maybeGuide('item', '你捡到了一个道具，摁下tab以将其绑定在快捷键上');
     }
   }
 
@@ -1145,9 +1155,13 @@ export class Game {
       this.activeItem = this.activeItem === id ? null : id;
       this.audio.click(0.4);
       if (this.activeItem) {
-        this.maybeGuide('throw2', '用鼠标左键瞄准，再点击掷出');
+        if (!this.guides?.throwSelect) {
+          this.maybeGuide('throwSelect', '摁下鼠标左键可以投掷出投掷物');
+          this.laterGuide('throwCancel', '再次摁下对应快捷键以取消选中', 3600);
+        }
         this.ui.feed(`已握紧 ${def.name} · 左键掷出`);
       } else {
+        this.cancelGuide('throwCancel');
         this.ui.feed(`已松开 ${def.name}`);
       }
       return;
@@ -2292,7 +2306,10 @@ export class Game {
   }
 
   alertHunter(h, x, y, delay) {
-    this.maybeGuide('sneak', '按下 Shift 潜行');
+    if (!this.guides?.hunter) {
+      this.maybeGuide('hunter', '你惊扰了一只猎手，按下shift以潜行');
+      this.laterGuide('hunterSound', '猎手可以听到你发出来的声音', 3600);
+    }
     const tracking = h.state === 'investigate';
     h.hear(x, y, delay);
     if (tracking || this.alertCd > 0) return;
@@ -2328,6 +2345,52 @@ export class Game {
     if (this.guides[key]) return;
     this.guides[key] = true;
     this.ui.guide(text);
+  }
+
+  /** The first-run lesson: one line at a time, never while a screen owns input. */
+  beginTutorial() {
+    if (this.state !== 'playing' || this.tutorialStarted) return;
+    this.tutorialStarted = true;
+    // The key that started the game must not also be spent on a ping.
+    this.input.pressed.delete('Space');
+    this.input.pressed.delete('Enter');
+    this.ui.guide('空格键可以发出声呐，探索更大的范围');
+  }
+
+  /** A follow-up hint with a beat in between, skipped if the moment passed. */
+  laterGuide(key, text, ms = 3600) {
+    if (!this.guideTimers) this.guideTimers = new Map();
+    this.cancelGuide(key);
+    const t = setTimeout(() => {
+      this.guideTimers.delete(key);
+      if (this.state !== 'playing') return;
+      this.maybeGuide(key, text);
+    }, ms);
+    this.guideTimers.set(key, t);
+  }
+
+  cancelGuide(key) {
+    if (!this.guideTimers) return;
+    const t = this.guideTimers.get(key);
+    if (t) clearTimeout(t);
+    this.guideTimers.delete(key);
+  }
+
+  clearGuideTimers() {
+    if (!this.guideTimers) return;
+    for (const t of this.guideTimers.values()) clearTimeout(t);
+    this.guideTimers.clear();
+  }
+
+  /** A usable was just bound to the hotkey row. */
+  onHotkeyBound(o) {
+    if (o && o.kind === 'item' && ITEMS[o.id] && ITEMS[o.id].kind === 'throw') this.throwBound = true;
+  }
+
+  onInventoryClosed() {
+    if (!this.throwBound) return;
+    this.throwBound = false;
+    this.maybeGuide('bindThrow', '摁下对应快捷键可以选中投掷物');
   }
 
   resolve(entity, dx, dy) {
@@ -2547,7 +2610,11 @@ export class Game {
       this.pingHintShown = true;
       this.ui.toast('shard');
     }
-
+    // The dots only mean something once one has gone dark: teach them on the
+    // first real ping, a beat after the shell has left the body.
+    if (this.tutorialStarted && !this.guides?.charges) {
+      this.laterGuide('charges', '左下角的点表示你还剩余多少次声呐释放机会，它会随着时间自然恢复', 900);
+    }
   }
 
   /** The shards are not silent. A pulse reaching them is answered by a bell
