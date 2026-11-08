@@ -3,6 +3,18 @@
 All notable changes to HUSH. The format follows [Keep a Changelog](https://keepachangelog.com/),
 and the game follows [SemVer](https://semver.org/).
 
+## [0.8.10] - 2026-11-09
+
+### Changed
+- 声线整体调暗：底色由近白改为暗青灰（`RAY_RGB = '150, 198, 192'`），
+  线身与头部亮度约降一半，波纹圈透明度同步降低；命中敌人时的变色与
+  延长保留，只是不再额外发亮。
+- 取消声线撞墙 / 撞到敌人时留下的彩色圆点（原 `contacts` 渲染）：
+  不再在反弹点画白点、金点，也不在猎手/模仿者身上画红点与红圈。
+
+### Removed
+- `game.contacts` 数据及其收集、清理、移动迷宫换色代码。
+
 ## [0.8.9] - 2026-11-09
 
 ### Added

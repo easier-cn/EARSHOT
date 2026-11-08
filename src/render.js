@@ -9,6 +9,8 @@ const GLOW_RGB = '80, 210, 198';
 const AMBER = '255, 196, 107';
 const RED = '255, 86, 86';
 const TEAL = '127, 227, 212';
+// Sonar lines sit a step below the UI teal: the dark should stay dark.
+const RAY_RGB = '150, 198, 192';
 const GOLD = '255, 205, 110';
 const GREEN = '140, 240, 170';
 
@@ -127,49 +129,17 @@ export class Renderer {
     // Stealth is silence, and silence is blindness: nothing renders at all.
     const vision = !game.blind;
     const rays = vision ? game.rays || [] : [];
-    const contacts = vision ? game.contacts || [] : [];
-    if (rays.length || contacts.length) {
+    if (rays.length) {
       ctx.globalCompositeOperation = 'lighter';
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
-      for (let i = 0; i < contacts.length; i++) {
-        const c = contacts[i];
-        if (c.kind === 'hunter' || c.kind === 'skitter') continue;
-        const k = Math.max(0, 1 - (now - c.t) / 1.7);
-        if (k <= 0.02) continue;
-        const col = c.tint || (c.kind === 'shard' ? '255,205,110'
-          : c.kind === 'exit' ? '140,240,170'
-            : '236,252,250');
-        ctx.fillStyle = `rgba(${col}, ${k * 0.5})`;
-        ctx.beginPath();
-        ctx.arc(c.x, c.y, 1.4 + k * 1.3, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      // A reflection off something that hunts you is the loudest thing in the dark.
-      ctx.globalCompositeOperation = 'source-over';
-      for (let i = 0; i < contacts.length; i++) {
-        const c = contacts[i];
-        if (c.kind !== 'hunter' && c.kind !== 'skitter') continue;
-        const k = Math.max(0, 1 - (now - c.t) / 1.7);
-        if (k <= 0.02) continue;
-        ctx.fillStyle = `rgba(255, 44, 44, ${0.55 + k * 0.45})`;
-        ctx.beginPath();
-        ctx.arc(c.x, c.y, 1.2 + k * 0.9, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = `rgba(255, 90, 90, ${k * 0.5})`;
-        ctx.lineWidth = 0.7;
-        ctx.beginPath();
-        ctx.arc(c.x, c.y, 3.2 + (1 - k) * 6, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-      ctx.globalCompositeOperation = 'lighter';
       for (let i = 0; i < rays.length; i++) {
         const r = rays[i];
         if (!r.pts || r.pts.length < 2) continue;
         const fade = r.age <= r.life ? 1 : Math.max(0, 1 - (r.age - r.life) / 1.2);
         if (fade <= 0.02) continue;
         const head = Math.min(1, r.age / r.life);
-        const a = (0.5 - head * 0.3) * fade * (r.tint ? 1.45 : 1);
+        const a = (0.34 - head * 0.2) * fade * (r.tint ? 1.2 : 1);
         if (a <= 0.02) continue;
         const pts = r.pts;
         const n = pts.length;
@@ -186,13 +156,13 @@ export class Renderer {
             ctx.moveTo(pts[i0].x, pts[i0].y);
             for (let j = i0 + 1; j <= i1; j++) ctx.lineTo(pts[j].x, pts[j].y);
             if (b === batches - 1) ctx.lineTo(r.x, r.y);
-            ctx.strokeStyle = `rgba(${r.tint || '240,253,252'}, ${Math.min(1, ta * (r.hot ? 2.1 : r.tint ? 1.5 : 1))})`;
+            ctx.strokeStyle = `rgba(${r.tint || RAY_RGB}, ${Math.min(1, ta * (r.hot ? 1.9 : r.tint ? 1.3 : 1))})`;
             ctx.lineWidth = (r.hot ? 1.6 : r.tint ? 1.0 : 0.8) + ta * (r.hot ? 2.4 : 1.4);
             ctx.stroke();
           }
         }
         if (r.age <= r.life) {
-          ctx.fillStyle = `rgba(${r.tint || '240,253,252'}, ${Math.min(0.9, a * (r.hot ? 3 : 1.4))})`;
+          ctx.fillStyle = `rgba(${r.tint || RAY_RGB}, ${Math.min(0.62, a * (r.hot ? 2.6 : 1.25))})`;
           ctx.beginPath();
           ctx.arc(r.x, r.y, r.hot ? 2.6 : 1.4, 0, Math.PI * 2);
           ctx.fill();
@@ -649,12 +619,12 @@ export class Renderer {
       if (age < 0 || age > p.life) continue;
       const R = age * p.speed;
       const fade = (1 - age / p.life) * (p.small ? 0.45 : 1);
-      ctx.strokeStyle = `rgba(${p.tint || TEAL}, ${fade * (p.tint ? 0.6 : 0.2)})`;
+      ctx.strokeStyle = `rgba(${p.tint || TEAL}, ${fade * (p.tint ? 0.45 : 0.13)})`;
       ctx.lineWidth = 1.4;
       ctx.beginPath();
       ctx.arc(p.x, p.y, R, 0, Math.PI * 2);
       ctx.stroke();
-      ctx.strokeStyle = `rgba(${p.tint || TEAL}, ${fade * fade * 0.09})`;
+      ctx.strokeStyle = `rgba(${p.tint || TEAL}, ${fade * fade * 0.055})`;
       ctx.lineWidth = 7;
       ctx.beginPath();
       ctx.arc(p.x, p.y, R, 0, Math.PI * 2);

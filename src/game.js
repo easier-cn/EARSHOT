@@ -229,7 +229,6 @@ export class Game {
     this.shards = this.level.shards.map((s) => ({ ...s }));
     this.pings = [];
     this.rays = [];
-    this.contacts = [];
     this.sounds = [];
     this.flashes = [];
     this.sneak = false;
@@ -396,7 +395,6 @@ export class Game {
     this.totalShards = 1;
     this.pings = [];
     this.rays = [];
-    this.contacts = [];
     this.echoRings = [];
     this.flipRings = [];
     this.flipSoundLines = [];
@@ -512,7 +510,6 @@ export class Game {
     this.throws = [];
     this.pings = [];
     this.rays = [];
-    this.contacts = [];
     this.echoRings = [];
     this.flipRings = [];
     this.flipSoundLines = [];
@@ -841,10 +838,6 @@ export class Game {
 
     this.relocateMoved(movedIds);
 
-    for (const c of this.contacts) {
-      const blk = blockAt(L, Math.floor(c.x / tile), Math.floor(c.y / tile));
-      if (blk && movedIds.has(blk.i)) c.tint = '255, 70, 70';
-    }
     this.flipFreeze = 0.7;
     this.shakeT = 0.7;
     this.shake = Math.max(this.shake, 9);
@@ -1610,7 +1603,6 @@ export class Game {
     this.shards = level.shards.map((s) => ({ ...s }));
     this.pings = [];
     this.rays = [];
-    this.contacts = [];
     this.echoRings = [];
     this.particles = makeDust(level, 260);
     this.camX = this.player.x;
@@ -1674,7 +1666,6 @@ export class Game {
     this.shards = level.shards.map((s) => ({ ...s }));
     this.pings = [];
     this.rays = [];
-    this.contacts = [];
     this.sounds = [];
     this.echoRings = [];
     this.particles = makeDust(level, 200);
@@ -1734,7 +1725,6 @@ export class Game {
     this.shards = this.level.shards.map((s) => ({ ...s }));
     this.pings = [];
     this.rays = [];
-    this.contacts = [];
     this.particles = makeDust(this.level);
     this.camX = this.player.x;
     this.camY = this.player.y;
@@ -2528,7 +2518,6 @@ export class Game {
               r.life += 0.55;
               this.flashes.push({ x: ent.e.x, y: ent.e.y, t: this.now });
             }
-            this.contacts.push({ x: r.x, y: r.y, t: this.now, kind: ent.kind });
             const nlen = Math.hypot(r.x - ent.e.x, r.y - ent.e.y) || 1;
             const nxn = (r.x - ent.e.x) / nlen;
             const nyn = (r.y - ent.e.y) / nlen;
@@ -2553,8 +2542,6 @@ export class Game {
               break;
             }
             r.bounce++;
-            const cb = blockAt(this.level, Math.floor(r.x / this.level.tile), Math.floor(r.y / this.level.tile));
-            this.contacts.push({ x: r.x, y: r.y, t: this.now, tint: r.tint, block: cb ? cb.i : -1 });
           }
           r.x = hitX ? r.x : nx;
           r.y = hitY ? r.y : ny;
@@ -2574,12 +2561,6 @@ export class Game {
     }
     this.rays = alive;
     if (this.flashes.length) this.flashes = this.flashes.filter((f) => this.now - f.t < 0.55);
-    if (this.contacts.length > 40) {
-      let cut = 0;
-      while (cut < this.contacts.length && this.now - this.contacts[cut].t > 1.9) cut++;
-      if (cut) this.contacts.splice(0, cut);
-      if (this.contacts.length > 600) this.contacts.splice(0, this.contacts.length - 600);
-    }
   }
 
   firePing() {
@@ -2644,7 +2625,6 @@ export class Game {
     this.flash = 0;
     this.pings = [];
     this.rays = [];
-    this.contacts = [];
     this.audio.death();
     this.ui.dismiss();
     this.ui.hideHUD();
