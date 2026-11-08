@@ -2796,6 +2796,9 @@ function buildMazeMap(seed) {
 
   const spawnTile = { x: 1, y: 1 };
   const exitTile = { x: w - 2, y: h - 2 };
+  // The moving-maze portal sits one cell left of the stair; make sure that
+  // cell is open even when the maze carved a wall there.
+  fill(grid, w, exitTile.x - 1, exitTile.y, exitTile.x - 1, exitTile.y, 0);
 
   const monsters = [];
   for (let i = 0; i < 5; i++) {
@@ -2822,7 +2825,12 @@ function buildMazeMap(seed) {
     key: null,
     exit: { x: exitTile.x * TILE + TILE / 2, y: exitTile.y * TILE + TILE / 2 },
     exitTile,
-    exits: [{ to: 'room', x: 0, y: 0, require: null, color: '127,227,212', silent: true }],
+    exits: [
+      { to: 'room', x: 0, y: 0, require: null, color: '127,227,212', silent: true },
+      // The diagonal corner already holds the stair; put the moving-maze
+      // portal on the open cell beside it so both stay usable.
+      { to: 'moving', x: exitTile.x - 1, y: exitTile.y, require: null, color: '200,160,255', silent: true },
+    ],
     absorb: [],
     monsters,
     loot: mazeLoot(rnd, grid, w, h, spawnTile, exitTile, monsters),
@@ -4856,7 +4864,7 @@ const ITEM_GLYPH = {
 // Startup self-check: proves the build the browser actually loaded is intact.
 // This exists because a stale module cache once made bug fixes look absent
 // until Ctrl+F5 — so the boot screen now shows what loaded and what works.
-const VERSION = '0.8.7';
+const VERSION = '0.8.8';
 
 const SCRIPT_VERSION = () => {
   const s = [...document.scripts].map((el) => el.src).find((src) => src.includes('main.js'));

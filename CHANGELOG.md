@@ -3,6 +3,17 @@
 All notable changes to HUSH. The format follows [Keep a Changelog](https://keepachangelog.com/),
 and the game follows [SemVer](https://semver.org/).
 
+## [0.8.8] - 2026-11-08
+
+### Added
+- 迷宫地图右下角（出生点对角）的台阶旁新增一道前往「移动迷宫」的传送门。
+  传送门占用台阶旁一格；该格若被墙堵住会被打通，保证从迷宫出口能直接走进去。
+  这扇门与地图选择、`?map=moving` 并存。
+
+### Docs
+- `tests/worldgen.test.js` 增加回归：12 个种子的迷宫都必须有这扇门，且门格
+  与对角台阶曼哈顿距离为 1、门格可通行。
+
 ## [0.8.7] - 2026-11-08
 
 ### Changed

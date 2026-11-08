@@ -55,6 +55,20 @@ test('maze map: connected and has monsters', () => {
   assert.ok(level.monsters.length >= 3);
 });
 
+test('maze map: moving-maze portal sits beside the diagonal exit', () => {
+  for (let seed = 1; seed <= 12; seed++) {
+    const level = buildMazeMap(seed);
+    const portal = level.exits.find((e) => e.to === 'moving');
+    assert.ok(portal, `seed ${seed} has no moving portal`);
+    assert.equal(
+      Math.abs(portal.x - level.exitTile.x) + Math.abs(portal.y - level.exitTile.y),
+      1,
+      `seed ${seed} portal is not beside the exit`,
+    );
+    assert.equal(level.grid[portal.y * level.w + portal.x], 0, `seed ${seed} portal tile is solid`);
+  }
+});
+
 test('maze map: 8-10 loot spots, spread by depth, some mid-corridor', () => {
   for (let seed = 1; seed <= 60; seed++) {
     const level = buildMazeMap(seed);

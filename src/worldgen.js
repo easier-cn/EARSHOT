@@ -517,6 +517,9 @@ export function buildMazeMap(seed) {
 
   const spawnTile = { x: 1, y: 1 };
   const exitTile = { x: w - 2, y: h - 2 };
+  // The moving-maze portal sits one cell left of the stair; make sure that
+  // cell is open even when the maze carved a wall there.
+  fill(grid, w, exitTile.x - 1, exitTile.y, exitTile.x - 1, exitTile.y, 0);
 
   const monsters = [];
   for (let i = 0; i < 5; i++) {
@@ -543,7 +546,12 @@ export function buildMazeMap(seed) {
     key: null,
     exit: { x: exitTile.x * TILE + TILE / 2, y: exitTile.y * TILE + TILE / 2 },
     exitTile,
-    exits: [{ to: 'room', x: 0, y: 0, require: null, color: '127,227,212', silent: true }],
+    exits: [
+      { to: 'room', x: 0, y: 0, require: null, color: '127,227,212', silent: true },
+      // The diagonal corner already holds the stair; put the moving-maze
+      // portal on the open cell beside it so both stay usable.
+      { to: 'moving', x: exitTile.x - 1, y: exitTile.y, require: null, color: '200,160,255', silent: true },
+    ],
     absorb: [],
     monsters,
     loot: mazeLoot(rnd, grid, w, h, spawnTile, exitTile, monsters),
