@@ -3,6 +3,15 @@
 All notable changes to EARSHOT (formerly HUSH). The format follows [Keep a Changelog](https://keepachangelog.com/),
 and the game follows [SemVer](https://semver.org/).
 
+## [0.8.17] - 2026-11-09
+
+### Changed
+- 反色更柔和：负片不再到纯白，最高只到 `invert(0.9)`，并随反色进度同步压暗到
+  `brightness(0.82)`，黑暗中不会突然变成刺眼的白墙；淡入淡出因此也是连续的。
+
+### Notes
+- 只改 `render()` 里的 CSS 滤镜组合，仪式时序、触发逻辑与测试均未变（95 pass）。
+
 ## [0.8.16] - 2026-11-09
 
 ### Added

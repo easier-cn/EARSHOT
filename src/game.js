@@ -39,9 +39,12 @@ const PING_REGEN = 2.4;
 const PING_SPEED = 720;
 const PING_LIFE = 0.9;
 // The star and the counter charm each perform a colour ceremony: a short
-// freeze, a drain to negative, then the same on the way back.
+// freeze, a drain to negative, then the same on the way back. The negative is
+// kept off pure white and dimmed a little so it does not glare in a dark room.
 const INVERT_HOLD = 0.5;
 const INVERT_FADE = 0.45;
+const INVERT_MAX = 0.9;
+const INVERT_DIM = 0.18;
 const WAVE_LISTEN = 620;
 const THROUGH_WALL = 0.6;
 const SHARD_ECHO_RANGE = 1150;
@@ -3140,8 +3143,12 @@ export class Game {
   render() {
     this.renderer.draw(this);
     // One canvas filter keeps the HUD and toasts legible while the world
-    // drains to negative.
-    const f = this.invertK > 0.002 ? `invert(${this.invertK.toFixed(3)})` : '';
+    // drains to negative. The negative tops out at 0.9 and dims as it rises,
+    // so the flash reads but never turns the room into a white wall.
+    const k = this.invertK;
+    const f = k > 0.002
+      ? `invert(${(k * INVERT_MAX).toFixed(3)}) brightness(${(1 - INVERT_DIM * k).toFixed(3)})`
+      : '';
     if (this.canvas.style.filter !== f) this.canvas.style.filter = f;
   }
 
