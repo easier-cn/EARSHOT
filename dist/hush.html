@@ -6206,7 +6206,7 @@ const ITEM_GLYPH = {
 // Startup self-check: proves the build the browser actually loaded is intact.
 // This exists because a stale module cache once made bug fixes look absent
 // until Ctrl+F5 — so the boot screen now shows what loaded and what works.
-const VERSION = '0.8.12';
+const VERSION = '0.8.13';
 
 const SCRIPT_VERSION = () => {
   const s = [...document.scripts].map((el) => el.src).find((src) => src.includes('main.js'));
@@ -10314,9 +10314,10 @@ class Game {
       return;
     }
     if (this.mapMode) {
-      // Retry = a fresh layout of the same place, not a replay of the same rooms.
+      // Retry means the whole run, not this one map: start over in the first
+      // room. A fresh layout, and never a time-rewind into the old snapshot.
       this.resetRunState();
-      this.startMap(this.mapId, (Math.random() * 1e9) | 0);
+      this.startMap('room', (Math.random() * 1e9) | 0);
       if (this.state !== 'playing') this.state = 'playing';
       return;
     }

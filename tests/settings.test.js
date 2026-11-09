@@ -57,7 +57,7 @@ test('settings: binding a used key swaps the two actions', () => {
   const s = defaultSettings();
   bindKey(s, 'ping', 'KeyW');
   assert.deepEqual(s.bindings.ping.keys, ['KeyW']);
-  assert.deepEqual(s.bindings.up.keys, ['Space']);
+  assert.deepEqual(s.bindings.up.keys, ['Space', 'KeyJ']);
 });
 
 test('settings: binding a used pad button swaps the two actions', () => {

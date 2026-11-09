@@ -3,6 +3,18 @@
 All notable changes to HUSH. The format follows [Keep a Changelog](https://keepachangelog.com/),
 and the game follows [SemVer](https://semver.org/).
 
+## [0.8.13] - 2026-11-09
+
+### Changed
+- 「重来」现在是真正的重新开局：在地图模式（房间 / 迷宫 / 移动迷宫 / 实验室）
+  按 R 或点暂停页的重来，不再重开当前地图，而是清空背包、护符与进度，
+  回到初始房间并生成新的布局。
+- 重来不会走时间回溯：入口快照与已用护符不会被还原，和手动重开一样从零开始。
+
+### Tests
+- 新增 `tests/restart.test.js`：地图模式回到 room、楼层模式从第一层重开、
+  密室模式保持同一间、标题页忽略重来、绝不调用 `restoreEntry`。
+
 ## [0.8.12] - 2026-11-09
 
 ### Added

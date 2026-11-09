@@ -124,14 +124,18 @@ export function bindKey(settings, actionId, code) {
   const bindings = settings.bindings;
   const own = bindings[actionId];
   if (!own) return false;
-  const old = own.keys[0] || null;
+  const old = [...own.keys];
+  let other = null;
   for (const [id, b] of Object.entries(bindings)) {
     if (id === actionId) continue;
     if (!b.keys.includes(code)) continue;
+    other = b;
     b.keys = b.keys.filter((k) => k !== code);
-    if (!b.keys.length && old) b.keys = [old];
   }
   own.keys = [code];
+  // Trade the whole old binding to the action that used to own the key, so a
+  // swapped action keeps its alternate key instead of ending up unbound.
+  if (other && old.length && !old.includes(code)) other.keys = old;
   saveSettings(settings);
   return true;
 }
@@ -141,14 +145,16 @@ export function bindPad(settings, actionId, index) {
   const bindings = settings.bindings;
   const own = bindings[actionId];
   if (!own) return false;
-  const old = own.pad[0] ?? null;
+  const old = [...own.pad];
+  let other = null;
   for (const [id, b] of Object.entries(bindings)) {
     if (id === actionId) continue;
     if (!b.pad.includes(index)) continue;
+    other = b;
     b.pad = b.pad.filter((n) => n !== index);
-    if (!b.pad.length && old != null) b.pad = [old];
   }
   own.pad = [index];
+  if (other && old.length && !old.includes(index)) other.pad = old;
   saveSettings(settings);
   return true;
 }
