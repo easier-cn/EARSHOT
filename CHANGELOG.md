@@ -1,7 +1,34 @@
 # Changelog
 
-All notable changes to HUSH. The format follows [Keep a Changelog](https://keepachangelog.com/),
+All notable changes to EARSHOT (formerly HUSH). The format follows [Keep a Changelog](https://keepachangelog.com/),
 and the game follows [SemVer](https://semver.org/).
+
+## [0.8.15] - 2026-11-09
+
+### Removed
+- 标题页的中文题记与游戏简介；欢迎页只保留 **EARSHOT** 标题，其余图形、按钮与操作提示不变。
+
+### Notes
+- 纯展示层改动，没有改玩法、数值、存档或内部标识。
+
+## [0.8.14] - 2026-11-09
+
+### Added
+- 标题页重新有了文字：游戏名 **EARSHOT**、一行题记，以及一段简短的游戏简介。
+- README / DESIGN / DEVELOPMENT 补充 EARSHOT 的品牌与简介；标题页截图更新。
+
+### Changed
+- 显示名从 HUSH 改为 **EARSHOT**（听觉所及的范围），更贴合“发声即暴露”的核心。
+- 第八密室的英文名从 `HUSH` 改为 `SILENCE`，避免和旧标题重名。
+- 内部标识保持不变：存档键 `hush.*`、`dist/hush.html`、`HUSH_PORT`、`window.__hush`。
+
+### Fixed
+- 单文件构建补上 `src/settings.js`：此前 `dist/hush.html` 会在 `loadSettings` 处抛 `ReferenceError`，双击打开是黑屏。
+- 自检在单文件版里不再报「版本 / 无版本号」：没有 `main.js` 外链时按内联构建的 `VERSION` 核对。
+- 标题页在极矮屏幕（≤640px 高）隐藏装饰性声呐纹章并收紧间距，避免「摁下空格键以开始」压住密室选图。
+
+### Notes
+- 展示层、构建清单与文档改动，没有改玩法、数值或存档格式。
 
 ## [0.8.13] - 2026-11-09
 

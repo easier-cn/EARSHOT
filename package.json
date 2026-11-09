@@ -1,9 +1,9 @@
 {
-  "name": "hush",
-  "version": "0.8.13",
+  "name": "earshot",
+  "version": "0.8.15",
   "private": true,
   "type": "module",
-  "description": "HUSH — a sonar stealth game played in the dark",
+  "description": "EARSHOT — a sonar stealth game played in the dark",
   "scripts": {
     "serve": "python -m http.server 8080 --bind 127.0.0.1",
     "build": "node tools/build.mjs",

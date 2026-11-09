@@ -44,6 +44,7 @@ export class UI {
             <path class="arc a2" d="M80 12a68 68 0 0 1 0 136"/>
             <path class="arc a3" d="M80 44a36 36 0 0 1 0 72"/>
           </svg>
+          <h1 class="logo">EARSHOT</h1>
           <div class="start-row">
             <button class="btn primary" id="btn-start" aria-label="进入">${icon('play')}</button>
             <button class="btn build" id="btn-edit" aria-label="造图">${icon('pencil')}</button>

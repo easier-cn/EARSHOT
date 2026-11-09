@@ -1,7 +1,7 @@
 import { clamp } from './util.js';
 
 /**
- * Every sound in HUSH is synthesised at runtime — no audio files.
+ * Every sound in EARSHOT is synthesised at runtime — no audio files.
  * The engine keeps a dry bus and a convolution reverb bus, and exposes
  * small musical helpers that the game calls for events.
  */

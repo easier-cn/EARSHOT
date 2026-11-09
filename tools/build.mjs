@@ -13,6 +13,7 @@ const DIST = path.join(ROOT, 'dist');
 // Dependency order: every module only uses names declared above it.
 const MODULES = [
   'src/util.js',
+  'src/settings.js',
   'src/portal-config.js',
   'src/portal-fx.js',
   'src/pathfind.js',

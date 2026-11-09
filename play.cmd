@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
-rem HUSH - open the game. Picks a free port automatically, reuses a running
-rem HUSH server if one is already up, and falls back to dist\hush.html.
+rem EARSHOT - open the game. Picks a free port automatically, reuses a running
+rem EARSHOT server if one is already up, and falls back to dist\hush.html.
 setlocal
 cd /d "%~dp0"
 if /i "%~1"=="stop" (

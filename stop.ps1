@@ -35,7 +35,7 @@ if (Test-Path $pidFile) {
   if ($saved -match '^\d+$') { Stop-Tree ([int]$saved) }
 }
 
-# 2. Fallback (only when the pid file did not help): find a HUSH server by probing.
+# 2. Fallback (only when the pid file did not help): find an EARSHOT server by probing.
 for ($p = 8080; $p -lt 8140; $p++) {
   if ($stopped.Count -gt 0) { break }
   if (-not (Test-Open $p)) { continue }
@@ -47,6 +47,6 @@ for ($p = 8080; $p -lt 8140; $p++) {
 Remove-Item $pidFile -ErrorAction SilentlyContinue
 
 if (-not $Quiet) {
-  if ($stopped.Count -gt 0) { Write-Host "  HUSH server stopped ($($stopped -join ', '))." }
-  else { Write-Host "  No HUSH server was running." }
+  if ($stopped.Count -gt 0) { Write-Host "  EARSHOT server stopped ($($stopped -join ', '))." }
+  else { Write-Host "  No EARSHOT server was running." }
 }

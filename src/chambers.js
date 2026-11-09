@@ -76,7 +76,7 @@ export const CHAMBERS = [
   {
     num: 'VIII',
     title: '寂静',
-    en: 'HUSH',
+    en: 'SILENCE',
     shards: 5,
     hunters: 5,
     skitters: 2,

@@ -39,12 +39,12 @@ function Test-Hush([int]$port) {
   }
 }
 
-# 1. An existing HUSH server on 8080 can be reused as-is.
+# 1. An existing EARSHOT server on 8080 can be reused as-is.
 $start = if ($env:HUSH_PORT) { [int]$env:HUSH_PORT } elseif ($Port -gt 0) { $Port } else { 8080 }
 $port = 0
 $reused = $false
 # Reuse only the requested port: a custom start port should not be hijacked by
-# some other HUSH window that happens to sit further down the range.
+# some other EARSHOT window that happens to sit further down the range.
 if ((Test-Busy $start) -and (Test-Hush $start)) { $port = $start; $reused = $true }
 
 # 2. Otherwise take the first free port in that range.
@@ -66,15 +66,15 @@ $openUrl = $url + "?launch=" + [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
 
 if ($reused) {
   Write-Host ""
-  Write-Host "  HUSH  ->  $url"
-  Write-Host "  (an existing HUSH server is already running here)"
+  Write-Host "  EARSHOT  ->  $url"
+  Write-Host "  (an existing EARSHOT server is already running here)"
   Write-Host ""
   if (-not $env:HUSH_NO_OPEN) { Start-Process $openUrl }
   exit 0
 }
 
 Write-Host ""
-Write-Host "  HUSH  ->  $url"
+Write-Host "  EARSHOT  ->  $url"
 Write-Host "  (close this window, or run stop.cmd, to stop the server)"
 Write-Host ""
 

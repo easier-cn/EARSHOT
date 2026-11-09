@@ -89,6 +89,8 @@ body {
 
 .title-screen {
   background: radial-gradient(ellipse at 50% 45%, rgba(3, 8, 10, 0.05), rgba(2, 4, 6, 0.86) 82%);
+  overflow-y: auto;
+  place-items: safe center;
 }
 
 @keyframes screenIn {
@@ -100,10 +102,11 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
   text-align: center;
-  padding: 24px;
-  max-width: 720px;
+  /* The bottom padding reserves room for the floating "press a key" guide. */
+  padding: 24px 24px 84px;
+  max-width: 760px;
 }
 
 .eyebrow {
@@ -117,11 +120,11 @@ body {
 
 .logo {
   margin: 0;
-  font-size: clamp(64px, 12.5vw, 150px);
+  font-size: clamp(46px, 8.4vw, 108px);
   font-weight: 200;
-  line-height: 0.95;
-  letter-spacing: 0.34em;
-  text-indent: 0.34em;
+  line-height: 1;
+  letter-spacing: 0.28em;
+  text-indent: 0.28em;
   color: #f2fffc;
   text-shadow:
     0 0 26px rgba(127, 227, 212, 0.32),
@@ -130,29 +133,8 @@ body {
 }
 
 @keyframes logoIn {
-  from { opacity: 0; letter-spacing: 0.6em; filter: blur(8px); }
-  to { opacity: 1; letter-spacing: 0.34em; filter: blur(0); }
-}
-
-.rule {
-  width: min(420px, 58vw);
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(127, 227, 212, 0.45), transparent);
-  animation: fadeUp 1s 0.3s ease both;
-}
-
-.tagline {
-  margin: 2px 0 6px;
-  font-size: clamp(13px, 1.5vw, 15px);
-  letter-spacing: 0.26em;
-  text-indent: 0.26em;
-  color: rgba(220, 250, 245, 0.6);
-  font-weight: 300;
-  animation: fadeUp 1s 0.45s ease both;
-}
-
-.tagline span {
-  color: rgba(127, 227, 212, 0.8);
+  from { opacity: 0; letter-spacing: 0.5em; filter: blur(8px); }
+  to { opacity: 1; letter-spacing: 0.28em; filter: blur(0); }
 }
 
 @keyframes fadeUp {
@@ -607,7 +589,16 @@ kbd {
   .hud-hint { display: none; }
   .panel { padding: 34px 26px; }
   .chamber-grid { grid-template-columns: repeat(4, 34px); }
-  .title-inner { gap: 12px; }
+  .title-inner { gap: 12px; padding: 20px 18px 78px; }
+  .logo { font-size: clamp(42px, 12vw, 62px); letter-spacing: 0.22em; text-indent: 0.22em; }
+  .emblem { width: 66px; height: 66px; }
+}
+
+/* Short viewports (laptops, landscape phones): shrink the lockup rather than clip it. */
+@media (max-height: 700px) {
+  .title-inner { gap: 10px; padding-top: 14px; padding-bottom: 74px; }
+  .logo { font-size: clamp(40px, 6vw, 76px); }
+  .emblem { width: 64px; height: 64px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -648,7 +639,7 @@ kbd {
 }
 
 /* ---- glyph interface: no words, only shapes ------------------------------ */
-.emblem { width: 128px; height: 128px; display: block; margin: 0 auto 30px; }
+.emblem { width: 92px; height: 92px; display: block; margin: 0 auto; }
 .emblem .arc { fill: none; stroke: var(--ink); stroke-width: 1.3; stroke-linecap: round; }
 .emblem .a1 { opacity: 0.85; } .emblem .a2 { opacity: 0.3; } .emblem .a3 { opacity: 0.14; }
 .emblem .dot { fill: #eaf7f4; filter: drop-shadow(0 0 8px rgba(160, 245, 232, 0.8)); }
@@ -1165,4 +1156,17 @@ kbd {
   border-radius: 0;
   display: inline-block;
   animation: none;
+}
+
+/* Phones: the chamber picker must not widen the title column. The 8x46 grid
+   is declared late in the file, so this repeat comes last to win the cascade. */
+@media (max-width: 640px) {
+  .chamber-grid { grid-template-columns: repeat(4, 46px); gap: 6px; }
+}
+
+/* Very short phones: drop the ornament and tighten, so the start guide never
+   sits on top of the chamber picker. */
+@media (max-height: 640px) {
+  .emblem { display: none; }
+  .title-inner { gap: 8px; padding-top: 12px; padding-bottom: 64px; }
 }

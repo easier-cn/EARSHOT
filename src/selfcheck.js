@@ -4,11 +4,13 @@
 import { Inventory, ITEMS } from './loot.js';
 import { ITEM_TEXT } from './desc.js';
 
-export const VERSION = '0.8.13';
+export const VERSION = '0.8.15';
 
 const SCRIPT_VERSION = () => {
   const s = [...document.scripts].map((el) => el.src).find((src) => src.includes('main.js'));
-  if (!s) return null;
+  // The single-file build has no external script tag: its inline bundle is
+  // generated from this same source tree, so its version is VERSION.
+  if (!s) return VERSION;
   const m = s.match(/[?&]v=([\w.]+)/);
   return m ? m[1] : null;
 };

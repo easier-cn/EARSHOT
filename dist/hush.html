@@ -5,8 +5,8 @@
     <meta http-equiv="Cache-Control" content="no-store" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#04070a" />
-    <meta name="description" content="HUSH — 一款用声呐当眼睛的潜行游戏。你什么都看不见，黑暗在听。" />
-    <title>HUSH — 黑暗在听</title>
+    <meta name="description" content="EARSHOT — 一款用声呐当眼睛的黑暗潜行游戏。每一次脉冲照亮房间，也把猎手引向你。" />
+    <title>EARSHOT — 黑暗在听</title>
     <link
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%2304070a'/%3E%3Ccircle cx='16' cy='16' r='4' fill='%237fe3d4'/%3E%3Ccircle cx='16' cy='16' r='10' fill='none' stroke='%237fe3d4' stroke-opacity='.45'/%3E%3C/svg%3E"
@@ -103,6 +103,8 @@ body {
 
 .title-screen {
   background: radial-gradient(ellipse at 50% 45%, rgba(3, 8, 10, 0.05), rgba(2, 4, 6, 0.86) 82%);
+  overflow-y: auto;
+  place-items: safe center;
 }
 
 @keyframes screenIn {
@@ -114,10 +116,11 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
   text-align: center;
-  padding: 24px;
-  max-width: 720px;
+  /* The bottom padding reserves room for the floating "press a key" guide. */
+  padding: 24px 24px 84px;
+  max-width: 760px;
 }
 
 .eyebrow {
@@ -131,11 +134,11 @@ body {
 
 .logo {
   margin: 0;
-  font-size: clamp(64px, 12.5vw, 150px);
+  font-size: clamp(46px, 8.4vw, 108px);
   font-weight: 200;
-  line-height: 0.95;
-  letter-spacing: 0.34em;
-  text-indent: 0.34em;
+  line-height: 1;
+  letter-spacing: 0.28em;
+  text-indent: 0.28em;
   color: #f2fffc;
   text-shadow:
     0 0 26px rgba(127, 227, 212, 0.32),
@@ -144,29 +147,8 @@ body {
 }
 
 @keyframes logoIn {
-  from { opacity: 0; letter-spacing: 0.6em; filter: blur(8px); }
-  to { opacity: 1; letter-spacing: 0.34em; filter: blur(0); }
-}
-
-.rule {
-  width: min(420px, 58vw);
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(127, 227, 212, 0.45), transparent);
-  animation: fadeUp 1s 0.3s ease both;
-}
-
-.tagline {
-  margin: 2px 0 6px;
-  font-size: clamp(13px, 1.5vw, 15px);
-  letter-spacing: 0.26em;
-  text-indent: 0.26em;
-  color: rgba(220, 250, 245, 0.6);
-  font-weight: 300;
-  animation: fadeUp 1s 0.45s ease both;
-}
-
-.tagline span {
-  color: rgba(127, 227, 212, 0.8);
+  from { opacity: 0; letter-spacing: 0.5em; filter: blur(8px); }
+  to { opacity: 1; letter-spacing: 0.28em; filter: blur(0); }
 }
 
 @keyframes fadeUp {
@@ -621,7 +603,16 @@ kbd {
   .hud-hint { display: none; }
   .panel { padding: 34px 26px; }
   .chamber-grid { grid-template-columns: repeat(4, 34px); }
-  .title-inner { gap: 12px; }
+  .title-inner { gap: 12px; padding: 20px 18px 78px; }
+  .logo { font-size: clamp(42px, 12vw, 62px); letter-spacing: 0.22em; text-indent: 0.22em; }
+  .emblem { width: 66px; height: 66px; }
+}
+
+/* Short viewports (laptops, landscape phones): shrink the lockup rather than clip it. */
+@media (max-height: 700px) {
+  .title-inner { gap: 10px; padding-top: 14px; padding-bottom: 74px; }
+  .logo { font-size: clamp(40px, 6vw, 76px); }
+  .emblem { width: 64px; height: 64px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -662,7 +653,7 @@ kbd {
 }
 
 /* ---- glyph interface: no words, only shapes ------------------------------ */
-.emblem { width: 128px; height: 128px; display: block; margin: 0 auto 30px; }
+.emblem { width: 92px; height: 92px; display: block; margin: 0 auto; }
 .emblem .arc { fill: none; stroke: var(--ink); stroke-width: 1.3; stroke-linecap: round; }
 .emblem .a1 { opacity: 0.85; } .emblem .a2 { opacity: 0.3; } .emblem .a3 { opacity: 0.14; }
 .emblem .dot { fill: #eaf7f4; filter: drop-shadow(0 0 8px rgba(160, 245, 232, 0.8)); }
@@ -1181,10 +1172,23 @@ kbd {
   animation: none;
 }
 
+/* Phones: the chamber picker must not widen the title column. The 8x46 grid
+   is declared late in the file, so this repeat comes last to win the cascade. */
+@media (max-width: 640px) {
+  .chamber-grid { grid-template-columns: repeat(4, 46px); gap: 6px; }
+}
+
+/* Very short phones: drop the ornament and tighten, so the start guide never
+   sits on top of the chamber picker. */
+@media (max-height: 640px) {
+  .emblem { display: none; }
+  .title-inner { gap: 8px; padding-top: 12px; padding-bottom: 64px; }
+}
+
 </style>
   </head>
   <body>
-    <canvas id="game" aria-label="HUSH"></canvas>
+    <canvas id="game" aria-label="EARSHOT"></canvas>
     <div id="ui"></div>
     <script type="module">
 // ---- src/util.js ----
@@ -1267,6 +1271,175 @@ function nowSec() {
 function echoPan(dx, dy) {
   const d = Math.hypot(dx, dy);
   return clamp(dx / (d * 0.9 + 60), -1, 1);
+}
+
+// ---- src/settings.js ----
+// Player preferences: volume, sonar brightness, control device and bindings.
+// Everything the settings panel edits lives here, so game.js and input.js
+// never care about a physical key or a gamepad button — only an action name.
+
+const STORAGE_KEY = 'hush.settings.v1';
+
+const ACTIONS = [
+  { id: 'up', name: '向上', keys: ['KeyW', 'ArrowUp'], pad: 12 },
+  { id: 'down', name: '向下', keys: ['KeyS', 'ArrowDown'], pad: 13 },
+  { id: 'left', name: '向左', keys: ['KeyA', 'ArrowLeft'], pad: 14 },
+  { id: 'right', name: '向右', keys: ['KeyD', 'ArrowRight'], pad: 15 },
+  { id: 'sneak', name: '潜行（按住）', keys: ['ShiftLeft', 'ShiftRight'], pad: 4 },
+  { id: 'ping', name: '声呐', keys: ['Space', 'KeyJ'], pad: 0 },
+  { id: 'interact', name: '互动', keys: ['KeyF'], pad: 2 },
+  { id: 'inventory', name: '背包', keys: ['Tab'], pad: 3 },
+  { id: 'hot1', name: '快捷键 1', keys: ['Digit1'], pad: 5 },
+  { id: 'hot2', name: '快捷键 2', keys: ['Digit2'], pad: 6 },
+  { id: 'hot3', name: '快捷键 3', keys: ['Digit3'], pad: 7 },
+  { id: 'hot4', name: '快捷键 4', keys: ['Digit4'], pad: 10 },
+  { id: 'pause', name: '暂停', keys: ['Escape'], pad: 9 },
+  { id: 'restart', name: '重新开始', keys: ['KeyR'], pad: 8 },
+  { id: 'mute', name: '静音', keys: ['KeyM'], pad: 11 },
+];
+
+const NAMED_KEYS = {
+  Space: '空格键',
+  ShiftLeft: 'Shift',
+  ShiftRight: 'Shift',
+  ControlLeft: 'Ctrl',
+  ControlRight: 'Ctrl',
+  AltLeft: 'Alt',
+  AltRight: 'Alt',
+  Tab: 'Tab',
+  Enter: 'Enter',
+  Escape: 'Esc',
+  Backspace: '退格',
+  Backquote: '`',
+  Minus: '-',
+  Equal: '=',
+  BracketLeft: '[',
+  BracketRight: ']',
+  Backslash: '\\',
+  Semicolon: ';',
+  Quote: "'",
+  Comma: ',',
+  Period: '.',
+  Slash: '/',
+  ArrowUp: '↑',
+  ArrowDown: '↓',
+  ArrowLeft: '←',
+  ArrowRight: '→',
+};
+
+const PAD_NAMES = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', '返回', '开始', 'L3', 'R3', '↑', '↓', '←', '→'];
+
+function keyLabel(code) {
+  if (!code) return '—';
+  if (NAMED_KEYS[code]) return NAMED_KEYS[code];
+  if (code.startsWith('Key')) return code.slice(3);
+  if (code.startsWith('Digit')) return code.slice(5);
+  if (code.startsWith('Numpad')) return `小键盘 ${code.slice(6)}`;
+  return code;
+}
+
+function padLabel(index) {
+  return PAD_NAMES[index] || `键 ${index}`;
+}
+
+function defaultSettings() {
+  const bindings = {};
+  for (const a of ACTIONS) bindings[a.id] = { keys: [...a.keys], pad: [a.pad] };
+  return { version: 1, volume: 0.85, brightness: 1, device: 'keyboard', bindings };
+}
+
+/** Fill in anything a stored profile is missing, so new actions keep working. */
+function normalizeSettings(raw) {
+  const base = defaultSettings();
+  if (!raw || typeof raw !== 'object') return base;
+  const out = { ...base };
+  if (Number.isFinite(raw.volume)) out.volume = Math.min(1, Math.max(0, raw.volume));
+  if (Number.isFinite(raw.brightness)) out.brightness = Math.min(1.8, Math.max(0.3, raw.brightness));
+  if (raw.device === 'gamepad' || raw.device === 'keyboard') out.device = raw.device;
+  for (const a of ACTIONS) {
+    const b = raw.bindings && raw.bindings[a.id];
+    if (!b) continue;
+    if (Array.isArray(b.keys) && b.keys.length) out.bindings[a.id].keys = b.keys.filter((k) => typeof k === 'string');
+    if (Array.isArray(b.pad) && b.pad.length) out.bindings[a.id].pad = b.pad.filter((n) => Number.isInteger(n) && n >= 0);
+  }
+  return out;
+}
+
+function loadSettings(storage = globalThis.localStorage) {
+  try {
+    const raw = storage && storage.getItem(STORAGE_KEY);
+    return normalizeSettings(raw ? JSON.parse(raw) : null);
+  } catch {
+    return defaultSettings();
+  }
+}
+
+function saveSettings(settings, storage = globalThis.localStorage) {
+  try {
+    storage && storage.setItem(STORAGE_KEY, JSON.stringify(settings));
+  } catch {
+    /* private mode: the session still works, it just will not remember */
+  }
+  return settings;
+}
+
+/** Drop the stored profile (used by tests and by a manual reset). */
+function clearStoredSettings(storage = globalThis.localStorage) {
+  try {
+    storage && storage.removeItem(STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Bind one keyboard code to an action. If the code already belongs to another
+ * action, the two swap their first key so nothing ends up unbound.
+ */
+function bindKey(settings, actionId, code) {
+  const bindings = settings.bindings;
+  const own = bindings[actionId];
+  if (!own) return false;
+  const old = [...own.keys];
+  let other = null;
+  for (const [id, b] of Object.entries(bindings)) {
+    if (id === actionId) continue;
+    if (!b.keys.includes(code)) continue;
+    other = b;
+    b.keys = b.keys.filter((k) => k !== code);
+  }
+  own.keys = [code];
+  // Trade the whole old binding to the action that used to own the key, so a
+  // swapped action keeps its alternate key instead of ending up unbound.
+  if (other && old.length && !old.includes(code)) other.keys = old;
+  saveSettings(settings);
+  return true;
+}
+
+/** Same contract for a gamepad button index. */
+function bindPad(settings, actionId, index) {
+  const bindings = settings.bindings;
+  const own = bindings[actionId];
+  if (!own) return false;
+  const old = [...own.pad];
+  let other = null;
+  for (const [id, b] of Object.entries(bindings)) {
+    if (id === actionId) continue;
+    if (!b.pad.includes(index)) continue;
+    other = b;
+    b.pad = b.pad.filter((n) => n !== index);
+  }
+  own.pad = [index];
+  if (other && old.length && !old.includes(index)) other.pad = old;
+  saveSettings(settings);
+  return true;
+}
+
+function resetSettings(settings) {
+  const base = defaultSettings();
+  Object.assign(settings, base);
+  saveSettings(settings);
+  return settings;
 }
 
 // ---- src/portal-config.js ----
@@ -5305,7 +5478,7 @@ class Input {
 // ---- src/audio.js ----
 
 /**
- * Every sound in HUSH is synthesised at runtime — no audio files.
+ * Every sound in EARSHOT is synthesised at runtime — no audio files.
  * The engine keeps a dry bus and a convolution reverb bus, and exposes
  * small musical helpers that the game calls for events.
  */
@@ -5788,7 +5961,7 @@ const CHAMBERS = [
   {
     num: 'VIII',
     title: '寂静',
-    en: 'HUSH',
+    en: 'SILENCE',
     shards: 5,
     hunters: 5,
     skitters: 2,
@@ -6206,11 +6379,13 @@ const ITEM_GLYPH = {
 // Startup self-check: proves the build the browser actually loaded is intact.
 // This exists because a stale module cache once made bug fixes look absent
 // until Ctrl+F5 — so the boot screen now shows what loaded and what works.
-const VERSION = '0.8.13';
+const VERSION = '0.8.15';
 
 const SCRIPT_VERSION = () => {
   const s = [...document.scripts].map((el) => el.src).find((src) => src.includes('main.js'));
-  if (!s) return null;
+  // The single-file build has no external script tag: its inline bundle is
+  // generated from this same source tree, so its version is VERSION.
+  if (!s) return VERSION;
   const m = s.match(/[?&]v=([\w.]+)/);
   return m ? m[1] : null;
 };
@@ -7470,6 +7645,7 @@ class UI {
             <path class="arc a2" d="M80 12a68 68 0 0 1 0 136"/>
             <path class="arc a3" d="M80 44a36 36 0 0 1 0 72"/>
           </svg>
+          <h1 class="logo">EARSHOT</h1>
           <div class="start-row">
             <button class="btn primary" id="btn-start" aria-label="进入">${icon('play')}</button>
             <button class="btn build" id="btn-edit" aria-label="造图">${icon('pencil')}</button>
