@@ -38,6 +38,10 @@ const PING_MAX = 3;
 const PING_REGEN = 2.4;
 const PING_SPEED = 720;
 const PING_LIFE = 0.9;
+// The star and the counter charm each perform a colour ceremony: a short
+// freeze, a drain to negative, then the same on the way back.
+const INVERT_HOLD = 0.5;
+const INVERT_FADE = 0.45;
 const WAVE_LISTEN = 620;
 const THROUGH_WALL = 0.6;
 const SHARD_ECHO_RANGE = 1150;
@@ -154,6 +158,12 @@ export class Game {
     this.invulnT = 0;
     this.stressCharges = 0;
     this.starT = 0;
+    this.counterT = 0;
+    this.invertK = 0;
+    this.invertPhase = 'idle';
+    this.invertT = 0;
+    this.invertFrom = 0;
+    this.invertHold = false;
     this.counterReady = false;
     this.rewindUsed = false;
     this.denyCooldown = 0;
@@ -311,6 +321,7 @@ export class Game {
     this.lures = [];
     this.stressCharges = 0;
     this.starT = 0;
+    this.clearInvert();
     this.invulnT = 0;
     this.speedT = 0;
     this.scanT = 0;
@@ -454,6 +465,7 @@ export class Game {
     this.invulnT = 0;
     this.lives = this.maxLives();
     this.starT = 0;
+    this.clearInvert();
     this.stressUsed = false;
     this.counterUsed = false;
     this.stoneGranted = false;
@@ -1380,6 +1392,7 @@ export class Game {
       this.starT = 3;
       this.audio.gateOpen();
       this.flash = 1;
+      this.beginInvert();
       this.ui.feed('无敌星：撞上你的会死');
     } else if (id === 'totem') {
       if (!take()) { this.audio.deny(); return false; }
@@ -1677,8 +1690,10 @@ export class Game {
       this.counterUsed = true;
       if (source && source.x != null) this.killHunter(source);
       this.invulnT = CHARMS.counter.window;
+      this.counterT = CHARMS.counter.window;
       this.flash = 1;
       this.audio.gateOpen();
+      this.beginInvert();
       return;
     }
     this.lives -= 1;
@@ -2044,6 +2059,7 @@ export class Game {
 
   victory() {
     this.state = 'victory';
+    this.clearInvert();
     this.ui.dismiss();
     this.ui.showVictory(this.progress);
   }
@@ -2058,7 +2074,10 @@ export class Game {
     dt = Math.min(dt, 0.05);
 
     if (!this.frozen) {
-      if (this.state !== 'paused') this.now += dt;
+      // The two hit-stops of the colour ceremony also freeze ambient motion
+      // (sonar rings, grain) so the beat reads as a still frame.
+      const hold = this.invertHold && this.state === 'playing';
+      if (this.state !== 'paused' && !hold) this.now += dt;
       this.input.poll();
       if (this.state === 'title' && !this.ui.settingsOpen && this.input.padJustPressed()) {
         this.audio.unlock();
@@ -2162,11 +2181,70 @@ export class Game {
     this.shake = Math.max(0, this.shake - dt * 30);
   }
 
+  /** Start (or extend) the colour ceremony. A buff picked up during the
+   *  fade-out turns the screen back to negative instead of replaying the
+   *  opening hold. */
+  beginInvert() {
+    const p = this.invertPhase;
+    if (p === 'holdIn' || p === 'fadeIn' || p === 'on') return;
+    if (p === 'holdOut') { this.invertPhase = 'on'; return; }
+    this.invertFrom = this.invertK;
+    this.invertPhase = 'holdIn';
+    this.invertT = INVERT_HOLD;
+  }
+
+  /** Advance the ceremony. True means this frame is a freeze-frame. */
+  stepInvert(dt) {
+    const p = this.invertPhase;
+    if (p === 'idle') { this.invertHold = false; return false; }
+    this.invertT -= dt;
+    if (p === 'holdIn' || p === 'holdOut') {
+      this.invertHold = this.invertT > 0;
+      if (this.invertHold) return true;
+      this.invertPhase = p === 'holdIn' ? 'fadeIn' : 'fadeOut';
+      this.invertFrom = this.invertK;
+      this.invertT = INVERT_FADE;
+      this.invertHold = false;
+      return false;
+    }
+    if (p === 'fadeIn') {
+      const k = clamp(1 - this.invertT / INVERT_FADE, 0, 1);
+      this.invertK = this.invertFrom + (1 - this.invertFrom) * k;
+      if (this.invertT <= 0) { this.invertK = 1; this.invertPhase = 'on'; }
+      return false;
+    }
+    if (p === 'on') {
+      if (this.starT > 0 || this.counterT > 0) return false;
+      this.invertPhase = 'holdOut';
+      this.invertT = INVERT_HOLD;
+      this.invertHold = true;
+      return true;
+    }
+    // fadeOut
+    const k = clamp(this.invertT / INVERT_FADE, 0, 1);
+    this.invertK = this.invertFrom * k;
+    if (this.invertT <= 0) { this.invertK = 0; this.invertPhase = 'idle'; }
+    return false;
+  }
+
+  /** Drop the ceremony instantly: death, retry, or a new map. */
+  clearInvert() {
+    this.invertPhase = 'idle';
+    this.invertK = 0;
+    this.invertT = 0;
+    this.invertFrom = 0;
+    this.invertHold = false;
+    this.counterT = 0;
+  }
+
   update(dt) {
     if (this._entryPending && this.player && !this._suppressSnapshot) {
       this._entryPending = false;
       this.snapshotEntry();
     }
+    // A colour ceremony can hold the world still for a beat; while it does,
+    // nothing below (movement, hunters, timers) runs.
+    if (this.stepInvert(dt)) return;
     const p = this.player;
     const L = this.level;
     if (this.debugFreeze && this.debugMode) {
@@ -2321,6 +2399,7 @@ export class Game {
 
     // timed items and thrown lures
     if (this.starT > 0) this.starT = Math.max(0, this.starT - dt);
+    if (this.counterT > 0) this.counterT = Math.max(0, this.counterT - dt);
     if (this.scanT > 0) {
       this.scanT -= dt;
       this.scanTick -= dt;
@@ -2949,6 +3028,7 @@ export class Game {
     if (this.debugInvincible) return;
     this.state = 'dead';
     this.deathT = 0;
+    this.clearInvert();
     this.shake = 18;
     this.flash = 0;
     this.pings = [];
@@ -2960,6 +3040,7 @@ export class Game {
 
   complete() {
     if (this.state !== 'playing') return;
+    this.clearInvert();
     if (this.floorMode) {
       this.audio.gateOpen();
       this.state = 'complete';
@@ -3058,6 +3139,10 @@ export class Game {
 
   render() {
     this.renderer.draw(this);
+    // One canvas filter keeps the HUD and toasts legible while the world
+    // drains to negative.
+    const f = this.invertK > 0.002 ? `invert(${this.invertK.toFixed(3)})` : '';
+    if (this.canvas.style.filter !== f) this.canvas.style.filter = f;
   }
 
   // Debug hooks used by the headless screenshot script.

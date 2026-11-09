@@ -3,6 +3,24 @@
 All notable changes to EARSHOT (formerly HUSH). The format follows [Keep a Changelog](https://keepachangelog.com/),
 and the game follows [SemVer](https://semver.org/).
 
+## [0.8.16] - 2026-11-09
+
+### Added
+- 无敌星与「反击时刻」触发时，游戏画面进入全屏反色仪式：先停格 0.5 秒，
+  再用 0.45 秒逐渐转为负片；效果持续到无敌 / 反击窗口结束，随后再次停格
+  0.5 秒，用 0.45 秒渐回原色。
+- 两次停格是真正的冻结帧：世界、计时器与声呐波纹都停住，只有反色进度在推进。
+
+### Changed
+- 反色只作用于游戏画布，HUD、提示与菜单保持原色，血量、探测次数与播报仍然可读。
+
+### Notes
+- 实现集中在 `Game.beginInvert / stepInvert / clearInvert`，CSS `invert()` 滤镜写在
+  `render()` 末尾；触发点是无敌星使用与 `hurt()` 中的反击分支（`counterT` 与护符
+  窗口同为 3 秒）。死亡、重来、换图与胜利会立即清除反色，不把负片带进结算页。
+- `tests/effects.test.js` 新增 3 条：星的道具仪式、反击触发同一仪式、清场；
+  全套 95 pass / 0 fail。
+
 ## [0.8.15] - 2026-11-09
 
 ### Removed

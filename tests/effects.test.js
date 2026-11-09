@@ -153,3 +153,70 @@ test('every hunter death answers with exactly one purple line', () => {
   assert.equal(g.beeps.length, 1);
   assert.equal(g.beeps[0], '190, 130, 255');
 });
+// The colour ceremony around the star and the counter charm: a hold, a drain
+// to negative, a second hold when the buff ends, and a fade home.
+
+function invertGame(extra = {}) {
+  const g = fakeGame(Object.assign({
+    starT: 0, counterT: 0, invertK: 0, invertPhase: 'idle', invertT: 0,
+    invertFrom: 0, invertHold: false, invulnT: 0, counterUsed: false, flash: 0,
+  }, extra));
+  g.audio = { alert() {}, shard() {}, gateOpen() {} };
+  return g;
+}
+
+/** Step the ceremony like the frame loop does; returns how many frames froze. */
+function drive(g, seconds, dt = 1 / 60) {
+  let holds = 0;
+  const n = Math.max(1, Math.round(seconds / dt));
+  for (let i = 0; i < n; i++) if (g.stepInvert(dt)) holds++;
+  return holds;
+}
+
+test('the star holds, drains to negative, then fades back when it ends', () => {
+  const g = invertGame({ starT: 3 });
+  g.beginInvert();
+  assert.equal(g.invertPhase, 'holdIn');
+
+  assert.ok(drive(g, 0.4) >= 20, 'the opening hold freezes the world');
+  assert.equal(g.invertK, 0, 'colour must not move during the hold');
+
+  drive(g, 0.2); // past the 0.5s hold: the drain begins
+  assert.ok(['fadeIn', 'on'].includes(g.invertPhase));
+  drive(g, 0.45);
+  assert.equal(g.invertPhase, 'on');
+  assert.equal(g.invertK, 1);
+
+  g.starT = 0; // the buff ran out
+  assert.ok(drive(g, 0.1) > 0, 'the closing hold freezes the world');
+  assert.equal(g.invertPhase, 'holdOut');
+  assert.equal(g.invertK, 1);
+
+  drive(g, 0.6);
+  assert.equal(g.invertPhase, 'fadeOut');
+  drive(g, 0.4);
+  assert.equal(g.invertPhase, 'idle');
+  assert.equal(g.invertK, 0);
+});
+
+test('the counter charm starts the same ceremony', () => {
+  const g = invertGame({ state: 'playing' });
+  g.inv = { level: (k) => (k === 'counter' ? 1 : 0) };
+  g.hurt(null);
+  assert.equal(g.counterUsed, true);
+  assert.equal(g.counterT, 3);
+  assert.equal(g.invertPhase, 'holdIn');
+  assert.equal(g.stepInvert(1 / 60), true, 'the next frame is a freeze-frame');
+});
+
+test('death or a new map clears the ceremony instantly', () => {
+  const g = invertGame({ starT: 1 });
+  g.beginInvert();
+  drive(g, 1.0);
+  assert.equal(g.invertK, 1);
+  g.clearInvert();
+  assert.equal(g.invertPhase, 'idle');
+  assert.equal(g.invertK, 0);
+  assert.equal(g.invertT, 0);
+  assert.equal(g.invertHold, false);
+});
