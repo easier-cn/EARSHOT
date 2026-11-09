@@ -21,6 +21,7 @@ const MODULES = [
   'src/maps.js',
   'src/worldgen.js',
   'src/entities.js',
+  'src/lab.js',
   'src/input.js',
   'src/audio.js',
   'src/chambers.js',

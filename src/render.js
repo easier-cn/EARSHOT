@@ -125,10 +125,13 @@ export class Renderer {
     ctx.translate(this.cw / 2 - cx * this.scale + sx, this.ch / 2 - cy * this.scale + sy);
     ctx.scale(this.scale, this.scale);
 
+    this._drawLab(game, now);
+
     // ---- sonar: sparks fly out, bounce off walls, leave short comet tails ---
     // Stealth is silence, and silence is blindness: nothing renders at all.
     const vision = !game.blind;
     const rays = vision ? game.rays || [] : [];
+    const brightness = Math.max(0.3, Math.min(1.8, game.settings ? game.settings.brightness : 1));
     if (rays.length) {
       ctx.globalCompositeOperation = 'lighter';
       ctx.lineCap = 'round';
@@ -139,8 +142,12 @@ export class Renderer {
         const fade = r.age <= r.life ? 1 : Math.max(0, 1 - (r.age - r.life) / 1.2);
         if (fade <= 0.02) continue;
         const head = Math.min(1, r.age / r.life);
-        const a = (0.34 - head * 0.2) * fade * (r.tint ? 1.2 : 1);
+        const a = (0.34 - head * 0.2) * fade * (r.tint ? 1.2 : 1) * brightness;
         if (a <= 0.02) continue;
+        // Fog is invisible; a brighter green line is the only cue that a ray
+        // is travelling through it.
+        const fogBoost = r.fog ? 1.85 : 1;
+        const col = r.fog ? '170, 255, 190' : r.tint || RAY_RGB;
         const pts = r.pts;
         const n = pts.length;
         const start = Math.max(0, n - 10);
@@ -156,15 +163,15 @@ export class Renderer {
             ctx.moveTo(pts[i0].x, pts[i0].y);
             for (let j = i0 + 1; j <= i1; j++) ctx.lineTo(pts[j].x, pts[j].y);
             if (b === batches - 1) ctx.lineTo(r.x, r.y);
-            ctx.strokeStyle = `rgba(${r.tint || RAY_RGB}, ${Math.min(1, ta * (r.hot ? 1.9 : r.tint ? 1.3 : 1))})`;
-            ctx.lineWidth = (r.hot ? 1.6 : r.tint ? 1.0 : 0.8) + ta * (r.hot ? 2.4 : 1.4);
+            ctx.strokeStyle = `rgba(${col}, ${Math.min(1, ta * (r.hot ? 1.9 : r.tint ? 1.3 : 1) * fogBoost)})`;
+            ctx.lineWidth = (r.hot ? 1.6 : r.tint ? 1.0 : 0.8) + ta * (r.hot ? 2.4 : 1.4) + (r.fog ? 0.9 : 0);
             ctx.stroke();
           }
         }
         if (r.age <= r.life) {
-          ctx.fillStyle = `rgba(${r.tint || RAY_RGB}, ${Math.min(0.62, a * (r.hot ? 2.6 : 1.25))})`;
+          ctx.fillStyle = `rgba(${col}, ${Math.min(0.9, a * (r.hot ? 2.6 : 1.25) * fogBoost)})`;
           ctx.beginPath();
-          ctx.arc(r.x, r.y, r.hot ? 2.6 : 1.4, 0, Math.PI * 2);
+          ctx.arc(r.x, r.y, r.hot ? 2.6 : r.fog ? 2.2 : 1.4, 0, Math.PI * 2);
           ctx.fill();
         }
       }
@@ -487,6 +494,21 @@ export class Renderer {
         ctx.strokeStyle = 'rgba(110, 180, 255, 0.95)';
         ctx.strokeRect(sk.x - 9, sk.y - 9, 18, 18);
       }
+      for (const e of game.labEnemies || []) {
+        const col = e.type === 'lab2' ? '255, 150, 80' : '150, 255, 190';
+        ctx.strokeStyle = `rgba(${col}, 0.95)`;
+        ctx.strokeRect(e.x - e.r, e.y - e.r, e.r * 2, e.r * 2);
+        if (e.path && e.path.length) {
+          ctx.beginPath();
+          ctx.moveTo(e.x, e.y);
+          for (const wp of e.path) ctx.lineTo(wp.x, wp.y);
+          ctx.strokeStyle = `rgba(${col}, 0.4)`;
+          ctx.stroke();
+        }
+        ctx.fillStyle = `rgba(${col}, 0.9)`;
+        ctx.font = '9px monospace';
+        ctx.fillText(`${e.type}:${e.state}`, e.x - 14, e.y - e.r - 5);
+      }
       ctx.restore();
     }
 
@@ -636,6 +658,14 @@ export class Renderer {
     ctx.restore();
 
     // ---- screen space overlays ---------------------------------------------
+    if (game.stunT > 0) {
+      const r = Math.min(this.cw, this.ch) * 0.46;
+      const g = ctx.createRadialGradient(this.cw / 2, this.ch / 2, r * 0.2, this.cw / 2, this.ch / 2, r);
+      g.addColorStop(0, 'rgba(80, 220, 120, 0)');
+      g.addColorStop(1, `rgba(60, 190, 100, ${Math.min(0.42, 0.18 + game.stunT * 0.1)})`);
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, this.cw, this.ch);
+    }
     const danger = game.danger || 0;
     if (danger > 0.02) {
       const g = ctx.createRadialGradient(
@@ -674,6 +704,66 @@ export class Renderer {
       ctx.fillStyle = `rgba(190, 255, 245, ${game.flash * 0.06})`;
       ctx.fillRect(0, 0, this.cw, this.ch);
     }
+  }
+
+  /** Lab-only scenery: fog, dishes, gates, cards and the two experimental bodies. */
+  _drawLab(game, now) {
+    const lab = game.lab;
+    const level = game.level;
+    if (!lab || !level) return;
+    const { ctx } = this;
+
+    // Culture dishes: three green sound particles bouncing forever inside the
+    // sealed one-tile cell, drawn exactly like a moving-maze core.
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (const t of game.dishTrails || []) {
+      const d = lab.dishes[t.dish];
+      const pts = t.pts;
+      if (!d || d.broken || !pts || pts.length < 2) continue;
+      const n = pts.length;
+      const start = Math.max(0, n - 22);
+      const tail = pts[start];
+      const grad = ctx.createLinearGradient(tail.x, tail.y, t.x, t.y);
+      grad.addColorStop(0, 'rgba(90, 255, 130, 0)');
+      grad.addColorStop(0.45, 'rgba(90, 255, 130, 0.18)');
+      grad.addColorStop(1, 'rgba(120, 255, 150, 0.8)');
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(pts[start].x, pts[start].y);
+      for (let i = start + 1; i < n - 1; i++) {
+        const mx = (pts[i].x + pts[i + 1].x) / 2;
+        const my = (pts[i].y + pts[i + 1].y) / 2;
+        ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, my);
+      }
+      ctx.lineTo(pts[n - 1].x, pts[n - 1].y);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(170, 255, 185, 0.95)';
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+
+    // Key cards are carried objects, so they stay visible.
+    for (const c of game.mapCards || []) {
+      if (c.taken) continue;
+      const pulse = 0.55 + 0.45 * Math.sin(now * 2.6 + c.zone);
+      ctx.save();
+      ctx.translate(c.x, c.y);
+      ctx.strokeStyle = `rgba(${c.color}, ${0.45 + 0.45 * pulse})`;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.rect(-5, -3.5, 10, 7);
+      ctx.stroke();
+      ctx.fillStyle = `rgba(${c.color}, ${0.5 * pulse})`;
+      ctx.fillRect(-2, -1, 4, 2);
+      ctx.restore();
+    }
+
+    if (lab.finalExit) this._drawExit(lab.finalExit.x, lab.finalExit.y, 0.75, GREEN, now, true);
   }
 
   _drawExit(x, y, a, color, now, open) {

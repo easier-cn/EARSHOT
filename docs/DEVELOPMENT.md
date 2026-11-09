@@ -1,6 +1,6 @@
 # HUSH 开发交接文档
 
-> 最后更新：v0.8.11（2026-11-09）
+> 最后更新：v0.8.12（2026-11-09）
 
 ## 交接约定（每次改动都必须遵守）
 
@@ -16,7 +16,7 @@
 
 现在的完整形态是**肉鸽式地图探索**：
 
-- 主流程：`房间 → 迷宫 → ……` 共 21 张地图，目前建成 3 张（房间 / 迷宫 / 移动迷宫）
+- 主流程：`房间 → 迷宫 → ……` 共 21 张地图，目前建成 4 张（房间 / 迷宫 / 移动迷宫 / 实验室）
 - 每张图有钥匙、出口、护符/道具、被动型猎手（听见才动）
 - 护符 10 种（含 3 级升级）、道具 8 种、6 格背包 + 4 快捷键 + 4 护符槽 + 2 格工作台
 - 另有"五层肉鸽"旧模式（`startRun`）与编辑器模式
@@ -70,9 +70,10 @@ ni/
 │  ├─ pathfind.js        # A*（8 向、禁止切角）+ 视线检测
 │  ├─ levelgen.js        # 旧版"密室"关卡
 │  ├─ rooms.js           # 五层肉鸽的房间图生成（走廊优先）
-│  ├─ worldgen.js        # 地图模式：buildRoomMap / buildMazeMap / buildMovingMap
+│  ├─ worldgen.js        # 地图模式：buildRoomMap / buildMazeMap / buildMovingMap / buildLabMap
 │  ├─ maps.js            # 21 张地图的节点表与顺序
-│  ├─ entities.js        # Player / Hunter(4 种) / Skitter
+│  ├─ entities.js        # Player / Hunter(5 种) / Skitter
+│  ├─ lab.js             # 实验室专属：LabBrute(ii 型) / LabStalker(iii 型)
 │  ├─ loot.js            # CHARMS / ITEMS / Inventory（背包与合成）
 │  ├─ desc.js            # 护符与道具的文言文案、SVG 纹样
 │  ├─ render.js          # 全部绘制：射线、接触点、实体、UI 世界层
@@ -83,7 +84,7 @@ ni/
 └─ tools/                # 全部是 Node 脚本，见第 6 节
 ```
 
-`src/` 里模块之间的依赖是单向的：`util → pathfind → levelgen/rooms/worldgen → maps → entities → loot/desc → audio → chambers → editor → ui → render → game → main`。`tools/build.mjs` 的 `MODULES` 数组就是这个顺序，**新增文件必须同时加进去**。
+`src/` 里模块之间的依赖是单向的：`util → pathfind → levelgen/rooms/worldgen → maps → entities → lab → loot/desc → audio → chambers → editor → ui → render → game → main`。`tools/build.mjs` 的 `MODULES` 数组就是这个顺序，**新增文件必须同时加进去**。
 
 ---
 
@@ -177,7 +178,7 @@ ni/
 |---|---|---|
 | 构建 | `node tools/build.mjs` | 把 `src/` 里全部模块内联成单文件 |
 | 传送门调参 | `python tools/serve.py 8080` 后打开 `/tools/portal-tune.html` | 拖滑块实时预览；保存写 `tools/portal-tune.saved.json`，再抄进 `src/portal-config.js` |
-| 单测 | `npm test` | 79 项：连通性、AI、背包、地图生成、迷宫道具分布、投掷瞄准、六项道具效果、交互提示、移动迷宫、首次引导 |
+| 单测 | `npm test` | 82 项：连通性、AI、背包、地图生成、迷宫道具分布、投掷瞄准、六项道具效果、交互提示、移动迷宫、首次引导、设置/改键/标签、实验室生成/门禁/消毒间 |
 | 端到端 | `node tools/playtest.mjs` | CDP 真实按键：开局→移动→投掷→通关→编辑器 |
 | 单表达式 | `node tools/probe.mjs "<js>"` | 在真实页面执行一段代码并回值（最常用） |
 | 真实时间截图 | `node tools/live.mjs "<js>" out.png 800` | 注入场景、等真实毫秒、截图（抓"冻结时间看不出来"的渲染问题） |
@@ -190,7 +191,7 @@ ni/
 
 验证约定：
 
-1. 逻辑改动 → `npm test` 必须 79/79。
+1. 逻辑改动 → `npm test` 必须 82/82。
 2. 交互改动 → `node tools/playtest.mjs` 必须 `errors: []`。
 3. 视觉改动 → 至少一张 `shots/*.png` 截图，自己看一眼再提交。
 4. 改了 `dist` 相关 → 用 `file://` 再跑一次 playtest。
@@ -241,6 +242,23 @@ ni/
 - 猎手在移动迷宫未警戒速度 64（玩家 92 的 0.7×），警戒 184（2×）；`alertT > 0` 时 `_lurk` 不再闲逛，`_footsteps` 间隔 34、射线 9 条（平时 58 / 22 条）。`hear()` 和诱饵触碰都要续 `alertT`。
 - `now` 只在 `frame()` 里推进。用 `game.update(dt)` 直接快进的探针不会让 `flipRings` 过期，这是探针现象，不是正式游玩的泄漏。
 
+### 实验室
+
+- 实验室是隐藏图：`MAPS.lab.kind === 'lab'`，`BUILT_MAPS` 里有 `lab`，但 `openMapSelect()` 会过滤掉它；正常入口只有移动迷宫 `b2` 坍塌后的八道门（`collapseB2()` 把门指向 `lab`）。调试模式（`debugMode`）仍可直接选。
+- `buildLabMap(seed)` 使用 `LAB = {W:118,H:155,ZONE_Y:[3,55,107]}`。三个区域蛇形排列（左→右、右→左、左→右），每个区域主路 5 或 7 间，中段房间向下长出 2 或 3 间分支，末间固定 8×12 门禁卡房；区域终点房底墙开 2 格门，竖井 + 下一区上方 2 格高走廊进入下一区起点房；区 2 门后是 9×8 终室，`lab.finalExit` 按 F 通关。主路尺寸故意拉开：5 间区 13–19 宽、10–16 高，7 间区 10–14 宽、8–14 高，避免所有房间一样大。
+- 房间内还有 1–2 处**不贴外墙**的短墙/立柱（`labInnerWalls()`）：优先放横行/竖行 1–2 格，避开房间中心、门洞方向、卡/皿/出生点/终点周围 2 格；每放一处就用 `labRoomConnected()` 检查房间内地板仍全部连通，断开则回滚。它们不碰外墙，所以不会堵死门洞；不要改成贴墙长条。
+- 网格值：`0` 地板、`1` 墙、`3` 门禁门、`4` 培养皿。`3`/`4` 对 `isSolid()` 都算实心；开门/碎皿时把对应格写回 `0`。门是**区域单向门**，不回到上一区。
+- 实验室生成返回的 `size` 必须是**像素** `{w: w*TILE, h: h*TILE}`，不能返回格数；`render.viewCenter()` 用它夹相机边界，返回格数会把相机锁在左上角，主角直接画出屏幕。
+- `lab.rooms` 有像素无关的 `cx/cy`（格），但 `lab.deconRooms` 里存的是原始房对象，只有 `x/y/w/h`；对消毒间取中心要用 `(x+w/2)*tile`。实验室房间 `kind` 有 `start` / `room` / `branch` / `card` / `final`。
+- 消毒间：第二、三区起点房外框固定 7×7（内径正好 5×5）、无内饰、无培养皿/毒雾，`room.decon = true`；与下一间房的走廊开在 `rowY+2..3`，否则门洞会切到内墙。玩家进入只清眩晕、给 3 秒雾免疫；怪物靠 `game.deconAt(x,y)` 每帧回退旧位置，永远进不来。
+- 培养皿约 1/10 房间，放在房间内侧独立 3 格凸起里，`cells` 存三格；`tryBreakDishAt()` 由 ii 型冲撞/投掷物触发，碎后生成 24 条 `{kind:'dish'}` 墨绿射线——玩家被碰眩晕 2 秒，敌人被碰 `boostT=2`。皿里那三条墨绿线不是静态装饰：`game.dishTrails` 是真实的粒子头+拖尾，在中央那一格里反弹（同移动迷宫核心），碎了就清空。
+- 毒雾占房间地板约 1/5，存 `lab.fog = Uint8Array(w*h)`；`fogAt()` 读格。雾中玩家乘 0.8、怪物乘 1.5，射线渲染成更亮的墨绿、线宽 +0.9、透明度 ×1.85，碰撞性质不变；消毒间和 3 秒免疫期不受影响。**毒雾本身不绘制**，玩家只能靠声线变绿判断。
+- 实验室的可见性规则和其他图一致：除了道具（门禁卡/掉落物）和传送门（终室出口），猎手、实验体、毒雾、门缝、消毒间边框都不直接绘制。猎手/实验体碰撞箱只在 `~` 的 `debugMode` 里画；不要给它们加常驻轮廓。
+- 门禁卡每区 1 张，卡房中心，颜色蓝/紫/冷白；未取时每 4 秒发无 tag 提示环，**取卡后提示环停止**（卡已经拿到，不再当路标）。卡房守卫 `guardCard` 未取卡时 `locked`，不离开房间也不听房外声音；取卡后解锁，玩家不潜行时每 1.6 秒朝玩家（iii 型朝 `wallNear(player)`）寻路，潜行则清路径随机游荡。
+- 实验体 ii/iii 的高频短声线统一为 10 条、相邻 36°（`spawnRays({count:10,even:true})`）；`even` 关闭随机角抖动，保证正好 36°。长声线（iii 型尖啸 40 条、培养皿碎裂 24 条、卡脉冲 14 条）不受此限制。iii 型到达墙根后先进入 `windup` 2 秒，每 0.1 秒发一组 10×36° 短声线，再转 `hunt`。
+- 实验体 i 型是 `Hunter`（`speed 83 / alertSpeed 110`，即玩家 0.9× / 1.2×）；ii 型 `LabBrute` 游荡 0.5×（每 0.55 秒一步脚步短声线，仅移动时发）、蓄力 1 秒、冲撞 5.5× 持续 6 秒并反弹；iii 型 `LabStalker` 贴墙 0.5×、听声后沿“墙根活动带”BFS 到离声源最近的可达格（带外视为墙）、以 2.5× 走过去、蓄力 2 秒、尖啸后 3.5× 扑向声源、停 2 秒再沿墙根退回。活动带取 2 格宽：身体有半径，严格 1 格带在 90° 拐角会断成对角两截，走不过去。后两者只在 `level.labEnemies`，不混进 `level.monsters`。
+- 测试在 `tests/worldgen.test.js`：多 seed 检查 3 区/3 卡/3 门、房间与皿数量、房间尺寸上界、室内短墙存在、门临时置 0 后全连通、终室可达、同 seed 确定性，以及两个 7×7 消毒间（内径 5×5）无皿无雾。
+
 ### 射线与实体
 
 - 脚步/声呐射线如果从实体中心发出，第一步就会命中自己，全部染成"命中红"并原地反弹 → 表现成"只有一坨红点"。
@@ -273,11 +291,15 @@ ni/
 - 标题只认空格 / 回车：`onAnyKey` 的 keyup 分支没有 event，必须判空。开局后 `beginTutorial()` 会从 `input.pressed` 删掉 Space/Enter，防止开局那一下立刻放声呐。
 - 投掷引导跨背包与游戏两层 UI：绑定发生在 `ui.dropDragged()`（回调 `game.onHotkeyBound(obj)`），提示必须等 `toggleInventory` 关闭时由 `game.onInventoryClosed()` 发出——背包打开时 `.guide` 是 `visibility:hidden`，拖完就弹会被盖住。
 - 声线命中点**不要画点**：`contacts` 曾把每次撞墙画成彩色圆点、撞猎手再加红点红圈，反弹一多满屏噪点。已整组删除；命中信息只靠声线变色 + 延长（`r.tint` / `r.hot` / `r.life`）表达。声线底色统一用 `RAY_RGB`（当前 `'150, 198, 192'`），别再写近白色。
+- 输入层现在是**动作绑定**（`src/settings.js` 的 `ACTIONS`）：逻辑只写 `consume('ping')`/`down('sneak')`，不要再认 `Space`/`Shift` 这类物理键；所有给玩家看的提示用 `game.keyName(action)`，手柄模式会自动显示按钮名。
+- 设置面板的改键捕获必须在 `window` 的 capture 阶段 `stopImmediatePropagation()`，否则 Esc 会先被全局键当成"关闭面板"；手柄按钮没有 keydown，只能在 listening 时用 90ms 轮询 `getGamepads()` 做边沿检测。
+- 面板打开时状态仍是 `title`/`paused`，所以 `onAnyKey` 和手柄开局分支都要额外判 `!ui.settingsOpen && !ui.listen`，不然按空格会隔着面板开局。
 
 ### 启动与缓存（2026-11 新增，**这组坑最坑人**）
 
 - 浏览器会缓存**文档本身**：旧缓存页里没有 `no-store`，普通打开根本不发请求，只有 Ctrl+F5 才更新 → 表现为“第一次打开没自检动画、还有老 bug，硬刷新就正常”。
   → `play.ps1` 现在打开 `…/?launch=<时间戳>`；`index.html` 另有 3.2 秒兜底自动重载。
+- 首次进入无声的真正原因：`unlock()` 只在标题键盘开局 / `startFloor` 里调用，点播放按钮走 `startBest()` 不会创建 `AudioContext`。现在构造器挂了一次性 `pointerdown/keydown` 唤醒，`startBest()` 也主动 `unlock()`；新入口不要再假设"用户先按了空格"。
 - 模块也会被缓存：`python -m http.server` 不禁止缓存 → 必须用 `tools/serve.py`（全部 `no-store`）。
 - 单线程 `TCPServer` 在浏览器并发加载十几个模块时会拒绝连接（白屏）→ 已改 `ThreadingTCPServer`。
 - 快捷键格只是**指向背包堆叠的引用**：拖上去时如果把整堆搬出背包，第一次按键就会判定“空”并清空引用，整堆丢失。
@@ -292,9 +314,11 @@ ni/
 
 ## 8. 当前进度与下一步
 
-### 已完成（截至 v0.8.11）
+### 已完成（截至 v0.8.12）
 
-- 三张地图：房间（BSP 多房间 + 内饰 + 钥匙/出口/三扇门）、迷宫（递归回溯 + 口袋）、移动迷宫（3×3×2 块、每 20 秒抽 5 块替换为另一层布局；玩家所在块被抽中则换块，脚下网格不改写；4/6/8 出口）
+- 四张地图：房间（BSP 多房间 + 内饰 + 钥匙/出口/三扇门）、迷宫（递归回溯 + 口袋）、移动迷宫（3×3×2 块、每 20 秒抽 5 块替换为另一层布局；玩家所在块被抽中则换块，脚下网格不改写；4/6/8 出口）、实验室（隐藏图，三区蛇形、门禁卡与单向门、培养皿、毒雾、5×5 内径消毒间、三种实验体）
+- v0.8.12 实验室：移动迷宫 b2 八门进入；主路 5/7 间 + 中段向下 2/3 间分支 + 8×12 卡房；iii 型只贴外墙刷新；卡房守卫取卡后自动追击、玩家潜行则失去目标；实验室不出现在标题选图里
+- v0.8.12 设置与手柄：音量/声线亮度滑杆、键鼠/手柄切换、15 项动作自由绑定（点一行再按键或手柄按钮，冲突交换，Esc 取消，localStorage 保存）；输入层改为动作绑定；首次点击或按键即创建音频上下文，修复初次进入无声
 - 无字 UI、护符/道具/背包/工作台、投掷与瞄准、区域名、弹幕、引导
 - 地图选择窗、调试冻结/选图、单文件构建修复
 - 消耗品/快捷键契约（投掷=绑定+左键，使用=按键立即生效）、时间逆流快照、死亡重开清空、图腾/复活原地
@@ -315,7 +339,7 @@ ni/
 ### 待做（按优先级）
 
 1. **机械地牢**：左右两半、牢门钥匙、紫色反光门、猎犬/死徒/镇守者（子弹可反弹三次）。
-2. **地图连接**：`enterMapExit` 已支持 `to/require/color`；已有 room→maze（单向）与迷宫右下角台阶旁 → 移动迷宫的门。传送门一律单向，不再做回程门；移动迷宫仍可从地图选择/`?map=moving` 进入。补完 21 张图的图结构后，把 `BUILT_MAPS` 逐个放开。
+2. **地图连接**：`enterMapExit` 已支持 `to/require/color`；已有 room→maze（单向）、迷宫右下角台阶旁 → 移动迷宫、移动迷宫 b2 → 实验室（八道门，需先打碎 b2 核心）。传送门一律单向，不再做回程门；移动迷宫仍可从地图选择或 `?map=moving` 进入，实验室可用 `?map=lab`（地图选择里只有调试模式显示）。补完 21 张图的图结构后，把 `BUILT_MAPS` 逐个放开。
 3. **城堡钥匙**：第一个击杀掉落（字段已留 `castleKey`，掉落逻辑未接）。
 4. **吸收门**：草原门应吸收声波不再反弹（`absorb` 集合已生成，`updateRays` 未消费）。
 5. **科技树**（用户已给格式：缩进父子、`名称 | 前置 | 价格 | 效果`；需先定"局外永久/局内"与货币量级）。
@@ -336,7 +360,7 @@ ni/
 
 - 语义化版本 `v0.x.y`，**每个可见改动都打 tag**，并在 `CHANGELOG.md` 写"改了什么 + 为什么"。
 - 提交信息用 `fix:` / `feat:` / `docs:` / `perf:` 前缀，一句话说清根因（例：`fix: rewind revived into a stale floor`）。
-- 提交前检查：`npm test` 79/79、`playtest` 无异常、`dist` 已重建（`node tools/build.mjs`）。
+- 提交前检查：`npm test` 82/82、`playtest` 无异常、`dist` 已重建（`node tools/build.mjs`）。
 - 截图不进仓库（`.gitignore` 忽略 `shots*/`），README 用的图放 `docs/img/`。
 
 ---
@@ -345,7 +369,7 @@ ni/
 
 ```bash
 cd C:\Users\浩\Desktop\ni
-npm test                       # 79 项应全绿
+npm test                       # 82 项应全绿
 node tools/build.mjs           # 重建 dist
 play.cmd                       # 自动选端口、不缓存、带自检
 ```
@@ -356,6 +380,7 @@ play.cmd                       # 自动选端口、不缓存、带自检
 http://127.0.0.1:8080/?map=maze&seed=777&static=1
 http://127.0.0.1:8080/?map=room&seed=1234&static=1
 http://127.0.0.1:8080/?map=moving&seed=1234&static=1
+http://127.0.0.1:8080/?map=lab&seed=42&static=1
 ```
 
 想在控制台里改状态：

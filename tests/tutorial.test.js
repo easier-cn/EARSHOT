@@ -40,7 +40,7 @@ test('loot tutorial names charms and usable items once', () => {
   const charm = { kind: 'charm', id: 'sleep' };
   g.loot = [charm];
   g.takeLoot(charm);
-  assert.equal(g.shown.at(-1), '你捡到了一个护符，摁下tab以装配');
+  assert.equal(g.shown.at(-1), '你捡到了一个护符，摁下Tab以装配');
 
   const charm2 = { kind: 'charm', id: 'counter' };
   g.loot = [charm2];
@@ -50,7 +50,7 @@ test('loot tutorial names charms and usable items once', () => {
   const vitamin = { kind: 'item', id: 'vitamin' };
   g.loot = [vitamin];
   g.takeLoot(vitamin);
-  assert.equal(g.shown.at(-1), '你捡到了一个道具，摁下tab以将其绑定在快捷键上');
+  assert.equal(g.shown.at(-1), '你捡到了一个道具，摁下Tab以将其绑定在快捷键上');
 
   const pebbles = { kind: 'item', id: 'pebbles' };
   g.loot = [pebbles];
@@ -64,7 +64,7 @@ test('the first scare explains sneaking, then that hunters listen', (t) => {
   const hunter = { state: 'idle', x: 100, y: 0, hear() { this.state = 'investigate'; } };
 
   g.alertHunter(hunter, 100, 0, 0);
-  assert.equal(g.shown.at(-1), '你惊扰了一只猎手，按下shift以潜行');
+  assert.equal(g.shown.at(-1), '你惊扰了一只猎手，按下Shift以潜行');
   assert.ok(g.guideTimers.has('hunterSound'), 'the second line waits its turn');
 
   t.mock.timers.tick(3600);

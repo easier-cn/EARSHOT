@@ -63,6 +63,15 @@ export class AudioEngine {
     return this.muted;
   }
 
+  /** Live volume changes, also from the settings panel. 0..1. */
+  setVolume(v) {
+    this.volume = Math.min(1, Math.max(0, Number(v) || 0));
+    if (this.master && !this.muted) {
+      this.master.gain.cancelScheduledValues(this.ctx.currentTime);
+      this.master.gain.setTargetAtTime(this.volume, this.ctx.currentTime, 0.05);
+    }
+  }
+
   _impulse(seconds, decay) {
     const rate = this.ctx.sampleRate;
     const len = Math.floor(rate * seconds);
@@ -350,6 +359,19 @@ export class AudioEngine {
     for (const [f, i] of [[2400, 0], [3100, 0.045], [4200, 0.09]]) {
       this.tone({ freq: f, freqEnd: f * 0.62, type: 'triangle', dur: 0.32, gain: 0.03, send: 0.6, delay: i });
     }
+  }
+
+  /** The silent hunter finds a wall and screams down it. */
+  screech(pan = 0, loud = 1) {
+    this.tone({ freq: 3200, freqEnd: 1400, type: 'sawtooth', dur: 0.55, gain: 0.05 * loud, pan, send: 1.2 });
+    this.tone({ freq: 4700, freqEnd: 2200, type: 'square', dur: 0.35, gain: 0.025 * loud, pan, send: 1.1 });
+    this.noise({ dur: 0.4, gain: 0.06 * loud, type: 'highpass', freq: 1800, pan, send: 1.0 });
+  }
+
+  /** A brute winding up before the six-second charge. */
+  bruteCharge(pan = 0, loud = 1) {
+    this.tone({ freq: 70, freqEnd: 120, type: 'sawtooth', dur: 0.9, gain: 0.09 * loud, pan, send: 0.6 });
+    this.noise({ dur: 0.8, gain: 0.04 * loud, type: 'lowpass', freq: 380, pan, send: 0.5 });
   }
 
   /** b2 breaks: the whole structure drops a floor. */

@@ -250,9 +250,14 @@ export class Hunter {
       }
     }
     const alert = (this.alertT || 0) > 0;
-    const speed = game.level && game.level.moving
+    let speed = game.level && game.level.moving
       ? (alert ? 184 : 64)
-      : (this.speedCap || (game.hunterSpeed ? game.hunterSpeed() : 126));
+      : (alert && this.alertSpeed ? this.alertSpeed : (this.speedCap || (game.hunterSpeed ? game.hunterSpeed() : 126)));
+    if (this.boostT > 0) {
+      this.boostT = Math.max(0, this.boostT - dt);
+      speed *= 2;
+    }
+    if (game.fogAt && game.fogAt(this.x, this.y)) speed *= 1.5;
     if (this.pending) {
       this.pending.t -= dt;
       if (this.pending.t <= 0) {

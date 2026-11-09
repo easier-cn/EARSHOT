@@ -23,9 +23,15 @@ try { sessionStorage.removeItem('hushReload'); } catch {}
 runSelfCheck(game);
 
 // Chrome can suspend/interrupt the audio context after a reload or device change.
+// If the game was entered with a click, the context may not exist yet: build it
+// on this first real gesture instead of waiting for a hard refresh.
 const resumeAudio = () => {
   const a = game.audio;
-  if (!a || !a.ready || !a.ctx) return;
+  if (!a) return;
+  if (!a.ready) {
+    a.unlock();
+    return;
+  }
   if (a.ctx.state === 'suspended' || a.ctx.state === 'interrupted') a.ctx.resume();
 };
 window.addEventListener('pointerdown', resumeAudio, true);

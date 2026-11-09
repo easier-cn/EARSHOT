@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildRoomMap, buildMazeMap } from '../src/worldgen.js';
+import { buildRoomMap, buildMazeMap, buildLabMap } from '../src/worldgen.js';
 
 function reachableAll(level) {
   const W = level.w;
@@ -129,4 +129,87 @@ test('maze map: 8-10 loot spots, spread by depth, some mid-corridor', () => {
 
 test('maze map: loot is deterministic for one seed', () => {
   assert.deepEqual(buildMazeMap(31).loot, buildMazeMap(31).loot);
+});
+
+
+test('lab map: three zones, cards, gates, fog and dishes', () => {
+  for (let seed = 1; seed <= 12; seed++) {
+    const level = buildLabMap(seed);
+    const lab = level.lab;
+    assert.equal(lab.zones.length, 3, `seed ${seed} zones`);
+    assert.equal(level.size.w, level.w * level.tile, `seed ${seed} size w`);
+    assert.equal(level.size.h, level.h * level.tile, `seed ${seed} size h`);
+    assert.equal(lab.cards.length, 3, `seed ${seed} cards`);
+    assert.equal(lab.gates.length, 3, `seed ${seed} gates`);
+    assert.ok(level.rooms.length >= 20, `seed ${seed} rooms`);
+    assert.ok(lab.dishes.length >= 2, `seed ${seed} dishes`);
+    assert.ok(lab.dishes.every((d) => d.cells.length === 3 && d.cells.every((i) => level.grid[i] === 4)));
+    assert.equal(lab.fog.some((v) => v === 1), true, `seed ${seed} no fog`);
+    assert.ok(Math.max(...level.rooms.map((r) => r.w)) >= 13, `seed ${seed} rooms too uniform`);
+    let innerWalls = 0;
+    for (const r of level.rooms) {
+      for (let y = r.y + 3; y <= r.y + r.h - 4; y++) {
+        for (let x = r.x + 3; x <= r.x + r.w - 4; x++) {
+          if (level.grid[y * level.w + x] === 1) innerWalls++;
+        }
+      }
+    }
+    assert.ok(innerWalls > 0, `seed ${seed} no interior walls`);
+    assert.equal(level.monsters.length, 3, `seed ${seed} type i count`);
+    assert.equal(level.labEnemies.length, 12, `seed ${seed} lab enemies`);
+    assert.equal(level.grid[level.spawnTile.y * level.w + level.spawnTile.x], 0);
+    for (const c of lab.cards) assert.equal(level.grid[c.ty * level.w + c.tx], 0);
+    const f = lab.finalExit;
+    assert.equal(level.grid[f.ty * level.w + f.tx], 0);
+    assert.equal(lab.deconRooms.length, 2, `seed ${seed} airlocks`);
+    for (const r of lab.deconRooms) {
+      assert.equal(r.kind, 'start', `seed ${seed} airlock kind`);
+      assert.equal(r.w, 7, `seed ${seed} airlock width`);
+      assert.equal(r.h, 7, `seed ${seed} airlock height`);
+      // The frame is 7x7 so the walkable inside is the specified 5x5.
+      for (let y = r.y + 1; y < r.y + r.h - 1; y++) {
+        for (let x = r.x + 1; x < r.x + r.w - 1; x++) {
+          const i = y * level.w + x;
+          assert.equal(level.grid[i], 0, `seed ${seed} airlock interior is not floor`);
+          assert.notEqual(level.grid[i], 4, `seed ${seed} airlock has a dish`);
+          assert.equal(lab.fog[i], 0, `seed ${seed} airlock has fog`);
+        }
+      }
+    }
+  }
+});
+
+test('lab map: gate cells are the only thing between spawn and the end', () => {
+  for (const seed of [1, 2, 3, 7, 42, 99, 123]) {
+    const level = buildLabMap(seed);
+    const grid = Uint8Array.from(level.grid);
+    for (const g of level.lab.gates) for (const i of g.cells) grid[i] = 0;
+    const seen = new Uint8Array(level.w * level.h);
+    const start = level.spawnTile.y * level.w + level.spawnTile.x;
+    const q = [start];
+    seen[start] = 1;
+    while (q.length) {
+      const i = q.pop();
+      const x = i % level.w;
+      const y = (i / level.w) | 0;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= level.w || ny >= level.h) continue;
+        const j = ny * level.w + nx;
+        if (grid[j] || seen[j]) continue;
+        seen[j] = 1;
+        q.push(j);
+      }
+    }
+    const fx = level.lab.finalExit.ty * level.w + level.lab.finalExit.tx;
+    assert.ok(seen[fx], `seed ${seed} cannot reach final exit`);
+  }
+});
+
+test('lab map: deterministic for one seed', () => {
+  const a = buildLabMap(4242);
+  const b = buildLabMap(4242);
+  assert.deepEqual(Array.from(a.grid), Array.from(b.grid));
+  assert.equal(a.lab.gates.length, b.lab.gates.length);
 });

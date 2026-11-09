@@ -2,6 +2,7 @@ import { generateLevel, generateWorld, sectorOf, TILE } from './levelgen.js';
 import { lineOfSight, findPath, nearestOpen } from './pathfind.js';
 import { clamp, dist, dist2, echoPan, viewCenter } from './util.js';
 import { Player, Hunter, Skitter, moveCircle, isSolid } from './entities.js';
+import { LabBrute, LabStalker } from './lab.js';
 import { Renderer } from './render.js';
 import { Input } from './input.js';
 import { AudioEngine } from './audio.js';
@@ -13,6 +14,7 @@ import {
   buildRoomMap,
   buildMazeMap,
   buildMovingMap,
+  buildLabMap,
   blockAt,
   MOVING,
   flipMoving,
@@ -25,8 +27,9 @@ import {
   nearestOpenInBlock,
 } from './worldgen.js';
 import { mapNode, MAP_ORDER } from './maps.js';
-import { CHARMS, ITEMS, Inventory, HOTKEY_ORDER } from './loot.js';
+import { CHARMS, ITEMS, Inventory } from './loot.js';
 import { CHARM_TEXT, ITEM_TEXT, charmText } from './desc.js';
+import { ACTIONS, loadSettings, saveSettings, bindKey, bindPad, resetSettings, keyLabel, padLabel, defaultSettings } from './settings.js';
 
 const SAVE_KEY = 'hush.save.v1';
 const FLOORS = 5;
@@ -81,7 +84,10 @@ export class Game {
   constructor(canvas, uiRoot) {
     this.canvas = canvas;
     this.audio = new AudioEngine();
+    this.settings = loadSettings();
+    this.audio.volume = this.settings.volume;
     this.input = new Input(window, canvas);
+    this.input.settings = this.settings;
     this.renderer = new Renderer(canvas);
     this.ui = new UI(uiRoot, this);
     this.state = 'title';
@@ -93,6 +99,15 @@ export class Game {
     this.level = null;
     this.player = null;
     this.hunters = [];
+    this.lab = null;
+    this.labEnemies = [];
+    this.mapCards = [];
+    this.dishTrails = [];
+    this.hasCard = new Set();
+    this.stunT = 0;
+    this.fogImmuneT = 0;
+    this.inFog = false;
+    this.deconSeen = new Set();
     this.skitters = [];
     this.shards = [];
     this.particles = [];
@@ -167,13 +182,19 @@ export class Game {
     this.loadDemo();
 
     this.input.onAnyKey = (e) => {
-      if (this.state !== 'title') return;
+      if (this.state !== 'title' || this.ui.settingsOpen || this.ui.listen) return;
       // Space is the game's one gesture; Enter is the polite alternative.
       if (e && (e.code === 'Space' || e.code === 'Enter')) {
         this.audio.unlock();
         this.startBest();
       }
     };
+    // The first gesture is also the first chance to build the audio graph.
+    // Doing it here (and not only on the start key) means a player who enters
+    // by clicking the play button still hears the game.
+    const wake = () => this.audio.unlock();
+    window.addEventListener('pointerdown', wake, { once: true });
+    window.addEventListener('keydown', wake, { once: true });
     window.addEventListener('resize', () => this.renderer.resize());
     document.addEventListener('visibilitychange', () => {
       if (document.hidden && this.state === 'playing') this.pause();
@@ -306,6 +327,7 @@ export class Game {
   }
 
   startBest() {
+    this.audio.unlock();
     this.resetRunState();
     if (this.startMap('room', (Math.random() * 1e9) | 0)) { this.beginTutorial(); return; }
     if (this.state !== 'title') { this.beginTutorial(); return; }
@@ -449,7 +471,9 @@ export class Game {
       ? buildMazeMap(seed)
       : node.kind === 'moving'
         ? buildMovingMap(seed)
-        : buildRoomMap(seed);
+        : node.kind === 'lab'
+          ? buildLabMap(seed)
+          : buildRoomMap(seed);
     this.mapMode = true;
     this.mapId = node.id;
     this.mapSeed = seed;
@@ -483,12 +507,27 @@ export class Game {
     this.hunters = this.mapNodes.map((m) => {
       const h = new Hunter(m.x * level.tile + level.tile / 2, m.y * level.tile + level.tile / 2, m.type);
       h.speedCap = m.speed || (node.kind === 'maze' ? 76 : node.kind === 'moving' ? 184 : 84);
+      h.alertSpeed = m.alertSpeed || 0;
       h.block = m.block;
       h.layer = m.layer ?? 0;
       h.reserve = !!level.moving && m.layer !== 0;
       h.state = 'idle';
       return h;
     });
+    this.lab = level.lab || null;
+    this.labEnemies = (level.labEnemies || []).map((m) => {
+      const C = m.type === 'lab2' ? LabBrute : LabStalker;
+      const e = new C(m.x, m.y, m.home, { guardCard: m.guardCard ?? -1, locked: !!m.locked });
+      e.tile = level.tile;
+      return e;
+    });
+    this.mapCards = this.lab ? this.lab.cards.map((c) => ({ ...c })) : [];
+    this.dishTrails = this.makeDishTrails(level);
+    this.hasCard = new Set();
+    this.stunT = 0;
+    this.fogImmuneT = 0;
+    this.inFog = false;
+    this.deconSeen = new Set();
     if (level.moving) {
       // Both faces exist in the data, but the guard that rides the room is
       // always the same body. It never blinks out when the room turns over;
@@ -703,6 +742,67 @@ export class Game {
         if (!last || Math.abs(t.x - last.x) + Math.abs(t.y - last.y) >= 2) {
           t.pts.push({ x: t.x, y: t.y });
           if (t.pts.length > 32) t.pts.shift();
+        }
+      }
+    }
+  }
+
+  /** Three real sound particles per culture dish, bouncing inside its sealed
+   *  one-tile 口 exactly like a moving-maze core. */
+  makeDishTrails(level) {
+    const out = [];
+    if (!level || !level.lab) return out;
+    for (let i = 0; i < level.lab.dishes.length; i++) {
+      const d = level.lab.dishes[i];
+      if (d.broken) continue;
+      for (let k = 0; k < 3; k++) {
+        const a = -Math.PI / 2 + (38 * Math.PI) / 180 + (k * Math.PI * 2) / 3;
+        out.push({ dish: i, x: d.x, y: d.y, dx: Math.cos(a), dy: Math.sin(a), pts: [{ x: d.x, y: d.y }] });
+      }
+    }
+    return out;
+  }
+
+  updateDishTrails(dt) {
+    const L = this.level;
+    if (!L || !this.lab) return;
+    const T = L.tile;
+    for (const t of this.dishTrails || []) {
+      const d = this.lab.dishes[t.dish];
+      if (!d || d.broken) {
+        t.pts.length = 0;
+        continue;
+      }
+      const x0 = d.tx * T + 2;
+      const x1 = (d.tx + 1) * T - 2;
+      const y0 = d.ty * T + 2;
+      const y1 = (d.ty + 1) * T - 2;
+      let left = (RAY_SPEED / 3) * dt;
+      while (left > 0) {
+        const step = Math.min(2, left);
+        left -= step;
+        let nx = t.x + t.dx * step;
+        let ny = t.y + t.dy * step;
+        if (nx < x0) {
+          nx = x0 + (x0 - nx);
+          t.dx = Math.abs(t.dx);
+        } else if (nx > x1) {
+          nx = x1 - (nx - x1);
+          t.dx = -Math.abs(t.dx);
+        }
+        if (ny < y0) {
+          ny = y0 + (y0 - ny);
+          t.dy = Math.abs(t.dy);
+        } else if (ny > y1) {
+          ny = y1 - (ny - y1);
+          t.dy = -Math.abs(t.dy);
+        }
+        t.x = clamp(nx, x0, x1);
+        t.y = clamp(ny, y0, y1);
+        const last = t.pts[t.pts.length - 1];
+        if (!last || Math.abs(t.x - last.x) + Math.abs(t.y - last.y) >= 2) {
+          t.pts.push({ x: t.x, y: t.y });
+          if (t.pts.length > 28) t.pts.shift();
         }
       }
     }
@@ -989,6 +1089,51 @@ export class Game {
     return true;
   }
 
+  /** True when the world point sits inside lab poison fog. */
+  fogAt(x, y) {
+    const lab = this.lab;
+    if (!lab || !lab.fog || !this.level) return false;
+    const tx = Math.floor(x / this.level.tile);
+    const ty = Math.floor(y / this.level.tile);
+    if (tx < 0 || ty < 0 || tx >= this.level.w || ty >= this.level.h) return false;
+    return lab.fog[ty * this.level.w + tx] === 1;
+  }
+
+  /** The bare 5x5 airlock room containing this point, if any. */
+  deconAt(x, y) {
+    const lab = this.lab;
+    if (!lab || !this.level) return null;
+    const T = this.level.tile;
+    for (const r of lab.deconRooms) {
+      if (x > r.x * T && x < (r.x + r.w) * T && y > r.y * T && y < (r.y + r.h) * T) return r;
+    }
+    return null;
+  }
+
+  /** Break a culture dish if the point is close enough. Returns true on break. */
+  tryBreakDishAt(x, y, r = 12) {
+    const lab = this.lab;
+    if (!lab) return false;
+    for (const d of lab.dishes) {
+      if (d.broken) continue;
+      if (dist(x, y, d.x, d.y) > r + 16) continue;
+      d.broken = true;
+      for (const i of d.cells || []) this.level.grid[i] = 0;
+      this.audio.glassBreak();
+      this.spawnRays(d.x, d.y, {
+        count: 24,
+        speed: 300,
+        life: 0.9,
+        tint: '130, 240, 150',
+        kind: 'dish',
+      });
+      this.stepEcho(d.x, d.y, '130, 240, 150', { count: 20, speed: 320, life: 0.8, tagged: false });
+      this.ui.feed('培养皿碎了');
+      return true;
+    }
+    return false;
+  }
+
   /** Nearest thing the player can press F on: loot, key, portal or stair. */
   interactAt() {
     const p = this.player;
@@ -1011,6 +1156,11 @@ export class Game {
         }
       }
       for (const e of this.mapExits) take('exit', e, e.x, e.y, 50);
+      if (this.lab) {
+        for (const c of this.mapCards) if (!c.taken) take('card', c, c.x, c.y, 34);
+        for (const g of this.lab.gates) if (!g.open) take('gate', g, g.x, g.y, 56);
+        take('final', this.lab.finalExit, this.lab.finalExit.x, this.lab.finalExit.y, 50);
+      }
     } else if (this.level && this.level.exit) {
       const e = this.level.exit;
       take('stair', e, e.x, e.y, 50);
@@ -1034,13 +1184,27 @@ export class Game {
       const it = near.ref;
       const txt = it.kind === 'charm' ? CHARM_TEXT[it.id] : ITEM_TEXT[it.id];
       title = txt.name;
-      body = `${it.kind === 'charm' ? charmText(it.id, 1) : txt.line}\n\n[ F ] 拾取`;
+      body = `${it.kind === 'charm' ? charmText(it.id, 1) : txt.line}\n\n[ ${this.keyName('interact')} ] 拾取`;
     } else if (near.kind === 'key') {
       title = '地图钥匙';
-      body = '按 [ F ] 拾取。\n取得之后，上锁的门才会回应你。';
+      body = `按 [ ${this.keyName('interact')} ] 拾取。\n取得之后，上锁的门才会回应你。`;
     } else if (near.kind === 'button') {
       title = '楼层开关';
-      body = '按 [ F ] 停下整座迷宫。\\n走遍九间屋子，只有这一颗在发金光。';
+      body = `按 [ ${this.keyName('interact')} ] 停下整座迷宫。\\n走遍九间屋子，只有这一颗在发金光。`;
+    } else if (near.kind === 'card') {
+      const c = near.ref;
+      title = `门禁卡 · 第${['一', '二', '三'][c.zone] || '?'}区`;
+      body = `按 [ ${this.keyName('interact')} ] 拾取。\n取得之后，它每十秒都会发出一圈声线。`;
+    } else if (near.kind === 'gate') {
+      const g = near.ref;
+      const has = this.hasCard.has(g.require);
+      title = '区域闸门';
+      body = has
+        ? `按 [ ${this.keyName('interact')} ] 刷开门禁。`
+        : `需要第${['一', '二', '三'][g.zone] || '?'}区的门禁卡。`;
+    } else if (near.kind === 'final') {
+      title = '实验室出口';
+      body = `按 [ ${this.keyName('interact')} ] 离开实验室。`;
     } else if (near.kind === 'exit') {
       const ex = near.ref;
       const dest = mapNode(ex.to);
@@ -1048,11 +1212,11 @@ export class Game {
       if (!BUILT_MAPS.has(ex.to)) body = '此路尚未开通。';
       else if (ex.require === 'key' && !this.hasKey) body = '需要地图钥匙。';
       else if (ex.require === 'castle' && !this.castleKey) body = '需要城堡钥匙。';
-      else body = `按 [ F ] 前往「${dest.name}」。`;
+      else body = `按 [ ${this.keyName('interact')} ] 前往「${dest.name}」。`;
       if (dest && dest.sub && BUILT_MAPS.has(ex.to)) body += `\n${dest.sub}`;
     } else {
       title = '出口';
-      body = this.exitOpen ? '按 [ F ] 下行。' : `还需 ${this.shards.length} 块碎片。`;
+      body = this.exitOpen ? `按 [ ${this.keyName('interact')} ] 下行。` : `还需 ${this.shards.length} 块碎片。`;
     }
     this.ui.showTip(title, body, sx + 18, sy - 34);
   }
@@ -1074,6 +1238,35 @@ export class Game {
       this.ui.hideTip();
       return this.clearMovingMaze();
     }
+    if (near.kind === 'card') {
+      const c = near.ref;
+      if (c.taken) return false;
+      c.taken = true;
+      this.hasCard.add(c.id);
+      for (const e of this.labEnemies) if (e.guardCard === c.zone) e.locked = false;
+      this.audio.shard();
+      this.flash = 1;
+      this.stepEcho(c.x, c.y, c.color, { count: 30, speed: 360, life: 0.8 });
+      this.ui.feed(`取得第${['一', '二', '三'][c.zone] || '?'}区门禁卡`);
+      this.ui.hideTip();
+      return false;
+    }
+    if (near.kind === 'gate') {
+      const g = near.ref;
+      if (this.hasCard.has(g.require)) {
+        g.open = true;
+        for (const i of g.cells) this.level.grid[i] = 0;
+        this.audio.gateOpen();
+        this.stepEcho(g.x, g.y, g.color, { count: 22, speed: 320, life: 0.7 });
+        this.ui.feed('闸门开了');
+      } else {
+        this.audio.deny();
+        this.ui.toast('deny');
+      }
+      this.ui.hideTip();
+      return false;
+    }
+    if (near.kind === 'final') { this.ui.hideTip(); this.complete(); return true; }
     if (near.kind === 'exit') { this.ui.hideTip(); return this.enterMapExit(near.ref); }
     if (this.exitOpen) { this.complete(); return true; }
     this.audio.deny();
@@ -1090,7 +1283,7 @@ export class Game {
     if (res === 'full' || res === 'max') {
       this.audio.deny();
       this.ui.toast('deny');
-      this.ui.guide('背包已满：按 Tab 打开背包，把物品拖到外面即可丢弃');
+      this.ui.guide(`背包已满：按 ${this.keyName('inventory')} 打开背包，把物品拖到外面即可丢弃`);
       return;
     }
     this.loot.splice(this.loot.indexOf(it), 1);
@@ -1107,9 +1300,9 @@ export class Game {
     this.ui.feed(`拾取 ${label}`);
     // One introduction per kind: charms are socketed, usable items are bound
     // to the hotkey row, throwables are taught when they are first bound.
-    if (it.kind === 'charm') this.maybeGuide('charm', '你捡到了一个护符，摁下tab以装配');
+    if (it.kind === 'charm') this.maybeGuide('charm', `你捡到了一个护符，摁下${this.keyName('inventory')}以装配`);
     else if (ITEMS[it.id].kind !== 'throw') {
-      this.maybeGuide('item', '你捡到了一个道具，摁下tab以将其绑定在快捷键上');
+      this.maybeGuide('item', `你捡到了一个道具，摁下${this.keyName('inventory')}以将其绑定在快捷键上`);
     }
   }
 
@@ -1138,7 +1331,7 @@ export class Game {
     }
     if (!slot) {
       this.audio.deny();
-      this.ui.feed(`${i + 1} 号键是空的`);
+      this.ui.feed(`${this.keyName('hot' + (i + 1))} 是空的`);
       return;
     }
     const def = ITEMS[slot.id];
@@ -1225,7 +1418,8 @@ export class Game {
   }
 
   openMapSelect() {
-    const entries = MAP_ORDER.map((id) => {
+    // The lab is found through the moving maze, not from the title menu.
+    const entries = MAP_ORDER.filter((id) => id !== 'lab' || this.debugMode).map((id) => {
       const node = mapNode(id);
       return { id, name: node.name, sub: node.sub || '', built: BUILT_MAPS.has(id) };
     });
@@ -1363,6 +1557,7 @@ export class Game {
         const ny = t.y + t.dy * 6;
         const tx = Math.floor(nx / TILE);
         const ty = Math.floor(ny / TILE);
+        if (this.tryBreakDishAt(nx, ny, 6)) { hitWall = true; break; }
         const core = this.level.moving ? coreHitAt(this.level, nx, ny, 32) : null;
         if (core) {
           this.breakCore(core);
@@ -1378,6 +1573,12 @@ export class Game {
         if (!t.trail || t.trail.length === 0 || dist2(t.trail[t.trail.length - 1].x, t.trail[t.trail.length - 1].y, nx, ny) > 9) {
           t.trail.push({ x: nx, y: ny });
           if (t.trail.length > 16) t.trail.shift();
+        }
+        for (const e of this.labEnemies || []) {
+          if (dist(t.x, t.y, e.x, e.y) < (e.type === 'lab2' ? 16 : 10)) {
+            hitWall = true;
+            break;
+          }
         }
         for (const h of this.hunters) {
           if (dist(t.x, t.y, h.x, h.y) < 15) {
@@ -1435,6 +1636,9 @@ export class Game {
         if (!def.lure) {
           for (const h of this.hunters) {
             if (dist(t.x, t.y, h.x, h.y) < 620) this.alertHunter(h, t.x, t.y, 0.1);
+          }
+          for (const e of this.labEnemies || []) {
+            if (dist(t.x, t.y, e.x, e.y) < 620) e.hear(t.x, t.y);
           }
         }
         this.audio.noise({ dur: 0.22, gain: 0.06, type: 'bandpass', freq: 900, send: 0.5 });
@@ -1780,6 +1984,26 @@ export class Game {
     return muted;
   }
 
+  /** The label a prompt should print for an action, honouring gamepad mode. */
+  keyName(action) {
+    const b = (this.settings && this.settings.bindings ? this.settings : defaultSettings()).bindings[action];
+    if (!b) return '';
+    const padMode = this.settings && this.settings.device === 'gamepad' && this.input && this.input.padConnected;
+    if (padMode) return padLabel(b.pad[0]);
+    return keyLabel(b.keys[0]);
+  }
+
+  openSettings() {
+    this.ui.openSettings(this.state);
+  }
+
+  /** Persist and apply the settings the panel just edited. */
+  applySettings() {
+    this.input.settings = this.settings;
+    this.audio.setVolume(this.settings.volume);
+    saveSettings(this.settings);
+  }
+
   pause() {
     if (this.state !== 'playing') return;
     this.state = 'paused';
@@ -1834,6 +2058,11 @@ export class Game {
 
     if (!this.frozen) {
       if (this.state !== 'paused') this.now += dt;
+      this.input.poll();
+      if (this.state === 'title' && !this.ui.settingsOpen && this.input.padJustPressed()) {
+        this.audio.unlock();
+        this.startBest();
+      }
       this.handleGlobalKeys();
 
       if (this.state === 'playing') this.update(dt);
@@ -1849,9 +2078,13 @@ export class Game {
   };
 
   handleGlobalKeys() {
-    if (this.input.consume('KeyM')) this.toggleMute();
-    if (this.input.consume('Tab')) this.ui.toggleInventory(this);
-    if (this.input.consume('Backquote')) {
+    if (this.ui.settingsOpen) {
+      if (this.input.consume('pause') || this.input.consumeCode('Enter')) this.ui.closeSettings();
+      return;
+    }
+    if (this.input.consume('mute')) this.toggleMute();
+    if (this.input.consume('inventory')) this.ui.toggleInventory(this);
+    if (this.input.consumeCode('Backquote')) {
       this.debugMode = !this.debugMode;
       this.debugInvincible = this.debugMode;
       if (!this.debugMode) this.debugFreeze = false;
@@ -1859,26 +2092,26 @@ export class Game {
     }
     // Debug digits must win over the hotkey row, or 2 would just use slot 2.
     let debugDigit = false;
-    if (this.debugMode && this.input.consume('Digit2') && !this.ui.mapSel) {
+    if (this.debugMode && this.input.consumeCode('Digit2') && !this.ui.mapSel) {
       debugDigit = true;
       this.openMapSelect();
     }
-    if (this.debugMode && this.input.consume('Digit1')) {
+    if (this.debugMode && this.input.consumeCode('Digit1')) {
       debugDigit = true;
       this.debugFreeze = !this.debugFreeze;
       this.ui.toast(this.debugFreeze ? 'deny' : 'shard');
     }
     if (!debugDigit) {
       for (let i = 0; i < 4; i++) {
-        if (this.input.consume(`Digit${HOTKEY_ORDER[i]}`)) this.useHotkey(i);
+        if (this.input.consume(`hot${i + 1}`)) this.useHotkey(i);
       }
     }
-    if (this.state === 'edit' && this.input.consume('Escape')) this.closeEditor();
-    else if (this.state === 'playing' && this.input.consume('Escape')) this.pause();
-    else if (this.state === 'paused' && this.input.consume('Escape')) this.resume();
-    else if (this.state === 'dead' && this.input.consume('KeyR')) this.restart();
-    else if (this.state === 'playing' && this.input.consume('KeyR')) this.restart();
-    else if (this.state === 'complete' && (this.input.consume('Enter') || this.input.consume('Space'))) {
+    if (this.state === 'edit' && this.input.consume('pause')) this.closeEditor();
+    else if (this.state === 'playing' && this.input.consume('pause')) this.pause();
+    else if (this.state === 'paused' && this.input.consume('pause')) this.resume();
+    else if (this.state === 'dead' && this.input.consume('restart')) this.restart();
+    else if (this.state === 'playing' && this.input.consume('restart')) this.restart();
+    else if (this.state === 'complete' && (this.input.consumeCode('Enter') || this.input.consume('ping'))) {
       this.next();
     }
   }
@@ -1990,7 +2223,7 @@ export class Game {
     }
 
     // Shift is HELD, not toggled: silent and blind while the key is down.
-    const sneaking = this.input.down('ShiftLeft') || this.input.down('ShiftRight');
+    const sneaking = this.input.down('sneak');
     if (sneaking !== this.sneak) {
       this.sneak = sneaking;
       this.audio.click(0.4);
@@ -1999,7 +2232,10 @@ export class Game {
     this.blind = false; // sneaking is silence, not blindness: you still see every line
     const creeping = this.sneak;
     const run = false;
-    const move = this.debugMove || this.input.moveVector();
+    const stunned = this.stunT > 0;
+    if (stunned) this.stunT = Math.max(0, this.stunT - dt);
+    this.fogImmuneT = Math.max(0, this.fogImmuneT - dt);
+    const move = stunned ? { x: 0, y: 0 } : (this.debugMove || this.input.moveVector());
 
     const listen = !this.sneak && (this.debugListen === true || (this.listenT > 0.26 && !p.moving));
     this.listen = listen;
@@ -2010,10 +2246,30 @@ export class Game {
       this.speedMul = 1 + 2;
       if (this.speedT <= 0) this.speedMul = 1;
     }
-    const motion = p.update(dt, move, { run, listen, creep: this.sneak, creepMul, mul: this.speedMul });
+    const inFog = !this.fogImmuneT && this.fogAt(p.x, p.y);
+    this.inFog = inFog;
+    const motion = p.update(dt, move, { run, listen, creep: this.sneak, creepMul, mul: this.speedMul * (inFog ? 0.8 : 1) });
     const resolved = this.resolve(p, motion.x, motion.y);
     p.x = resolved.x;
     p.y = resolved.y;
+
+    // Decontamination rooms scrub the stun and grant a short fog immunity.
+    if (this.lab) {
+      const tile = this.level.tile;
+      for (const room of this.lab.deconRooms) {
+        const inside = p.x > room.x * tile && p.x < (room.x + room.w) * tile
+          && p.y > room.y * tile && p.y < (room.y + room.h) * tile;
+        if (inside) {
+          this.fogImmuneT = Math.max(this.fogImmuneT, 3);
+          this.stunT = 0;
+          if (!room._wasInside) {
+            this.stepEcho(p.x, p.y, '235, 245, 255', { count: 26, speed: 300, life: 0.9, tagged: false });
+            this.ui.feed('消毒间：声呐被洗净了');
+          }
+        }
+        room._wasInside = inside;
+      }
+    }
     const k = Math.min(1, dt * 7);
     this.camX += (p.x - this.camX) * k;
     this.camY += (p.y - this.camY) * k;
@@ -2051,11 +2307,11 @@ export class Game {
     // pinging
     // The left button only throws what a hotkey has bound to the cursor;
     // without a bound throwable it is just the sonar.
-    if (this.input.consume('Mouse0')) {
+    if (!stunned && this.input.consumeCode('Mouse0')) {
       if (this.activeItem) this.throwItem(this.activeItem);
       else this.tryPing();
     }
-    if (this.input.consume('Space') || this.input.consume('KeyJ')) this.firePing();
+    if (!stunned && this.input.consume('ping')) this.firePing();
 
 
     const aim = this.aimPoint();
@@ -2142,12 +2398,22 @@ export class Game {
       if (!it.kind && dist2(p.x, p.y, it.x, it.y) < LOOT_REVEAL * LOOT_REVEAL) this.revealLoot(it);
     }
 
+    // 门禁卡 pulse: only the card still in its room calls out; once taken,
+    // the beacon goes quiet.
+    for (const c of this.mapCards || []) {
+      if (c.taken) continue;
+      c.pulseT = (c.pulseT ?? 1) - dt;
+      if (c.pulseT > 0) continue;
+      c.pulseT = 4;
+      this.spawnRays(c.x, c.y, { count: 14, speed: 260, life: 0.7, tint: c.color, tag: null, kind: 'card' });
+    }
+
     // Everything you can touch answers to F: walk close, read the prompt, press it.
     const near = this.interactAt();
     this.nearLoot = near && near.kind === 'loot' ? near.ref : null;
     if (near) this.showInteractTip(near);
     else this.ui.hideTip();
-    if (near && this.input.consume('KeyF')) {
+    if (near && !stunned && this.input.consume('interact')) {
       if (this.doInteract(near)) return;
     }
     this.alertCd -= dt;
@@ -2171,11 +2437,48 @@ export class Game {
     // hunters
     let nearest = Infinity;
     for (const h of this.hunters) {
+      const ox = h.x;
+      const oy = h.y;
       h.update(dt, this);
+      if (this.deconAt(h.x, h.y) && !this.deconAt(ox, oy)) {
+        // The airlock scrubs everything that hunts. Bounce the body back to
+        // the threshold and drop its trail so it cannot camp the doorway.
+        h.x = ox;
+        h.y = oy;
+        h.path = [];
+        h.pending = null;
+        h.alertT = 0;
+        h.state = 'idle';
+      }
       const d = dist(p.x, p.y, h.x, h.y);
       if (d < nearest) nearest = d;
       if (d < p.r + h.r - 1) {
         this.hurt(h);
+        return;
+      }
+    }
+
+    for (const e of this.labEnemies || []) {
+      const ox = e.x;
+      const oy = e.y;
+      e.update(dt, this);
+      if (this.deconAt(e.x, e.y) && !this.deconAt(ox, oy)) {
+        e.x = ox;
+        e.y = oy;
+        e.path = [];
+        e.target = null;
+        e.alertT = 0;
+        e.state = 'wander';
+      }
+      const d = dist(p.x, p.y, e.x, e.y);
+      if (d < nearest) nearest = d;
+      if (d < p.r + e.r - 1) {
+        if (this.starT > 0) {
+          this.labEnemies.splice(this.labEnemies.indexOf(e), 1);
+          this.stepEcho(e.x, e.y, '255, 120, 70', { count: 20, speed: 320, life: 0.6, tagged: false });
+          continue;
+        }
+        this.hurt(e);
         return;
       }
     }
@@ -2191,7 +2494,7 @@ export class Game {
       }
     }
 
-    this.danger = this.hunters.length
+    this.danger = (this.hunters.length || (this.labEnemies && this.labEnemies.length))
       ? clamp(1 - (nearest - 55) / 300, 0, 1)
       : 0;
     if (this.danger > 0.4) this.danger = Math.min(1, this.danger + 0.1);
@@ -2215,6 +2518,7 @@ export class Game {
     this.updateThrows(dt);
     if (this.invulnT > 0) this.invulnT = Math.max(0, this.invulnT - dt);
     this.audio.update(dt, { danger: this.danger });
+    this.updateDishTrails(dt);
     this.updateRays(dt);
     this.updateParticles(dt);
     this.flipFreeze = Math.max(0, (this.flipFreeze || 0) - dt);
@@ -2297,7 +2601,7 @@ export class Game {
 
   alertHunter(h, x, y, delay) {
     if (!this.guides?.hunter) {
-      this.maybeGuide('hunter', '你惊扰了一只猎手，按下shift以潜行');
+      this.maybeGuide('hunter', `你惊扰了一只猎手，按下${this.keyName('sneak')}以潜行`);
       this.laterGuide('hunterSound', '猎手可以听到你发出来的声音', 3600);
     }
     const tracking = h.state === 'investigate';
@@ -2342,9 +2646,9 @@ export class Game {
     if (this.state !== 'playing' || this.tutorialStarted) return;
     this.tutorialStarted = true;
     // The key that started the game must not also be spent on a ping.
-    this.input.pressed.delete('Space');
+    this.input.clearAction('ping');
     this.input.pressed.delete('Enter');
-    this.ui.guide('空格键可以发出声呐，探索更大的范围');
+    this.ui.guide(`${this.keyName('ping')}可以发出声呐，探索更大的范围`);
   }
 
   /** A follow-up hint with a beat in between, skipped if the moment passed. */
@@ -2393,6 +2697,17 @@ export class Game {
    *  Newer tags overwrite older ones; an equal tag changes nothing. */
   onRayTouch(e, tag) {
     if (!e || !tag) return;
+    if (tag.kind === 'dish') {
+      // The shattered dish's ring is a stimulant to everything that hunts.
+      if (e instanceof Hunter || e instanceof LabBrute || e instanceof LabStalker) e.boostT = 2;
+      return;
+    }
+    if (e instanceof LabBrute || e instanceof LabStalker) {
+      if (tag.t <= (e.lastTag ?? -1)) return;
+      e.lastTag = tag.t;
+      e.hear(tag.x, tag.y);
+      return;
+    }
     if (e instanceof Hunter) {
       if (tag.kind === 'lure') {
         // The corpse's call owns the body until it physically arrives, and a
@@ -2436,6 +2751,10 @@ export class Game {
     for (const sk of this.skitters) {
       if (dist(x, y, sk.x, sk.y) < 12) return { e: sk, kind: 'skitter', tint: '255,58,58', hot: true };
     }
+    for (const e of this.labEnemies || []) {
+      const rr = e.type === 'lab2' ? 16 : 10;
+      if (dist(x, y, e.x, e.y) < rr) return { e, kind: 'lab', tint: '255,120,70', hot: true };
+    }
     return null;
   }
 
@@ -2451,10 +2770,10 @@ export class Game {
     this.spawnRays(x, y, { count, speed, life, tint, tag, kind: opts.kind || 'step', ghost: !!opts.ghost });
   }
 
-  spawnRays(x, y, { count = RAY_COUNT, speed = RAY_SPEED, life = RAY_LIFE, tint = null, kind = 'ping', tag = undefined, sweep = null, ghost = false } = {}) {
+  spawnRays(x, y, { count = RAY_COUNT, speed = RAY_SPEED, life = RAY_LIFE, tint = null, kind = 'ping', tag = undefined, sweep = null, ghost = false, even = false } = {}) {
     const stamp = tag === null ? null : tag || { x, y, t: this.now, kind };
     for (let i = 0; i < count; i++) {
-      const a = (i / count) * Math.PI * 2 + Math.random() * 0.035;
+      const a = (i / count) * Math.PI * 2 + (even ? 0 : Math.random() * 0.035);
       const o = 6 + Math.random() * 9;
       const ox = x + Math.cos(a) * o;
       const oy = y + Math.sin(a) * o;
@@ -2487,6 +2806,9 @@ export class Game {
       const r = this.rays[i];
       r.age += dt;
       if (r.age > r.life + 1.5) continue;
+      const ftx = Math.floor(r.x / L.tile);
+      const fty = Math.floor(r.y / L.tile);
+      r.fog = !!(this.lab && this.lab.fog && ftx >= 0 && fty >= 0 && ftx < L.w && fty < L.h && this.lab.fog[fty * L.w + ftx]);
       if (r.ghost && r.age <= r.life) {
         const step = (r.speed || RAY_SPEED) * dt;
         r.x += r.dx * step;
@@ -2506,6 +2828,11 @@ export class Game {
           move -= d;
           const nx = r.x + r.dx * d;
           const ny = r.y + r.dy * d;
+          if (r.tag && r.tag.kind === 'dish' && !r.dishHit && dist(nx, ny, this.player.x, this.player.y) < 16) {
+            r.dishHit = true;
+            this.stunT = 2;
+            this.audio.deny();
+          }
           // Only tagged (player-made) sound can touch a body. A hunter's own
           // footstep is scenery: it must not collide with the hunter itself.
           const ent = r.tag ? this.hitEntity(nx, ny) : null;
@@ -2648,6 +2975,25 @@ export class Game {
         this.ui.dismiss();
         this.ui.showRunVictory({ time: t, best: this.progress.bestRun, depth: FLOORS });
       }
+      return;
+    }
+    if (this.mapMode && this.mapId === 'lab') {
+      const time = Math.max(0, this.levelTime);
+      const prev = this.progress.labBest;
+      const isRecord = !prev || time < prev.time;
+      if (isRecord) this.progress.labBest = { time, pings: this.pingsUsed };
+      this.progress.labCleared = true;
+      this.saveProgress();
+      this.state = 'victory';
+      this.audio.clear();
+      this.ui.dismiss();
+      this.ui.showWorldVictory({
+        time,
+        pings: this.pingsUsed,
+        best: this.progress.labBest,
+        isRecord,
+        shards: this.collected,
+      });
       return;
     }
     if (this.worldMode) {

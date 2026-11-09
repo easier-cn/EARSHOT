@@ -23,7 +23,7 @@ export const MAPS = {
   gas: { id: 'gas', name: '沼气池', kind: 'plain' },
   rot: { id: 'rot', name: '腐臭之地', kind: 'plain' },
   moving: { id: 'moving', name: '移动迷宫', kind: 'moving' },
-  lab: { id: 'lab', name: '实验室', kind: 'plain' },
+  lab: { id: 'lab', name: '实验室', kind: 'lab' },
   mech: { id: 'mech', name: '机械地牢', sub: '机械核心', kind: 'mech' },
 };
 

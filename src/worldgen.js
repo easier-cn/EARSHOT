@@ -1021,3 +1021,522 @@ export function mapConnected(level) {
   }
   return { ok: open === ok, open, reached: ok };
 }
+
+// ---------------------------------------------------------------- lab map --
+// 高难隐藏地图：三个首尾相接的区域。每个区域是一条主路（5 或 7 间房），
+// 从中间房间向下伸一条 2-3 间的死路，尽头是门禁卡房。区域终点的门后有一条
+// 只向前的走廊通到下一区域的起点（第二、三区是消毒间）。房间里还会随机长出
+// 培养皿、毒雾和附属小岔路。
+
+export const LAB = {
+  W: 118,
+  H: 155,
+  ZONE_Y: [3, 55, 107],
+};
+
+function labCarve(grid, w, r) {
+  fill(grid, w, r.x, r.y, r.x + r.w - 1, r.y + r.h - 1, 1);
+  fill(grid, w, r.x + 1, r.y + 1, r.x + r.w - 2, r.y + r.h - 2, 0);
+}
+
+function labOverlap(a, b, pad = 1) {
+  return !(
+    a.x + a.w + pad <= b.x ||
+    b.x + b.w + pad <= a.x ||
+    a.y + a.h + pad <= b.y ||
+    b.y + b.h + pad <= a.y
+  );
+}
+
+function labWallSpot(rnd, room) {
+  const side = ri(rnd, 0, 3);
+  if (side === 0) return { x: ri(rnd, room.x + 1, room.x + room.w - 2), y: room.y + 1 };
+  if (side === 1) return { x: ri(rnd, room.x + 1, room.x + room.w - 2), y: room.y + room.h - 2 };
+  if (side === 2) return { x: room.x + 1, y: ri(rnd, room.y + 1, room.y + room.h - 2) };
+  return { x: room.x + room.w - 2, y: ri(rnd, room.y + 1, room.y + room.h - 2) };
+}
+
+/** All interior floor tiles of a room are still reachable from its middle. */
+function labRoomConnected(grid, w, room) {
+  const cx = room.x + (room.w >> 1);
+  const cy = room.y + (room.h >> 1);
+  if (grid[at(w, cx, cy)] !== 0) return false;
+  const seen = new Set([at(w, cx, cy)]);
+  const q = [[cx, cy]];
+  let total = 0;
+  for (let y = room.y + 1; y < room.y + room.h - 1; y++) {
+    for (let x = room.x + 1; x < room.x + room.w - 1; x++) {
+      if (grid[at(w, x, y)] === 0) total++;
+    }
+  }
+  let reached = 0;
+  for (let head = 0; head < q.length; head++) {
+    const [x, y] = q[head];
+    reached++;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx <= room.x || ny <= room.y || nx >= room.x + room.w - 1 || ny >= room.y + room.h - 1) continue;
+      const i = at(w, nx, ny);
+      if (seen.has(i) || grid[i] !== 0) continue;
+      seen.add(i);
+      q.push([nx, ny]);
+    }
+  }
+  return reached === total;
+}
+
+/**
+ * A few freestanding interior walls / pillars. They never touch the room
+ * shell, so door mouths and the global room graph stay intact; each insertion
+ * is rolled back if it would split the room's own floor.
+ */
+function labInnerWalls(grid, w, room, rnd, protectedCells) {
+  if (room.decon || room.w < 10 || room.h < 7) return;
+  const snap = () => grid.slice();
+  const isProtected = (x, y) => {
+    if (Math.abs(x - (room.x + (room.w >> 1))) <= 2 && Math.abs(y - (room.y + (room.h >> 1))) <= 2) return true;
+    for (const p of protectedCells) {
+      if (Math.abs(x - p.x) <= 2 && Math.abs(y - p.y) <= 2) return true;
+    }
+    return false;
+  };
+  const can = (x, y) => {
+    if (x < room.x + 3 || x > room.x + room.w - 4) return false;
+    if (y < room.y + 3 || y > room.y + room.h - 4) return false;
+    if (grid[at(w, x, y)] !== 0 || isProtected(x, y)) return false;
+    return true;
+  };
+  const want = room.w >= 15 && room.h >= 11 ? 2 : 1;
+  let made = 0;
+  for (let attempt = 0; attempt < 14 && made < want; attempt++) {
+    const horizontal = rnd() < 0.5;
+    const len = rnd() < 0.55 ? 1 : 2;
+    const x = ri(rnd, room.x + 3, room.x + room.w - 4 - (horizontal ? len - 1 : 0));
+    const y = ri(rnd, room.y + 3, room.y + room.h - 4 - (horizontal ? 0 : len - 1));
+    const cells = [];
+    for (let k = 0; k < len; k++) cells.push([x + (horizontal ? k : 0), y + (horizontal ? 0 : k)]);
+    if (!cells.every(([cx, cy]) => can(cx, cy))) continue;
+    const before = snap();
+    for (const [cx, cy] of cells) grid[at(w, cx, cy)] = 1;
+    if (!labRoomConnected(grid, w, room)) {
+      grid.set(before);
+      continue;
+    }
+    made++;
+  }
+}
+
+
+export function buildLabMap(seed) {
+  const rnd = mulberry32(seed);
+  const w = LAB.W;
+  const h = LAB.H;
+  const grid = new Uint8Array(w * h);
+  fill(grid, w, 0, 0, w - 1, h - 1, 1);
+
+  const zones = [];
+  const allRooms = [];
+
+  // --- 1. 三个区域的主路 ---------------------------------------------------
+  for (let z = 0; z < 3; z++) {
+    const n = rnd() < 0.5 ? 5 : 7;
+    const rev = z === 1;
+    const rowY = LAB.ZONE_Y[z];
+    const deconStart = z > 0;
+    const widths = [];
+    const roomy = n === 5;
+    for (let i = 0; i < n; i++) {
+      // The 2nd and 3rd zones open in a bare decontamination airlock:
+      // 7x7 outside so the walkable interior is a clean 5x5.
+      widths.push(
+        i === 0 && deconStart ? 7 : roomy ? ri(rnd, 13, 19) : ri(rnd, 10, 14),
+      );
+    }
+    let cursor = rev ? w - 3 : 3;
+    const main = [];
+    for (let i = 0; i < n; i++) {
+      const rw = widths[i];
+      const rh = i === 0 && deconStart ? 7 : roomy ? ri(rnd, 10, 16) : ri(rnd, 8, 14);
+      // Serpentine: the middle band runs right-to-left so each zone's exit
+      // sits beside the next zone's decontamination room.
+      if (rev) cursor -= rw;
+      const room = {
+        x: cursor,
+        y: rowY,
+        w: rw,
+        h: rh,
+        kind: i === 0 ? 'start' : i === n - 1 ? 'end' : 'main',
+        zone: z,
+        idx: i,
+        rev,
+        decon: deconStart && i === 0,
+      };
+      labCarve(grid, w, room);
+      main.push(room);
+      allRooms.push(room);
+      cursor += rev ? -2 : rw + 2;
+    }
+    for (let i = 0; i < n - 1; i++) {
+      const a = main[i];
+      const b = main[i + 1];
+      const left = a.x < b.x ? a : b;
+      const right = a.x < b.x ? b : a;
+      const airlock = (left.h === 7 && left.kind === 'start') || (right.h === 7 && right.kind === 'start');
+      const cy = airlock ? rowY + 2 : rowY + 4;
+      fill(grid, w, left.x + left.w - 1, cy, right.x + 1, cy + 1, 0);
+    }
+    zones.push({ index: z, n, rev, rowY, main, branches: [], card: null });
+  }
+
+  // --- 2. 中段向下的死路 + 尽头门禁卡房 ------------------------------------
+  for (const zone of zones) {
+    const n = zone.n;
+    const mid = zone.main[Math.floor(n / 2)];
+    const bCount = n === 5 ? 2 : 3;
+    const cx = mid.x + (mid.w >> 1);
+    let top = mid.y + mid.h + 2;
+    let prev = mid;
+    for (let j = 0; j < bCount; j++) {
+      const terminal = j === bCount - 1;
+      const rw = terminal ? 8 : ri(rnd, 9, 11);
+      const rh = terminal ? 12 : 7;
+      const x = Math.max(2, Math.min(w - rw - 2, cx - (rw >> 1)));
+      const room = {
+        x,
+        y: top,
+        w: rw,
+        h: rh,
+        kind: terminal ? 'card' : 'branch',
+        zone: zone.index,
+        branchIdx: j,
+      };
+      labCarve(grid, w, room);
+      zone.branches.push(room);
+      allRooms.push(room);
+      // 2 格宽竖向走廊，接在上一间房底墙和这间房顶墙之间
+      const lo = Math.max(prev.x, room.x) + 2;
+      const hi = Math.min(prev.x + prev.w, room.x + room.w) - 2;
+      const ccx = Math.max(3, Math.min(w - 4, Math.floor((lo + hi) / 2)));
+      fill(grid, w, ccx - 1, prev.y + prev.h - 1, ccx, room.y + 1, 0);
+      prev = room;
+      top = room.y + room.h + 2;
+    }
+    zone.cardRoom = zone.branches[bCount - 1];
+  }
+
+  // --- 3. 随机附属岔路（末端放道具/护符） ----------------------------------
+  const sides = [];
+  for (const zone of zones) {
+    let made = 0;
+    for (const br of zone.branches) {
+      if (br.kind !== 'branch') continue;
+      if (rnd() > 0.7 && !(zone.index && made === 0 && br === zone.branches[0])) continue;
+      const dirs = shuffle([-1, 1], rnd);
+      for (const dir of dirs) {
+        const sw = 6;
+        const sh = 5;
+        const sx = dir > 0 ? br.x + br.w + 4 : br.x - 4 - sw;
+        const sy = br.y + ((br.h - sh) >> 1);
+        const side = { x: sx, y: sy, w: sw, h: sh, kind: 'side', zone: zone.index };
+        if (sx < 2 || sx + sw > w - 2 || sy < 2 || sy + sh > h - 2) continue;
+        if (allRooms.some((r) => labOverlap(side, r, 2))) continue;
+        if (sides.some((r) => labOverlap(side, r, 2))) continue;
+        labCarve(grid, w, side);
+        const cy = br.y + (br.h >> 1);
+        if (dir > 0) fill(grid, w, br.x + br.w - 1, cy - 1, sx + 1, cy, 0);
+        else fill(grid, w, sx + sw - 2, cy - 1, br.x + 1, cy, 0);
+        sides.push(side);
+        allRooms.push(side);
+        made++;
+        break;
+      }
+    }
+    // 保底：至少一条附属岔路
+    if (!made) {
+      for (const br of zone.branches) {
+        if (br.kind !== 'branch') continue;
+        const dir = rnd() < 0.5 ? -1 : 1;
+        const sw = 6;
+        const sh = 5;
+        const sx = dir > 0 ? br.x + br.w + 4 : br.x - 4 - sw;
+        const sy = br.y + ((br.h - sh) >> 1);
+        const side = { x: sx, y: sy, w: sw, h: sh, kind: 'side', zone: zone.index };
+        if (sx < 2 || sx + sw > w - 2) continue;
+        if (allRooms.some((r) => labOverlap(side, r, 1))) continue;
+        labCarve(grid, w, side);
+        const cy = br.y + (br.h >> 1);
+        if (dir > 0) fill(grid, w, br.x + br.w - 1, cy - 1, sx + 1, cy, 0);
+        else fill(grid, w, sx + sw - 2, cy - 1, br.x + 1, cy, 0);
+        sides.push(side);
+        allRooms.push(side);
+        break;
+      }
+    }
+  }
+
+  // --- 4. 起点 / 消毒间 ----------------------------------------------------
+  const startRoom = zones[0].main[0];
+  const spawnTile = {
+    x: startRoom.x + (startRoom.w >> 1),
+    y: startRoom.y + (startRoom.h >> 1),
+  };
+  const deconRooms = [];
+  for (let z = 1; z < 3; z++) {
+    const r = zones[z].main[0];
+    r.decon = true;
+    deconRooms.push(r);
+  }
+
+  // --- 5. 区域之间的门和走廊，以及最后的实验室终点 -------------------------
+  const gates = [];
+  const addGate = (room, z) => {
+    const gx = room.x + (room.w >> 1) - 1;
+    const gy = room.y + room.h - 1;
+    grid[at(w, gx, gy)] = 3;
+    grid[at(w, gx + 1, gy)] = 3;
+    gates.push({
+      zone: z,
+      require: `card${z + 1}`,
+      cells: [at(w, gx, gy), at(w, gx + 1, gy)],
+      tx: gx,
+      ty: gy,
+      x: (gx + 1) * TILE,
+      y: (gy + 0.5) * TILE,
+      open: false,
+    });
+    return { gx, gy };
+  };
+
+  for (let z = 0; z < 2; z++) {
+    const end = zones[z].main[zones[z].n - 1];
+    const { gx, gy } = addGate(end, z);
+    const nextStart = zones[z + 1].main[0];
+    const targetX = nextStart.x + (nextStart.w >> 1) - 1;
+    const landingY = LAB.ZONE_Y[z + 1] - 5;
+    fill(grid, w, gx, gy + 1, gx + 1, landingY + 1, 0);
+    fill(grid, w, Math.min(gx, targetX), landingY, Math.max(gx + 1, targetX + 1), landingY + 1, 0);
+    fill(grid, w, targetX, landingY + 1, targetX + 1, nextStart.y + 1, 0);
+  }
+
+  const lastEnd = zones[2].main[zones[2].n - 1];
+  const { gx, gy } = addGate(lastEnd, 2);
+  const finalRoom = {
+    x: Math.max(2, Math.min(w - 11, lastEnd.x + (lastEnd.w >> 1) - 4)),
+    y: lastEnd.y + lastEnd.h + 4,
+    w: 9,
+    h: 8,
+    kind: 'final',
+    zone: 2,
+  };
+  labCarve(grid, w, finalRoom);
+  fill(grid, w, gx, gy + 1, gx + 1, finalRoom.y + 1, 0);
+  allRooms.push(finalRoom);
+  const finalTile = { x: finalRoom.x + (finalRoom.w >> 1), y: finalRoom.y + (finalRoom.h >> 1) };
+
+  // --- 6. 门禁卡 -----------------------------------------------------------
+  const CARD_COLORS = ['90,170,255', '190,130,255', '235,245,255'];
+  const cards = [];
+  for (const zone of zones) {
+    const room = zone.cardRoom;
+    const tx = room.x + (room.w >> 1);
+    const ty = room.y + (room.h >> 1);
+    const card = {
+      id: `card${zone.index + 1}`,
+      zone: zone.index,
+      tx,
+      ty,
+      x: (tx + 0.5) * TILE,
+      y: (ty + 0.5) * TILE,
+      color: CARD_COLORS[zone.index],
+      taken: false,
+      pulseT: 1.2 + Math.random() * 1.2,
+    };
+    cards.push(card);
+    zone.card = card;
+  }
+
+  // --- 7. 培养皿（约占房间数的 1/10） -------------------------------------
+  const dishPool = allRooms.filter(
+    (r) => r.kind === 'main' || r.kind === 'end' || r.kind === 'branch',
+  );
+  shuffle(dishPool, rnd);
+  const dishCount = Math.max(2, Math.round(allRooms.length * 0.1));
+  const dishes = [];
+  for (const room of dishPool) {
+    if (dishes.length >= dishCount) break;
+    // 独立的三格展示墙：放在房间内侧、离门口两格，打碎后也不会通向虚空。
+    const fromTop = room.kind !== 'branch';
+    const ty = fromTop ? room.y + 2 : room.y + room.h - 3;
+    const lo = room.x + 2;
+    const hi = room.x + room.w - 4;
+    if (hi <= lo) continue;
+    const tx = ri(rnd, lo, hi);
+    let ok = true;
+    for (let d = -1; d <= 1; d++) {
+      if (grid[at(w, tx + d, ty)] !== 0) ok = false;
+    }
+    if (!ok) continue;
+    for (let d = -1; d <= 1; d++) grid[at(w, tx + d, ty)] = 4;
+    dishes.push({
+      zone: room.zone,
+      tx,
+      ty,
+      x: (tx + 0.5) * TILE,
+      y: (ty + 0.5) * TILE,
+      cells: [at(w, tx - 1, ty), at(w, tx, ty), at(w, tx + 1, ty)],
+      broken: false,
+    });
+  }
+
+  // --- 7b. 室内隔断：不贴外墙的短墙/立柱，增加房间层次 ---------------------
+  const protectedCells = [];
+  for (const c of cards) protectedCells.push({ x: c.tx, y: c.ty });
+  protectedCells.push(spawnTile, finalTile);
+  for (const d of dishes) {
+    protectedCells.push({ x: d.tx, y: d.ty });
+    protectedCells.push({ x: d.tx - 1, y: d.ty }, { x: d.tx + 1, y: d.ty });
+  }
+  for (const room of allRooms) {
+    if (room.kind === 'final' || room.kind === 'card') continue;
+    labInnerWalls(grid, w, room, rnd, protectedCells);
+  }
+
+  // --- 8. 毒雾：每个房间约 1/5 的地板，成片出现 ----------------------------
+  const fog = new Uint8Array(w * h);
+  for (const room of allRooms) {
+    if (room.kind === 'start' || room.kind === 'card' || room.decon) continue;
+    if (room.kind === 'final') continue;
+    const cells = [];
+    for (let y = room.y + 1; y <= room.y + room.h - 2; y++) {
+      for (let x = room.x + 1; x <= room.x + room.w - 2; x++) {
+        if (grid[at(w, x, y)] === 0) cells.push({ x, y });
+      }
+    }
+    if (!cells.length) continue;
+    const want = Math.floor(cells.length * 0.2);
+    let made = 0;
+    let guard = 0;
+    while (made < want && guard++ < 200) {
+      const c = cells[(rnd() * cells.length) | 0];
+      const rad = 1 + ((rnd() * 2) | 0);
+      for (let dy = -rad; dy <= rad; dy++) {
+        for (let dx = -rad; dx <= rad; dx++) {
+          const x = c.x + dx;
+          const y = c.y + dy;
+          if (x < room.x + 1 || y < room.y + 1 || x > room.x + room.w - 2 || y > room.y + room.h - 2) continue;
+          const i = at(w, x, y);
+          if (grid[i] !== 0 || fog[i]) continue;
+          if (dishes.some((d) => d.tx === x && d.ty === y)) continue;
+          fog[i] = 1;
+          made++;
+        }
+      }
+    }
+  }
+
+  // --- 9. 敌人 -------------------------------------------------------------
+  const monsters = [];
+  for (const zone of zones) {
+    const pool = zone.main.filter((r) => r.kind === 'main');
+    const room = pool[(rnd() * pool.length) | 0] || zone.main[1];
+    for (let i = 0; i < 20; i++) {
+      const tx = ri(rnd, room.x + 2, room.x + room.w - 3);
+      const ty = ri(rnd, room.y + 2, room.y + room.h - 3);
+      if (grid[at(w, tx, ty)] !== 0) continue;
+      monsters.push({ x: tx, y: ty, type: 'hunter', speed: 83, alertSpeed: 110 });
+      break;
+    }
+  }
+
+  const labEnemies = [];
+  const homeOf = (room) => ({
+    tx0: room.x + 1,
+    tx1: room.x + room.w - 2,
+    ty0: room.y + 1,
+    ty1: room.y + room.h - 2,
+    x0: (room.x + 1) * TILE,
+    x1: (room.x + room.w - 1) * TILE,
+    y0: (room.y + 1) * TILE,
+    y1: (room.y + room.h - 1) * TILE,
+  });
+  const floorSpot = (room) => {
+    for (let i = 0; i < 24; i++) {
+      const tx = ri(rnd, room.x + 1, room.x + room.w - 2);
+      const ty = ri(rnd, room.y + 1, room.y + room.h - 2);
+      if (grid[at(w, tx, ty)] === 0) return { x: (tx + 0.5) * TILE, y: (ty + 0.5) * TILE, tx, ty };
+    }
+    return { x: (room.x + 1.5) * TILE, y: (room.y + 1.5) * TILE, tx: room.x + 1, ty: room.y + 1 };
+  };
+
+  for (const zone of zones) {
+    const cr = zone.cardRoom;
+    const b1 = floorSpot(cr);
+    labEnemies.push({
+      type: 'lab2', x: b1.x, y: b1.y, home: homeOf(cr),
+      guardCard: zone.index, locked: true,
+    });
+    const w1 = labWallSpot(rnd, cr);
+    labEnemies.push({
+      type: 'lab3', x: (w1.x + 0.5) * TILE, y: (w1.y + 0.5) * TILE, home: homeOf(cr),
+      guardCard: zone.index, locked: true,
+    });
+    const fr = zone.main[Math.min(2, zone.main.length - 2)];
+    const b2 = floorSpot(fr);
+    labEnemies.push({ type: 'lab2', x: b2.x, y: b2.y, home: homeOf(fr) });
+    const w2 = labWallSpot(rnd, fr);
+    labEnemies.push({
+      type: 'lab3', x: (w2.x + 0.5) * TILE, y: (w2.y + 0.5) * TILE, home: homeOf(fr),
+    });
+  }
+
+  // --- 10. 道具点：每条附属岔路的尽头 --------------------------------------
+  const loot = sides.map((r) => ({ x: r.x + (r.w >> 1), y: r.y + (r.h >> 1) }));
+  for (const zone of zones) {
+    const room = zone.main[1 + ((rnd() * Math.max(1, zone.n - 2)) | 0)];
+    const spot = floorSpot(room);
+    loot.push({ x: spot.tx, y: spot.ty });
+  }
+
+  const rooms = allRooms.map((r) => ({
+    x: r.x, y: r.y, w: r.w, h: r.h,
+    cx: r.x + (r.w >> 1), cy: r.y + (r.h >> 1),
+    kind: r.kind, zone: r.zone,
+  }));
+
+  return {
+    mapId: 'lab',
+    w,
+    h,
+    tile: TILE,
+    size: { w: w * TILE, h: h * TILE },
+    grid,
+    rooms,
+    spawn: { x: (spawnTile.x + 0.5) * TILE, y: (spawnTile.y + 0.5) * TILE },
+    spawnTile,
+    key: null,
+    keyTile: null,
+    exit: null,
+    exits: [],
+    absorb: [],
+    monsters,
+    labEnemies,
+    loot,
+    seed,
+    lab: {
+      zones,
+      cards,
+      gates,
+      dishes,
+      fog,
+      deconRooms,
+      finalExit: {
+        tx: finalTile.x,
+        ty: finalTile.y,
+        x: (finalTile.x + 0.5) * TILE,
+        y: (finalTile.y + 0.5) * TILE,
+      },
+      rooms: allRooms,
+    },
+  };
+}

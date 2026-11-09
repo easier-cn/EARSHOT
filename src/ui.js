@@ -3,6 +3,7 @@
 
 import { ITEMS, CHARMS } from './loot.js';
 import { charmText, CHARM_TEXT, ITEM_TEXT, CHARM_GLYPH, ITEM_GLYPH } from './desc.js';
+import { ACTIONS, bindKey, bindPad, resetSettings, keyLabel, padLabel } from './settings.js';
 
 const ICON = {
   play: '<svg viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z"/></svg>',
@@ -14,6 +15,7 @@ const ICON = {
   muted: '<svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l5 6M22 9l-5 6" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>',
   pencil: '<svg viewBox="0 0 24 24"><path d="M4 20l4-1 11-11-3-3L5 16z" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
   bars: '<svg viewBox="0 0 24 24"><rect x="7" y="5" width="3" height="14"/><rect x="14" y="5" width="3" height="14"/></svg>',
+  gear: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 3.2v2.2M12 18.6v2.2M3.2 12h2.2M18.6 12h2.2M5.8 5.8l1.6 1.6M16.6 16.6l1.6 1.6M18.2 5.8l-1.6 1.6M7.4 16.6l-1.6 1.6" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
 };
 
 function icon(name, cls = '') {
@@ -45,6 +47,7 @@ export class UI {
           <div class="start-row">
             <button class="btn primary" id="btn-start" aria-label="进入">${icon('play')}</button>
             <button class="btn build" id="btn-edit" aria-label="造图">${icon('pencil')}</button>
+            <button class="btn build" id="btn-settings-title" aria-label="设置">${icon('gear')}</button>
           </div>
           <div class="nest-glyph" id="nest-glyph"></div>
           <div class="chamber-grid" id="chamber-grid"></div>
@@ -58,6 +61,7 @@ export class UI {
           <div class="icon-row">
             <button class="btn icon" id="btn-resume" aria-label="继续">${icon('resume')}</button>
             <button class="btn icon" id="btn-restart" aria-label="重来">${icon('retry')}</button>
+            <button class="btn icon" id="btn-settings-pause" aria-label="设置">${icon('gear')}</button>
             <button class="btn icon" id="btn-mute" aria-label="静音">${icon('sound')}</button>
             <button class="btn icon" id="btn-title" aria-label="标题">${icon('home')}</button>
           </div>
@@ -104,6 +108,42 @@ export class UI {
         </div>
       </section>
 
+      <section class="screen settings-screen hidden" id="scr-settings">
+        <div class="panel settings-panel">
+          <div class="settings-head">
+            <span class="settings-title">设置</span>
+            <button class="btn icon small" id="btn-settings-x" aria-label="关闭">&times;</button>
+          </div>
+          <div class="set-row">
+            <span class="set-name">音量</span>
+            <input type="range" id="set-volume" min="0" max="1" step="0.01" aria-label="音量">
+            <span class="set-val" id="set-volume-val">85%</span>
+          </div>
+          <div class="set-row">
+            <span class="set-name">声线亮度</span>
+            <input type="range" id="set-bright" min="0.3" max="1.8" step="0.05" aria-label="声线亮度">
+            <span class="set-val" id="set-bright-val">100%</span>
+          </div>
+          <div class="set-row">
+            <span class="set-name">控制方式</span>
+            <div class="seg" id="set-device">
+              <button class="seg-btn" data-device="keyboard">键鼠</button>
+              <button class="seg-btn" data-device="gamepad">手柄</button>
+            </div>
+            <span class="set-val pad-state" id="set-pad-state">未连接</span>
+          </div>
+          <div class="settings-head binds-head">
+            <span class="set-name">键位</span>
+            <span class="set-hint" id="set-hint">点击一行，再按下新的键</span>
+          </div>
+          <div class="set-binds" id="set-binds"></div>
+          <div class="set-actions">
+            <button class="btn" id="btn-set-reset">恢复默认</button>
+            <button class="btn primary" id="btn-set-close">完成</button>
+          </div>
+        </div>
+      </section>
+
       <div class="hud hidden" id="hud">
         <div class="hud-left">
           <span class="hud-num" id="hud-num" data-sector="I"></span>
@@ -134,6 +174,7 @@ export class UI {
       dead: $('scr-dead'),
       clear: $('scr-clear'),
       victory: $('scr-victory'),
+      settings: $('scr-settings'),
     };
     this.hud = $('hud');
     this.grid = $('chamber-grid');
@@ -151,6 +192,18 @@ export class UI {
     this.clearStats = $('clear-stats');
     this.victoryStats = $('victory-stats');
     this.deadDeep = $('dead-deep');
+    this.setVolume = $('set-volume');
+    this.setBright = $('set-bright');
+    this.setVolumeVal = $('set-volume-val');
+    this.setBrightVal = $('set-bright-val');
+    this.setBinds = $('set-binds');
+    this.setHint = $('set-hint');
+    this.setDevice = $('set-device');
+    this.setPadState = $('set-pad-state');
+    this.settingsOpen = false;
+    this.settingsFrom = 'title';
+    this.listen = null;
+    this.listenTimer = 0;
 
     // Buttons blur themselves so Space never triggers twice.
     const bind = (id, fn) => {
@@ -174,7 +227,147 @@ export class UI {
     bind('btn-next', () => g.next());
     bind('btn-clear-title', () => g.quitToTitle());
     bind('btn-victory-home', () => g.quitToTitle());
+    bind('btn-settings-title', () => g.openSettings());
+    bind('btn-settings-pause', () => g.openSettings());
+    bind('btn-settings-x', () => this.closeSettings());
+    bind('btn-set-close', () => this.closeSettings());
+    bind('btn-set-reset', () => {
+      resetSettings(this.game.settings);
+      this.game.applySettings();
+      this.renderSettings();
+    });
     this.muteBtn = $('btn-mute');
+
+    this.setVolume.addEventListener('input', () => {
+      this.game.settings.volume = Number(this.setVolume.value);
+      this.game.applySettings();
+      this.renderSettings();
+    });
+    this.setBright.addEventListener('input', () => {
+      this.game.settings.brightness = Number(this.setBright.value);
+      this.game.applySettings();
+      this.renderSettings();
+    });
+    this.setDevice.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-device]');
+      if (!btn) return;
+      btn.blur();
+      this.game.settings.device = btn.dataset.device;
+      this.game.applySettings();
+      this.cancelListen();
+      this.renderSettings();
+    });
+    // While a binding row is listening, the next key belongs to it — even
+    // Escape, which would otherwise close the panel.
+    window.addEventListener('keydown', (e) => this.captureKey(e), true);
+  }
+
+  captureKey(e) {
+    if (!this.listen) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (e.code === 'Escape') {
+      this.cancelListen();
+      return;
+    }
+    if (this.listen.device !== 'keyboard') return;
+    bindKey(this.game.settings, this.listen.action, e.code);
+    this.game.applySettings();
+    this.cancelListen();
+  }
+
+  openSettings(from = 'title') {
+    this.settingsFrom = from === 'paused' ? 'paused' : 'title';
+    this.settingsOpen = true;
+    this.hideGuide();
+    this.showScreen('settings');
+    this.renderSettings();
+  }
+
+  closeSettings() {
+    this.cancelListen();
+    this.settingsOpen = false;
+    this.hideScreens();
+    if (this.settingsFrom === 'paused') this.showPause();
+    else this.showTitle(this.game.progress);
+  }
+
+  cancelListen() {
+    if (this.listenTimer) clearInterval(this.listenTimer);
+    this.listenTimer = 0;
+    this.listen = null;
+    this.renderSettings();
+  }
+
+  bindListen(action) {
+    const gp = this.game.settings.device === 'gamepad';
+    this.cancelListen();
+    this.listen = { action, device: gp ? 'gamepad' : 'keyboard' };
+    if (gp) {
+      const prev = [];
+      this.listenTimer = setInterval(() => {
+        if (!this.listen) return;
+        const pads = typeof navigator !== 'undefined' && navigator.getGamepads ? navigator.getGamepads() : null;
+        const pad = pads ? Array.from(pads).find(Boolean) : null;
+        if (!pad) return;
+        const buttons = pad.buttons || [];
+        for (let i = 0; i < buttons.length; i++) {
+          const on = !!buttons[i] && (buttons[i].pressed || buttons[i].value > 0.5);
+          if (on && !prev[i]) {
+            bindPad(this.game.settings, this.listen.action, i);
+            this.game.applySettings();
+            this.cancelListen();
+            return;
+          }
+          prev[i] = on;
+        }
+      }, 90);
+    }
+    this.renderSettings();
+  }
+
+  renderSettings() {
+    if (!this.settingsOpen) return;
+    const s = this.game.settings;
+    this.setVolume.value = String(s.volume);
+    this.setVolumeVal.textContent = `${Math.round(s.volume * 100)}%`;
+    this.setBright.value = String(s.brightness);
+    this.setBrightVal.textContent = `${Math.round((s.brightness / 1.8) * 100)}%`;
+    for (const b of this.setDevice.querySelectorAll('[data-device]')) {
+      b.classList.toggle('on', b.dataset.device === s.device);
+    }
+    const padOk = this.game.input && this.game.input.padConnected;
+    if (this.setPadState) this.setPadState.textContent = padOk ? '已连接' : '未连接';
+    this.setBinds.innerHTML = '';
+    for (const a of ACTIONS) {
+      const row = document.createElement('div');
+      const listening = this.listen && this.listen.action === a.id;
+      row.className = 'bind-row' + (listening ? ' listening' : '');
+      const name = document.createElement('span');
+      name.className = 'bind-name';
+      name.textContent = a.name;
+      const btn = document.createElement('button');
+      btn.className = 'bind-key';
+      const b = s.bindings[a.id];
+      btn.textContent = listening
+        ? '按下…'
+        : s.device === 'gamepad'
+          ? padLabel(b.pad[0])
+          : keyLabel(b.keys[0]);
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        btn.blur();
+        this.bindListen(a.id);
+      });
+      row.appendChild(name);
+      row.appendChild(btn);
+      this.setBinds.appendChild(row);
+    }
+    if (this.setHint) {
+      this.setHint.textContent = this.listen
+        ? (this.listen.device === 'gamepad' ? '按下一个手柄按钮…（Esc 取消）' : '按下新的键…（Esc 取消）')
+        : (s.device === 'gamepad' ? '点击一行，再按下一个手柄按钮' : '点击一行，再按下新的键');
+    }
   }
 
   hideScreens() {
@@ -189,7 +382,7 @@ export class UI {
   showTitle(progress = {}) {
     this.showScreen('title');
     this.hideHUD();
-    this.guide('摁下空格键以开始', { sticky: true });
+    this.guide(`摁下${this.game.keyName('ping')}以开始`, { sticky: true });
     this.grid.innerHTML = '';
     const unlocked = progress.unlocked || 1;
     const cleared = new Set(progress.cleared || []);

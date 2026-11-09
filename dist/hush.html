@@ -1029,6 +1029,158 @@ kbd {
 .boot-retry:hover { background: rgba(255, 120, 110, .08); }
 #boot.has-errors .boot-bar i { background: #ff6f6f; }
 
+/* ---------------------------------------------------------------- settings */
+.settings-screen { align-items: center; }
+.settings-panel {
+  min-width: min(600px, 92vw);
+  max-height: 88vh;
+  overflow: hidden;
+  padding: 26px 34px 22px;
+  text-align: left;
+}
+.settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.settings-title {
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.34em;
+  color: rgba(234, 247, 244, 0.82);
+}
+.btn.icon.small {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
+  color: rgba(234, 247, 244, 0.6);
+}
+.set-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(127, 227, 212, 0.06);
+}
+.set-name {
+  flex: none;
+  width: 86px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: rgba(234, 247, 244, 0.58);
+}
+.set-val {
+  flex: none;
+  width: 58px;
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: rgba(127, 227, 212, 0.75);
+}
+.set-row input[type="range"] {
+  flex: 1;
+  height: 2px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(127, 227, 212, 0.2);
+  outline: none;
+  cursor: pointer;
+}
+.set-row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #aef5e9;
+  box-shadow: 0 0 10px rgba(127, 227, 212, 0.8);
+}
+.set-row input[type="range"]::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: 0;
+  border-radius: 50%;
+  background: #aef5e9;
+  box-shadow: 0 0 10px rgba(127, 227, 212, 0.8);
+}
+.seg { display: flex; flex: 1; gap: 8px; }
+.seg-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  padding: 8px 18px;
+  color: rgba(234, 247, 244, 0.55);
+  background: transparent;
+  border: 1px solid rgba(127, 227, 212, 0.16);
+  cursor: pointer;
+}
+.seg-btn.on {
+  color: #04110f;
+  background: rgba(127, 227, 212, 0.85);
+  border-color: transparent;
+}
+.pad-state { width: auto; }
+.binds-head { margin: 16px 0 6px; }
+ .set-binds {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 20px;
+  margin-bottom: 14px;
+}
+ .bind-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 8px;
+  border-bottom: 1px solid rgba(127, 227, 212, 0.05);
+}
+.bind-row.listening { background: rgba(127, 227, 212, 0.07); }
+.bind-name {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: rgba(234, 247, 244, 0.62);
+}
+.bind-key {
+  min-width: 96px;
+  padding: 6px 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--teal);
+  background: rgba(5, 12, 14, 0.5);
+  border: 1px solid rgba(127, 227, 212, 0.2);
+  cursor: pointer;
+}
+.bind-key:hover { border-color: rgba(127, 227, 212, 0.6); }
+.bind-row.listening .bind-key { color: #04110f; background: var(--teal); }
+.set-hint {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: rgba(127, 227, 212, 0.5);
+}
+.set-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+.set-actions .btn {
+  padding: 10px 22px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+}
+.set-actions .btn.primary {
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  display: inline-block;
+  animation: none;
+}
+
 </style>
   </head>
   <body>
@@ -2265,7 +2417,7 @@ const MAPS = {
   gas: { id: 'gas', name: '沼气池', kind: 'plain' },
   rot: { id: 'rot', name: '腐臭之地', kind: 'plain' },
   moving: { id: 'moving', name: '移动迷宫', kind: 'moving' },
-  lab: { id: 'lab', name: '实验室', kind: 'plain' },
+  lab: { id: 'lab', name: '实验室', kind: 'lab' },
   mech: { id: 'mech', name: '机械地牢', sub: '机械核心', kind: 'mech' },
 };
 
@@ -3301,6 +3453,525 @@ function mapConnected(level) {
   return { ok: open === ok, open, reached: ok };
 }
 
+// ---------------------------------------------------------------- lab map --
+// 高难隐藏地图：三个首尾相接的区域。每个区域是一条主路（5 或 7 间房），
+// 从中间房间向下伸一条 2-3 间的死路，尽头是门禁卡房。区域终点的门后有一条
+// 只向前的走廊通到下一区域的起点（第二、三区是消毒间）。房间里还会随机长出
+// 培养皿、毒雾和附属小岔路。
+
+const LAB = {
+  W: 118,
+  H: 155,
+  ZONE_Y: [3, 55, 107],
+};
+
+function labCarve(grid, w, r) {
+  fill(grid, w, r.x, r.y, r.x + r.w - 1, r.y + r.h - 1, 1);
+  fill(grid, w, r.x + 1, r.y + 1, r.x + r.w - 2, r.y + r.h - 2, 0);
+}
+
+function labOverlap(a, b, pad = 1) {
+  return !(
+    a.x + a.w + pad <= b.x ||
+    b.x + b.w + pad <= a.x ||
+    a.y + a.h + pad <= b.y ||
+    b.y + b.h + pad <= a.y
+  );
+}
+
+function labWallSpot(rnd, room) {
+  const side = ri(rnd, 0, 3);
+  if (side === 0) return { x: ri(rnd, room.x + 1, room.x + room.w - 2), y: room.y + 1 };
+  if (side === 1) return { x: ri(rnd, room.x + 1, room.x + room.w - 2), y: room.y + room.h - 2 };
+  if (side === 2) return { x: room.x + 1, y: ri(rnd, room.y + 1, room.y + room.h - 2) };
+  return { x: room.x + room.w - 2, y: ri(rnd, room.y + 1, room.y + room.h - 2) };
+}
+
+/** All interior floor tiles of a room are still reachable from its middle. */
+function labRoomConnected(grid, w, room) {
+  const cx = room.x + (room.w >> 1);
+  const cy = room.y + (room.h >> 1);
+  if (grid[at(w, cx, cy)] !== 0) return false;
+  const seen = new Set([at(w, cx, cy)]);
+  const q = [[cx, cy]];
+  let total = 0;
+  for (let y = room.y + 1; y < room.y + room.h - 1; y++) {
+    for (let x = room.x + 1; x < room.x + room.w - 1; x++) {
+      if (grid[at(w, x, y)] === 0) total++;
+    }
+  }
+  let reached = 0;
+  for (let head = 0; head < q.length; head++) {
+    const [x, y] = q[head];
+    reached++;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx <= room.x || ny <= room.y || nx >= room.x + room.w - 1 || ny >= room.y + room.h - 1) continue;
+      const i = at(w, nx, ny);
+      if (seen.has(i) || grid[i] !== 0) continue;
+      seen.add(i);
+      q.push([nx, ny]);
+    }
+  }
+  return reached === total;
+}
+
+/**
+ * A few freestanding interior walls / pillars. They never touch the room
+ * shell, so door mouths and the global room graph stay intact; each insertion
+ * is rolled back if it would split the room's own floor.
+ */
+function labInnerWalls(grid, w, room, rnd, protectedCells) {
+  if (room.decon || room.w < 10 || room.h < 7) return;
+  const snap = () => grid.slice();
+  const isProtected = (x, y) => {
+    if (Math.abs(x - (room.x + (room.w >> 1))) <= 2 && Math.abs(y - (room.y + (room.h >> 1))) <= 2) return true;
+    for (const p of protectedCells) {
+      if (Math.abs(x - p.x) <= 2 && Math.abs(y - p.y) <= 2) return true;
+    }
+    return false;
+  };
+  const can = (x, y) => {
+    if (x < room.x + 3 || x > room.x + room.w - 4) return false;
+    if (y < room.y + 3 || y > room.y + room.h - 4) return false;
+    if (grid[at(w, x, y)] !== 0 || isProtected(x, y)) return false;
+    return true;
+  };
+  const want = room.w >= 15 && room.h >= 11 ? 2 : 1;
+  let made = 0;
+  for (let attempt = 0; attempt < 14 && made < want; attempt++) {
+    const horizontal = rnd() < 0.5;
+    const len = rnd() < 0.55 ? 1 : 2;
+    const x = ri(rnd, room.x + 3, room.x + room.w - 4 - (horizontal ? len - 1 : 0));
+    const y = ri(rnd, room.y + 3, room.y + room.h - 4 - (horizontal ? 0 : len - 1));
+    const cells = [];
+    for (let k = 0; k < len; k++) cells.push([x + (horizontal ? k : 0), y + (horizontal ? 0 : k)]);
+    if (!cells.every(([cx, cy]) => can(cx, cy))) continue;
+    const before = snap();
+    for (const [cx, cy] of cells) grid[at(w, cx, cy)] = 1;
+    if (!labRoomConnected(grid, w, room)) {
+      grid.set(before);
+      continue;
+    }
+    made++;
+  }
+}
+
+
+function buildLabMap(seed) {
+  const rnd = mulberry32(seed);
+  const w = LAB.W;
+  const h = LAB.H;
+  const grid = new Uint8Array(w * h);
+  fill(grid, w, 0, 0, w - 1, h - 1, 1);
+
+  const zones = [];
+  const allRooms = [];
+
+  // --- 1. 三个区域的主路 ---------------------------------------------------
+  for (let z = 0; z < 3; z++) {
+    const n = rnd() < 0.5 ? 5 : 7;
+    const rev = z === 1;
+    const rowY = LAB.ZONE_Y[z];
+    const deconStart = z > 0;
+    const widths = [];
+    const roomy = n === 5;
+    for (let i = 0; i < n; i++) {
+      // The 2nd and 3rd zones open in a bare decontamination airlock:
+      // 7x7 outside so the walkable interior is a clean 5x5.
+      widths.push(
+        i === 0 && deconStart ? 7 : roomy ? ri(rnd, 13, 19) : ri(rnd, 10, 14),
+      );
+    }
+    let cursor = rev ? w - 3 : 3;
+    const main = [];
+    for (let i = 0; i < n; i++) {
+      const rw = widths[i];
+      const rh = i === 0 && deconStart ? 7 : roomy ? ri(rnd, 10, 16) : ri(rnd, 8, 14);
+      // Serpentine: the middle band runs right-to-left so each zone's exit
+      // sits beside the next zone's decontamination room.
+      if (rev) cursor -= rw;
+      const room = {
+        x: cursor,
+        y: rowY,
+        w: rw,
+        h: rh,
+        kind: i === 0 ? 'start' : i === n - 1 ? 'end' : 'main',
+        zone: z,
+        idx: i,
+        rev,
+        decon: deconStart && i === 0,
+      };
+      labCarve(grid, w, room);
+      main.push(room);
+      allRooms.push(room);
+      cursor += rev ? -2 : rw + 2;
+    }
+    for (let i = 0; i < n - 1; i++) {
+      const a = main[i];
+      const b = main[i + 1];
+      const left = a.x < b.x ? a : b;
+      const right = a.x < b.x ? b : a;
+      const airlock = (left.h === 7 && left.kind === 'start') || (right.h === 7 && right.kind === 'start');
+      const cy = airlock ? rowY + 2 : rowY + 4;
+      fill(grid, w, left.x + left.w - 1, cy, right.x + 1, cy + 1, 0);
+    }
+    zones.push({ index: z, n, rev, rowY, main, branches: [], card: null });
+  }
+
+  // --- 2. 中段向下的死路 + 尽头门禁卡房 ------------------------------------
+  for (const zone of zones) {
+    const n = zone.n;
+    const mid = zone.main[Math.floor(n / 2)];
+    const bCount = n === 5 ? 2 : 3;
+    const cx = mid.x + (mid.w >> 1);
+    let top = mid.y + mid.h + 2;
+    let prev = mid;
+    for (let j = 0; j < bCount; j++) {
+      const terminal = j === bCount - 1;
+      const rw = terminal ? 8 : ri(rnd, 9, 11);
+      const rh = terminal ? 12 : 7;
+      const x = Math.max(2, Math.min(w - rw - 2, cx - (rw >> 1)));
+      const room = {
+        x,
+        y: top,
+        w: rw,
+        h: rh,
+        kind: terminal ? 'card' : 'branch',
+        zone: zone.index,
+        branchIdx: j,
+      };
+      labCarve(grid, w, room);
+      zone.branches.push(room);
+      allRooms.push(room);
+      // 2 格宽竖向走廊，接在上一间房底墙和这间房顶墙之间
+      const lo = Math.max(prev.x, room.x) + 2;
+      const hi = Math.min(prev.x + prev.w, room.x + room.w) - 2;
+      const ccx = Math.max(3, Math.min(w - 4, Math.floor((lo + hi) / 2)));
+      fill(grid, w, ccx - 1, prev.y + prev.h - 1, ccx, room.y + 1, 0);
+      prev = room;
+      top = room.y + room.h + 2;
+    }
+    zone.cardRoom = zone.branches[bCount - 1];
+  }
+
+  // --- 3. 随机附属岔路（末端放道具/护符） ----------------------------------
+  const sides = [];
+  for (const zone of zones) {
+    let made = 0;
+    for (const br of zone.branches) {
+      if (br.kind !== 'branch') continue;
+      if (rnd() > 0.7 && !(zone.index && made === 0 && br === zone.branches[0])) continue;
+      const dirs = shuffle([-1, 1], rnd);
+      for (const dir of dirs) {
+        const sw = 6;
+        const sh = 5;
+        const sx = dir > 0 ? br.x + br.w + 4 : br.x - 4 - sw;
+        const sy = br.y + ((br.h - sh) >> 1);
+        const side = { x: sx, y: sy, w: sw, h: sh, kind: 'side', zone: zone.index };
+        if (sx < 2 || sx + sw > w - 2 || sy < 2 || sy + sh > h - 2) continue;
+        if (allRooms.some((r) => labOverlap(side, r, 2))) continue;
+        if (sides.some((r) => labOverlap(side, r, 2))) continue;
+        labCarve(grid, w, side);
+        const cy = br.y + (br.h >> 1);
+        if (dir > 0) fill(grid, w, br.x + br.w - 1, cy - 1, sx + 1, cy, 0);
+        else fill(grid, w, sx + sw - 2, cy - 1, br.x + 1, cy, 0);
+        sides.push(side);
+        allRooms.push(side);
+        made++;
+        break;
+      }
+    }
+    // 保底：至少一条附属岔路
+    if (!made) {
+      for (const br of zone.branches) {
+        if (br.kind !== 'branch') continue;
+        const dir = rnd() < 0.5 ? -1 : 1;
+        const sw = 6;
+        const sh = 5;
+        const sx = dir > 0 ? br.x + br.w + 4 : br.x - 4 - sw;
+        const sy = br.y + ((br.h - sh) >> 1);
+        const side = { x: sx, y: sy, w: sw, h: sh, kind: 'side', zone: zone.index };
+        if (sx < 2 || sx + sw > w - 2) continue;
+        if (allRooms.some((r) => labOverlap(side, r, 1))) continue;
+        labCarve(grid, w, side);
+        const cy = br.y + (br.h >> 1);
+        if (dir > 0) fill(grid, w, br.x + br.w - 1, cy - 1, sx + 1, cy, 0);
+        else fill(grid, w, sx + sw - 2, cy - 1, br.x + 1, cy, 0);
+        sides.push(side);
+        allRooms.push(side);
+        break;
+      }
+    }
+  }
+
+  // --- 4. 起点 / 消毒间 ----------------------------------------------------
+  const startRoom = zones[0].main[0];
+  const spawnTile = {
+    x: startRoom.x + (startRoom.w >> 1),
+    y: startRoom.y + (startRoom.h >> 1),
+  };
+  const deconRooms = [];
+  for (let z = 1; z < 3; z++) {
+    const r = zones[z].main[0];
+    r.decon = true;
+    deconRooms.push(r);
+  }
+
+  // --- 5. 区域之间的门和走廊，以及最后的实验室终点 -------------------------
+  const gates = [];
+  const addGate = (room, z) => {
+    const gx = room.x + (room.w >> 1) - 1;
+    const gy = room.y + room.h - 1;
+    grid[at(w, gx, gy)] = 3;
+    grid[at(w, gx + 1, gy)] = 3;
+    gates.push({
+      zone: z,
+      require: `card${z + 1}`,
+      cells: [at(w, gx, gy), at(w, gx + 1, gy)],
+      tx: gx,
+      ty: gy,
+      x: (gx + 1) * TILE,
+      y: (gy + 0.5) * TILE,
+      open: false,
+    });
+    return { gx, gy };
+  };
+
+  for (let z = 0; z < 2; z++) {
+    const end = zones[z].main[zones[z].n - 1];
+    const { gx, gy } = addGate(end, z);
+    const nextStart = zones[z + 1].main[0];
+    const targetX = nextStart.x + (nextStart.w >> 1) - 1;
+    const landingY = LAB.ZONE_Y[z + 1] - 5;
+    fill(grid, w, gx, gy + 1, gx + 1, landingY + 1, 0);
+    fill(grid, w, Math.min(gx, targetX), landingY, Math.max(gx + 1, targetX + 1), landingY + 1, 0);
+    fill(grid, w, targetX, landingY + 1, targetX + 1, nextStart.y + 1, 0);
+  }
+
+  const lastEnd = zones[2].main[zones[2].n - 1];
+  const { gx, gy } = addGate(lastEnd, 2);
+  const finalRoom = {
+    x: Math.max(2, Math.min(w - 11, lastEnd.x + (lastEnd.w >> 1) - 4)),
+    y: lastEnd.y + lastEnd.h + 4,
+    w: 9,
+    h: 8,
+    kind: 'final',
+    zone: 2,
+  };
+  labCarve(grid, w, finalRoom);
+  fill(grid, w, gx, gy + 1, gx + 1, finalRoom.y + 1, 0);
+  allRooms.push(finalRoom);
+  const finalTile = { x: finalRoom.x + (finalRoom.w >> 1), y: finalRoom.y + (finalRoom.h >> 1) };
+
+  // --- 6. 门禁卡 -----------------------------------------------------------
+  const CARD_COLORS = ['90,170,255', '190,130,255', '235,245,255'];
+  const cards = [];
+  for (const zone of zones) {
+    const room = zone.cardRoom;
+    const tx = room.x + (room.w >> 1);
+    const ty = room.y + (room.h >> 1);
+    const card = {
+      id: `card${zone.index + 1}`,
+      zone: zone.index,
+      tx,
+      ty,
+      x: (tx + 0.5) * TILE,
+      y: (ty + 0.5) * TILE,
+      color: CARD_COLORS[zone.index],
+      taken: false,
+      pulseT: 1.2 + Math.random() * 1.2,
+    };
+    cards.push(card);
+    zone.card = card;
+  }
+
+  // --- 7. 培养皿（约占房间数的 1/10） -------------------------------------
+  const dishPool = allRooms.filter(
+    (r) => r.kind === 'main' || r.kind === 'end' || r.kind === 'branch',
+  );
+  shuffle(dishPool, rnd);
+  const dishCount = Math.max(2, Math.round(allRooms.length * 0.1));
+  const dishes = [];
+  for (const room of dishPool) {
+    if (dishes.length >= dishCount) break;
+    // 独立的三格展示墙：放在房间内侧、离门口两格，打碎后也不会通向虚空。
+    const fromTop = room.kind !== 'branch';
+    const ty = fromTop ? room.y + 2 : room.y + room.h - 3;
+    const lo = room.x + 2;
+    const hi = room.x + room.w - 4;
+    if (hi <= lo) continue;
+    const tx = ri(rnd, lo, hi);
+    let ok = true;
+    for (let d = -1; d <= 1; d++) {
+      if (grid[at(w, tx + d, ty)] !== 0) ok = false;
+    }
+    if (!ok) continue;
+    for (let d = -1; d <= 1; d++) grid[at(w, tx + d, ty)] = 4;
+    dishes.push({
+      zone: room.zone,
+      tx,
+      ty,
+      x: (tx + 0.5) * TILE,
+      y: (ty + 0.5) * TILE,
+      cells: [at(w, tx - 1, ty), at(w, tx, ty), at(w, tx + 1, ty)],
+      broken: false,
+    });
+  }
+
+  // --- 7b. 室内隔断：不贴外墙的短墙/立柱，增加房间层次 ---------------------
+  const protectedCells = [];
+  for (const c of cards) protectedCells.push({ x: c.tx, y: c.ty });
+  protectedCells.push(spawnTile, finalTile);
+  for (const d of dishes) {
+    protectedCells.push({ x: d.tx, y: d.ty });
+    protectedCells.push({ x: d.tx - 1, y: d.ty }, { x: d.tx + 1, y: d.ty });
+  }
+  for (const room of allRooms) {
+    if (room.kind === 'final' || room.kind === 'card') continue;
+    labInnerWalls(grid, w, room, rnd, protectedCells);
+  }
+
+  // --- 8. 毒雾：每个房间约 1/5 的地板，成片出现 ----------------------------
+  const fog = new Uint8Array(w * h);
+  for (const room of allRooms) {
+    if (room.kind === 'start' || room.kind === 'card' || room.decon) continue;
+    if (room.kind === 'final') continue;
+    const cells = [];
+    for (let y = room.y + 1; y <= room.y + room.h - 2; y++) {
+      for (let x = room.x + 1; x <= room.x + room.w - 2; x++) {
+        if (grid[at(w, x, y)] === 0) cells.push({ x, y });
+      }
+    }
+    if (!cells.length) continue;
+    const want = Math.floor(cells.length * 0.2);
+    let made = 0;
+    let guard = 0;
+    while (made < want && guard++ < 200) {
+      const c = cells[(rnd() * cells.length) | 0];
+      const rad = 1 + ((rnd() * 2) | 0);
+      for (let dy = -rad; dy <= rad; dy++) {
+        for (let dx = -rad; dx <= rad; dx++) {
+          const x = c.x + dx;
+          const y = c.y + dy;
+          if (x < room.x + 1 || y < room.y + 1 || x > room.x + room.w - 2 || y > room.y + room.h - 2) continue;
+          const i = at(w, x, y);
+          if (grid[i] !== 0 || fog[i]) continue;
+          if (dishes.some((d) => d.tx === x && d.ty === y)) continue;
+          fog[i] = 1;
+          made++;
+        }
+      }
+    }
+  }
+
+  // --- 9. 敌人 -------------------------------------------------------------
+  const monsters = [];
+  for (const zone of zones) {
+    const pool = zone.main.filter((r) => r.kind === 'main');
+    const room = pool[(rnd() * pool.length) | 0] || zone.main[1];
+    for (let i = 0; i < 20; i++) {
+      const tx = ri(rnd, room.x + 2, room.x + room.w - 3);
+      const ty = ri(rnd, room.y + 2, room.y + room.h - 3);
+      if (grid[at(w, tx, ty)] !== 0) continue;
+      monsters.push({ x: tx, y: ty, type: 'hunter', speed: 83, alertSpeed: 110 });
+      break;
+    }
+  }
+
+  const labEnemies = [];
+  const homeOf = (room) => ({
+    tx0: room.x + 1,
+    tx1: room.x + room.w - 2,
+    ty0: room.y + 1,
+    ty1: room.y + room.h - 2,
+    x0: (room.x + 1) * TILE,
+    x1: (room.x + room.w - 1) * TILE,
+    y0: (room.y + 1) * TILE,
+    y1: (room.y + room.h - 1) * TILE,
+  });
+  const floorSpot = (room) => {
+    for (let i = 0; i < 24; i++) {
+      const tx = ri(rnd, room.x + 1, room.x + room.w - 2);
+      const ty = ri(rnd, room.y + 1, room.y + room.h - 2);
+      if (grid[at(w, tx, ty)] === 0) return { x: (tx + 0.5) * TILE, y: (ty + 0.5) * TILE, tx, ty };
+    }
+    return { x: (room.x + 1.5) * TILE, y: (room.y + 1.5) * TILE, tx: room.x + 1, ty: room.y + 1 };
+  };
+
+  for (const zone of zones) {
+    const cr = zone.cardRoom;
+    const b1 = floorSpot(cr);
+    labEnemies.push({
+      type: 'lab2', x: b1.x, y: b1.y, home: homeOf(cr),
+      guardCard: zone.index, locked: true,
+    });
+    const w1 = labWallSpot(rnd, cr);
+    labEnemies.push({
+      type: 'lab3', x: (w1.x + 0.5) * TILE, y: (w1.y + 0.5) * TILE, home: homeOf(cr),
+      guardCard: zone.index, locked: true,
+    });
+    const fr = zone.main[Math.min(2, zone.main.length - 2)];
+    const b2 = floorSpot(fr);
+    labEnemies.push({ type: 'lab2', x: b2.x, y: b2.y, home: homeOf(fr) });
+    const w2 = labWallSpot(rnd, fr);
+    labEnemies.push({
+      type: 'lab3', x: (w2.x + 0.5) * TILE, y: (w2.y + 0.5) * TILE, home: homeOf(fr),
+    });
+  }
+
+  // --- 10. 道具点：每条附属岔路的尽头 --------------------------------------
+  const loot = sides.map((r) => ({ x: r.x + (r.w >> 1), y: r.y + (r.h >> 1) }));
+  for (const zone of zones) {
+    const room = zone.main[1 + ((rnd() * Math.max(1, zone.n - 2)) | 0)];
+    const spot = floorSpot(room);
+    loot.push({ x: spot.tx, y: spot.ty });
+  }
+
+  const rooms = allRooms.map((r) => ({
+    x: r.x, y: r.y, w: r.w, h: r.h,
+    cx: r.x + (r.w >> 1), cy: r.y + (r.h >> 1),
+    kind: r.kind, zone: r.zone,
+  }));
+
+  return {
+    mapId: 'lab',
+    w,
+    h,
+    tile: TILE,
+    size: { w: w * TILE, h: h * TILE },
+    grid,
+    rooms,
+    spawn: { x: (spawnTile.x + 0.5) * TILE, y: (spawnTile.y + 0.5) * TILE },
+    spawnTile,
+    key: null,
+    keyTile: null,
+    exit: null,
+    exits: [],
+    absorb: [],
+    monsters,
+    labEnemies,
+    loot,
+    seed,
+    lab: {
+      zones,
+      cards,
+      gates,
+      dishes,
+      fog,
+      deconRooms,
+      finalExit: {
+        tx: finalTile.x,
+        ty: finalTile.y,
+        x: (finalTile.x + 0.5) * TILE,
+        y: (finalTile.y + 0.5) * TILE,
+      },
+      rooms: allRooms,
+    },
+  };
+}
+
 // ---- src/entities.js ----
 
 function isSolid(grid, w, h, tx, ty) {
@@ -3553,9 +4224,14 @@ class Hunter {
       }
     }
     const alert = (this.alertT || 0) > 0;
-    const speed = game.level && game.level.moving
+    let speed = game.level && game.level.moving
       ? (alert ? 184 : 64)
-      : (this.speedCap || (game.hunterSpeed ? game.hunterSpeed() : 126));
+      : (alert && this.alertSpeed ? this.alertSpeed : (this.speedCap || (game.hunterSpeed ? game.hunterSpeed() : 126)));
+    if (this.boostT > 0) {
+      this.boostT = Math.max(0, this.boostT - dt);
+      speed *= 2;
+    }
+    if (game.fogAt && game.fogAt(this.x, this.y)) speed *= 1.5;
     if (this.pending) {
       this.pending.t -= dt;
       if (this.pending.t <= 0) {
@@ -3883,17 +4559,592 @@ class Skitter {
   }
 }
 
+// ---- src/lab.js ----
+/**
+ * 实验室的两种特殊实验体。
+ *
+ * 实验体 ii 型（LabBrute）是瞎子：它不听声呐，只对"第一个"打到自己的信号
+ * 做出反应——原地蓄力一秒，然后朝那个方向以 5.5 倍玩家速度冲撞六秒，撞墙
+ * 反弹。冲撞期间它不再接收任何声音。
+ *
+ * 实验体 iii 型（LabStalker）贴着房间外墙游荡，游荡时完全无声。听到信号后
+ * 先跑到离声源最近的那面墙，发出一圈长声呐和尖啸，再以 3.5 倍速度扑向声源，
+ * 扑完停顿两秒，退回墙上继续巡逻。
+ */
+
+
+const PLAYER_SPEED = 92;
+// (duplicate clamp removed by the bundler)
+
+function plan(e, game, x, y) {
+  const L = game.level;
+  const sx = Math.floor(e.x / L.tile);
+  const sy = Math.floor(e.y / L.tile);
+  let tx = Math.floor(x / L.tile);
+  let ty = Math.floor(y / L.tile);
+  if (isSolid(L.grid, L.w, L.h, tx, ty)) {
+    const open = nearestOpen(L.grid, L.w, L.h, tx, ty);
+    if (!open) return false;
+    tx = open.x;
+    ty = open.y;
+  }
+  const path = findPath(L.grid, L.w, L.h, sx, sy, tx, ty);
+  if (!path || !path.length) return false;
+  e.path = path.map((p) => ({ x: (p.x + 0.5) * L.tile, y: (p.y + 0.5) * L.tile }));
+  return true;
+}
+
+function walk(e, dt, game, speed) {
+  const L = game.level;
+  while (e.path.length && Math.hypot(e.path[0].x - e.x, e.path[0].y - e.y) < 9) e.path.shift();
+  if (!e.path.length) {
+    e.speed = 0;
+    return true;
+  }
+  const t = e.path[0];
+  const d = Math.hypot(t.x - e.x, t.y - e.y) || 1;
+  const dx = ((t.x - e.x) / d) * speed;
+  const dy = ((t.y - e.y) / d) * speed;
+  e.face = Math.atan2(dy, dx);
+  const res = moveCircle(L.grid, L.w, L.h, L.tile, e.x, e.y, e.r, dx * dt, dy * dt);
+  const moved = Math.hypot(res.x - e.x, res.y - e.y);
+  e.x = res.x;
+  e.y = res.y;
+  e.speed = moved / Math.max(dt, 1e-6);
+  return false;
+}
+
+function roomPoint(e, game, wallOnly = false) {
+  const L = game.level;
+  const h = e.home;
+  for (let i = 0; i < 40; i++) {
+    const tx = wallOnly
+      ? (Math.random() < 0.5
+        ? (Math.random() < 0.5 ? h.tx0 + 1 : h.tx1 - 1)
+        : h.tx0 + 1 + Math.floor(Math.random() * Math.max(1, h.tx1 - h.tx0 - 2)))
+      : h.tx0 + 1 + Math.floor(Math.random() * Math.max(1, h.tx1 - h.tx0 - 2));
+    const ty = wallOnly
+      ? (Math.random() < 0.5
+        ? h.ty0 + 1
+        : h.ty1 - 1)
+      : h.ty0 + 1 + Math.floor(Math.random() * Math.max(1, h.ty1 - h.ty0 - 2));
+    const x = (tx + 0.5) * L.tile;
+    const y = (ty + 0.5) * L.tile;
+    if (!isSolid(L.grid, L.w, L.h, tx, ty)) return { x, y, tx, ty };
+  }
+  return { x: (h.tx0 + 1.5) * L.tile, y: (h.ty0 + 1.5) * L.tile, tx: h.tx0 + 1, ty: h.ty0 + 1 };
+}
+
+function inHome(e, x, y) {
+  const h = e.home;
+  return x >= h.x0 && x <= h.x1 && y >= h.y0 && y <= h.y1;
+}
+
+/** Closest wall tile around a point, used by the stalker's post-card drift. */
+function wallNear(game, x, y) {
+  const L = game.level;
+  const T = L.tile;
+  const px = Math.floor(x / T);
+  const py = Math.floor(y / T);
+  for (let r = 1; r <= 12; r++) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        const tx = px + dx;
+        const ty = py + dy;
+        if (tx < 1 || ty < 1 || tx >= L.w - 1 || ty >= L.h - 1) continue;
+        if (isSolid(L.grid, L.w, L.h, tx, ty)) {
+          return { x: (tx + 0.5) * T, y: (ty + 0.5) * T };
+        }
+      }
+    }
+  }
+  return { x, y };
+}
+
+/**
+ * 无声猎手的“活动范围”：贴着墙体的地板带。
+ *
+ * A body with radius needs more than one cell of clearance to turn a 90°
+ * corner: the exact 1-cell band breaks into disconnected diagonal pieces at
+ * every convex corner. We therefore keep a two-cell band; it still reads as
+ * "hugging the wall", but the path can round corners without clipping one.
+ * 对 iii 型来说，这一圈之外的地板等同于墙——它只沿着墙根走。
+ */
+function activityCell(L, tx, ty, home) {
+  if (tx < 1 || ty < 1 || tx >= L.w - 1 || ty >= L.h - 1) return false;
+  if (home && (tx < home.tx0 || tx > home.tx1 || ty < home.ty0 || ty > home.ty1)) return false;
+  if (L.grid[ty * L.w + tx] !== 0) return false;
+  for (let dy = -2; dy <= 2; dy++) {
+    for (let dx = -2; dx <= 2; dx++) {
+      if (!dx && !dy) continue;
+      const nx = tx + dx;
+      const ny = ty + dy;
+      if (nx < 0 || ny < 0 || nx >= L.w || ny >= L.h) continue;
+      if (L.grid[ny * L.w + nx] !== 0) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * 在“墙根活动范围”内做 BFS，选一个离 (x,y) 最近且可达的格子。
+ * `withinHome` 把范围再限制在出生房间内；锁住的卡房守卫始终受此限制。
+ */
+function planActivity(e, game, x, y, withinHome = false) {
+  const L = game.level;
+  const T = L.tile;
+  const W = L.w;
+  const N = W * L.h;
+  const home = e.locked || withinHome ? e.home : null;
+  const active = (tx, ty) => activityCell(L, tx, ty, home);
+
+  let sx = Math.floor(e.x / T);
+  let sy = Math.floor(e.y / T);
+  if (!active(sx, sy)) {
+    let bx = -1;
+    let by = -1;
+    let bd = Infinity;
+    for (let r = 1; r <= 6 && bx < 0; r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+          const tx = sx + dx;
+          const ty = sy + dy;
+          if (!active(tx, ty)) continue;
+          const d = Math.hypot((tx + 0.5) * T - e.x, (ty + 0.5) * T - e.y);
+          if (d < bd) {
+            bd = d;
+            bx = tx;
+            by = ty;
+          }
+        }
+      }
+    }
+    if (bx < 0) return false;
+    sx = bx;
+    sy = by;
+  }
+
+  const start = sy * W + sx;
+  const prev = new Int32Array(N).fill(-1);
+  const seen = new Uint8Array(N);
+  const queue = new Int32Array(N);
+  let head = 0;
+  let tail = 0;
+  queue[tail++] = start;
+  seen[start] = 1;
+  let best = start;
+  let bestD = Math.hypot((sx + 0.5) * T - x, (sy + 0.5) * T - y);
+
+  while (head < tail) {
+    const i = queue[head++];
+    const tx = i % W;
+    const ty = (i / W) | 0;
+    const d = Math.hypot((tx + 0.5) * T - x, (ty + 0.5) * T - y);
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = tx + dx;
+      const ny = ty + dy;
+      if (!active(nx, ny)) continue;
+      const ni = ny * W + nx;
+      if (seen[ni]) continue;
+      seen[ni] = 1;
+      prev[ni] = i;
+      queue[tail++] = ni;
+    }
+  }
+
+  const pts = [];
+  for (let i = best; i !== -1; i = prev[i]) {
+    pts.push({ x: ((i % W) + 0.5) * T, y: (((i / W) | 0) + 0.5) * T });
+    if (i === start) break;
+  }
+  pts.reverse();
+  if (!pts.length) return false;
+  e.path = pts;
+  e.wall = { x: pts[pts.length - 1].x, y: pts[pts.length - 1].y };
+  return true;
+}
+
+/** 实验体 ii 型：蓄力、冲撞、反弹。 */
+class LabBrute {
+  constructor(x, y, home, { guardCard = -1, locked = false } = {}) {
+    this.type = 'lab2';
+    this.x = x;
+    this.y = y;
+    this.r = 16;
+    this.home = home;
+    this.guardCard = guardCard;
+    this.locked = locked;
+    this.state = 'wander';
+    this.path = [];
+    this.target = null;
+    this.wanderT = 0.5;
+    this.autoT = 0;
+    this.wasSneak = false;
+    this.windT = 0;
+    this.chargeT = 0;
+    this.restT = 0;
+    this.vx = 0;
+    this.vy = 0;
+    this.speed = 0;
+    this.face = 0;
+    this.alertT = 0;
+    this.boostT = 0;
+    this.emitT = 0;
+    this.trailT = 0;
+    this.stepT = 0;
+    this.hitWall = 0;
+  }
+
+  hear(x, y) {
+    if (this.locked && !inHome(this, x, y)) return;
+    if (this.state === 'windup' || this.state === 'charge' || this.state === 'rest') return;
+    this.alertT = 4;
+    this.state = 'windup';
+    this.windT = 1;
+    this.target = { x, y };
+    this.path = [];
+    this.speed = 0;
+  }
+
+  update(dt, game) {
+    this.boostT = Math.max(0, this.boostT - dt);
+    this.alertT = Math.max(0, this.alertT - dt);
+    const mul = this.boostT > 0 ? 2 : 1;
+    const L = game.level;
+    this.emitT -= dt;
+    this.trailT -= dt;
+    this.stepT -= dt;
+
+    if (this.state === 'wander') {
+      // Once its card is taken, a card-room guard follows the player while
+      // the player is noisy. Sneaking breaks the trail and sends it wandering.
+      if (this.guardCard >= 0 && !this.locked && game.player && this.alertT <= 0) {
+        this.autoT -= dt;
+        if (game.sneak) {
+          if (!this.wasSneak) {
+            this.path = [];
+            this.autoT = 0;
+          }
+        } else if (this.autoT <= 0) {
+          this.autoT = 1.6;
+          plan(this, game, game.player.x, game.player.y);
+          this.wanderT = 2;
+        }
+        this.wasSneak = game.sneak;
+      }
+      this.wanderT -= dt;
+      if (!this.path.length || this.wanderT <= 0) {
+        this.wanderT = 2.4 + Math.random() * 2;
+        const p = roomPoint(this, game);
+        plan(this, game, p.x, p.y);
+      }
+      walk(this, dt, game, PLAYER_SPEED * 0.5 * mul);
+      if (this.speed > 8 && this.stepT <= 0) {
+        this.stepT = 0.55;
+        game.spawnRays(this.x, this.y, {
+          count: 6,
+          speed: 95,
+          life: 0.5,
+          tint: '255,170,90',
+          tag: null,
+          kind: 'brute-step',
+        });
+      }
+      return;
+    }
+
+    if (this.state === 'windup') {
+      this.windT -= dt;
+      this.speed = 0;
+      if (this.emitT <= 0) {
+        this.emitT = 0.1;
+        game.spawnRays(this.x, this.y, { count: 10, speed: 240, life: 0.26, tint: '255,170,90', tag: null, kind: 'brute', even: true });
+      }
+      if (this.windT <= 0) {
+        const dx = this.target.x - this.x;
+        const dy = this.target.y - this.y;
+        const d = Math.hypot(dx, dy) || 1;
+        this.vx = dx / d;
+        this.vy = dy / d;
+        this.state = 'charge';
+        this.chargeT = 6;
+        game.audio?.bruteCharge?.(0, 1);
+      }
+      return;
+    }
+
+    if (this.state === 'charge') {
+      this.chargeT -= dt;
+      const sp = PLAYER_SPEED * 5.5 * mul;
+      const bx = this.x;
+      const by = this.y;
+      const res = moveCircle(L.grid, L.w, L.h, L.tile, this.x, this.y, this.r, this.vx * sp * dt, this.vy * sp * dt);
+      let hit = false;
+      const wantX = this.vx * sp * dt;
+      const wantY = this.vy * sp * dt;
+      if (Math.abs(this.vx) > 0.05 && Math.abs(res.x - bx) < Math.abs(wantX) * 0.45) {
+        this.vx = -this.vx;
+        hit = true;
+      }
+      if (Math.abs(this.vy) > 0.05 && Math.abs(res.y - by) < Math.abs(wantY) * 0.45) {
+        this.vy = -this.vy;
+        hit = true;
+      }
+      this.x = res.x;
+      this.y = res.y;
+      this.face = Math.atan2(this.vy, this.vx);
+      this.speed = sp;
+      // 守卫在拿到卡之前不会冲出卡房；撞到门框就反弹。
+      if (this.locked) {
+        const h = this.home;
+        if (this.x < h.x0 + this.r || this.x > h.x1 - this.r) {
+          this.x = clamp(this.x, h.x0 + this.r, h.x1 - this.r);
+          this.vx = -this.vx;
+          hit = true;
+        }
+        if (this.y < h.y0 + this.r || this.y > h.y1 - this.r) {
+          this.y = clamp(this.y, h.y0 + this.r, h.y1 - this.r);
+          this.vy = -this.vy;
+          hit = true;
+        }
+      }
+      if (hit) {
+        this.hitWall = 0.25;
+        game.tryBreakDishAt?.(this.x, this.y, this.r + 6);
+      }
+      if (this.trailT <= 0) {
+        this.trailT = 0.055;
+        game.spawnRays(this.x, this.y, { count: 10, speed: 210, life: 0.22, tint: '255,140,80', tag: null, kind: 'brute', even: true });
+      }
+      game.tryBreakDishAt?.(this.x, this.y, this.r + 4);
+      if (this.chargeT <= 0) {
+        this.state = 'rest';
+        this.restT = 1.4;
+        this.speed = 0;
+        this.vx = 0;
+        this.vy = 0;
+      }
+      return;
+    }
+
+    if (this.state === 'rest') {
+      this.restT -= dt;
+      this.speed = 0;
+      if (this.restT <= 0) {
+        this.state = 'wander';
+        this.wanderT = 0;
+      }
+    }
+  }
+}
+
+/** 实验体 iii 型：贴墙的无声猎手。 */
+class LabStalker {
+  constructor(x, y, home, { guardCard = -1, locked = false } = {}) {
+    this.type = 'lab3';
+    this.x = x;
+    this.y = y;
+    this.r = 9;
+    this.home = home;
+    this.guardCard = guardCard;
+    this.locked = locked;
+    this.state = 'wander';
+    this.path = [];
+    this.target = null;
+    this.wall = null;
+    this.wanderT = 0.4;
+    this.autoT = 0;
+    this.wasSneak = false;
+    this.huntT = 0;
+    this.pauseT = 0;
+    this.windT = 0;
+    this.speed = 0;
+    this.face = 0;
+    this.alertT = 0;
+    this.boostT = 0;
+    this.emitT = 0;
+    this.screeched = false;
+  }
+
+  hear(x, y) {
+    if (this.locked && !inHome(this, x, y)) return;
+    if (this.state === 'windup' || this.state === 'hunt' || this.state === 'pause') return;
+    this.alertT = 5;
+    this.target = { x, y };
+    this.wall = null;
+    this.state = 'approach';
+    this.screeched = false;
+    this.path = [];
+    this._needPath = true;
+  }
+
+  _nearestWallPoint(x, y) {
+    const h = this.home;
+    const tile = this.tile || 32;
+    const tx = clamp(Math.floor(x / tile), h.tx0 + 1, h.tx1 - 1);
+    const ty = clamp(Math.floor(y / tile), h.ty0 + 1, h.ty1 - 1);
+    const cands = [
+      { tx, ty: h.ty0 + 1 },
+      { tx, ty: h.ty1 - 1 },
+      { tx: h.tx0 + 1, ty },
+      { tx: h.tx1 - 1, ty },
+    ];
+    let best = cands[0];
+    let bd = Infinity;
+    for (const c of cands) {
+      const d = Math.hypot((c.tx + 0.5) * tile - x, (c.ty + 0.5) * tile - y);
+      if (d < bd) {
+        bd = d;
+        best = c;
+      }
+    }
+    return { x: (best.tx + 0.5) * tile, y: (best.ty + 0.5) * tile };
+  }
+
+  update(dt, game) {
+    this.boostT = Math.max(0, this.boostT - dt);
+    this.alertT = Math.max(0, this.alertT - dt);
+    const mul = this.boostT > 0 ? 2 : 1;
+    this.emitT -= dt;
+
+    if (this.state === 'wander') {
+      if (this.guardCard >= 0 && !this.locked && game.player && this.alertT <= 0) {
+        this.autoT -= dt;
+        if (game.sneak) {
+          if (!this.wasSneak) {
+            this.path = [];
+            this.autoT = 0;
+          }
+        } else if (this.autoT <= 0) {
+          this.autoT = 1.6;
+          if (!planActivity(this, game, game.player.x, game.player.y)) {
+            const p = wallNear(game, game.player.x, game.player.y);
+            plan(this, game, p.x, p.y);
+          }
+          this.wanderT = 2;
+        }
+        this.wasSneak = game.sneak;
+      }
+      this.wanderT -= dt;
+      if (!this.path.length || this.wanderT <= 0) {
+        this.wanderT = 2 + Math.random() * 1.6;
+        const p = roomPoint(this, game, true);
+        if (!planActivity(this, game, p.x, p.y, true)) plan(this, game, p.x, p.y);
+      }
+      walk(this, dt, game, PLAYER_SPEED * 0.5 * mul);
+      return;
+    }
+
+    if (this.state === 'approach') {
+      if (this._needPath) {
+        this._needPath = false;
+        const tx = this.target ? this.target.x : this.x;
+        const ty = this.target ? this.target.y : this.y;
+        if (!planActivity(this, game, tx, ty)) {
+          this.wall = this._nearestWallPoint(tx, ty);
+          plan(this, game, this.wall.x, this.wall.y);
+        }
+      }
+      const arrived = walk(this, dt, game, PLAYER_SPEED * 2.5 * mul);
+      if (arrived) {
+        this.state = 'windup';
+        this.windT = 2;
+        this.speed = 0;
+        this.emitT = 0;
+        this.wall = { x: this.x, y: this.y };
+      }
+      return;
+    }
+
+    if (this.state === 'windup') {
+      this.windT -= dt;
+      this.speed = 0;
+      if (this.emitT <= 0) {
+        this.emitT = 0.1;
+        game.spawnRays(this.x, this.y, {
+          count: 10,
+          speed: 230,
+          life: 0.22,
+          tint: '190,255,210',
+          tag: null,
+          kind: 'stalker',
+          even: true,
+        });
+      }
+      if (this.windT <= 0) {
+        this.state = 'hunt';
+        this.huntT = 2.2;
+        this.screeched = true;
+        game.audio?.screech?.(0, 1);
+        game.spawnRays(this.x, this.y, {
+          count: 40,
+          speed: 250,
+          life: 1.1,
+          tint: '190,255,210',
+          tag: null,
+          kind: 'screech',
+        });
+        this.huntPath = true;
+      }
+      return;
+    }
+
+    if (this.state === 'hunt') {
+      if (this.huntPath) {
+        plan(this, game, this.target ? this.target.x : this.x, this.target ? this.target.y : this.y);
+        this.huntPath = false;
+      }
+      this.huntT -= dt;
+      const arrived = walk(this, dt, game, PLAYER_SPEED * 3.5 * mul);
+      if (this.emitT <= 0) {
+        this.emitT = 0.07;
+        game.spawnRays(this.x, this.y, { count: 10, speed: 260, life: 0.2, tint: '170,255,220', tag: null, kind: 'stalker', even: true });
+      }
+      if (arrived || this.huntT <= 0) {
+        this.state = 'pause';
+        this.pauseT = 2;
+        this.speed = 0;
+      }
+      return;
+    }
+
+    if (this.state === 'pause') {
+      this.pauseT -= dt;
+      this.speed = 0;
+      if (this.pauseT <= 0) {
+        this.state = 'return';
+        this._needPath = true;
+      }
+      return;
+    }
+
+    if (this.state === 'return') {
+      if (this._needPath) {
+        this._needPath = false;
+        if (this.wall && !planActivity(this, game, this.wall.x, this.wall.y)) {
+          plan(this, game, this.wall.x, this.wall.y);
+        }
+      }
+      const arrived = walk(this, dt, game, PLAYER_SPEED * 2.5 * mul);
+      this.speed = Math.min(this.speed, PLAYER_SPEED * 2.5);
+      if (arrived) {
+        this.state = 'wander';
+        this.wanderT = 0.4;
+        this.path = [];
+      }
+    }
+  }
+}
+
 // ---- src/input.js ----
-const MOVE_KEYS = {
-  KeyW: 'up',
-  ArrowUp: 'up',
-  KeyS: 'down',
-  ArrowDown: 'down',
-  KeyA: 'left',
-  ArrowLeft: 'left',
-  KeyD: 'right',
-  ArrowRight: 'right',
-};
+// Raw devices in, named actions out. Keyboard, mouse and gamepad all feed the
+// same pressed/held sets, so the rest of the game never asks for a key code.
 
 class Input {
   constructor(target = window, canvas = null) {
@@ -3903,6 +5154,10 @@ class Input {
     this.mouseDown = false;
     this.anyKey = false;
     this.pointer = { x: 0, y: 0 };
+    this.settings = null;
+    this.pad = null;
+    this.padConnected = false;
+    this.padPrev = [];
 
     target.addEventListener('keydown', (e) => {
       if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
@@ -3942,14 +5197,72 @@ class Input {
     });
   }
 
-  down(code) {
-    return this.keys.has(code);
+  /** Called once per frame, before the game reads input. */
+  poll() {
+    const gp = typeof navigator !== 'undefined' && navigator.getGamepads
+      ? Array.from(navigator.getGamepads()).find(Boolean)
+      : null;
+    this.pad = gp || null;
+    this.padConnected = !!gp;
+    if (!gp) return;
+    const buttons = gp.buttons || [];
+    for (let i = 0; i < buttons.length; i++) {
+      const on = !!buttons[i] && (buttons[i].pressed || buttons[i].value > 0.5);
+      if (on && !this.padPrev[i]) this.pressed.add(`Pad${i}`);
+      this.padPrev[i] = on;
+    }
   }
 
-  consume(code) {
+  padJustPressed() {
+    for (const code of this.pressed) if (code.startsWith('Pad')) return true;
+    return false;
+  }
+
+  codes(action) {
+    const b = this.settings && this.settings.bindings && this.settings.bindings[action];
+    return b ? b.keys : [];
+  }
+
+  padIndex(action) {
+    const b = this.settings && this.settings.bindings && this.settings.bindings[action];
+    return b && b.pad && b.pad.length ? b.pad[0] : null;
+  }
+
+  padDown(index) {
+    if (!this.pad || index == null) return false;
+    const b = this.pad.buttons && this.pad.buttons[index];
+    return !!b && (b.pressed || b.value > 0.5);
+  }
+
+  /** Held this frame (keyboard or gamepad). */
+  down(action) {
+    if (this.codes(action).some((c) => this.keys.has(c))) return true;
+    return this.padDown(this.padIndex(action));
+  }
+
+  /** Pressed once this frame; consumes the press. */
+  consume(action) {
+    let hit = false;
+    for (const c of this.codes(action)) {
+      if (this.pressed.delete(c)) hit = true;
+    }
+    const p = this.padIndex(action);
+    if (p != null && this.pressed.delete(`Pad${p}`)) hit = true;
+    return hit;
+  }
+
+  /** Escape hatch for debug keys that intentionally bypass the bindings. */
+  consumeCode(code) {
     const has = this.pressed.has(code);
     if (has) this.pressed.delete(code);
     return has;
+  }
+
+  /** Forget queued presses of an action (used when a tutorial starts). */
+  clearAction(action) {
+    for (const c of this.codes(action)) this.pressed.delete(c);
+    const p = this.padIndex(action);
+    if (p != null) this.pressed.delete(`Pad${p}`);
   }
 
   consumeAny() {
@@ -3961,16 +5274,23 @@ class Input {
   moveVector() {
     let x = 0;
     let y = 0;
-    for (const code of this.keys) {
-      const dir = MOVE_KEYS[code];
-      if (dir === 'up') y -= 1;
-      else if (dir === 'down') y += 1;
-      else if (dir === 'left') x -= 1;
-      else if (dir === 'right') x += 1;
+    if (this.down('up')) y -= 1;
+    if (this.down('down')) y += 1;
+    if (this.down('left')) x -= 1;
+    if (this.down('right')) x += 1;
+    // Left stick is analogue; the dpad above is already digital.
+    if (this.pad) {
+      const ax = this.pad.axes[0] || 0;
+      const ay = this.pad.axes[1] || 0;
+      if (Math.hypot(ax, ay) > 0.28) {
+        x += ax;
+        y += ay;
+      }
     }
-    if (x && y) {
-      x *= Math.SQRT1_2;
-      y *= Math.SQRT1_2;
+    const len = Math.hypot(x, y);
+    if (len > 1) {
+      x /= len;
+      y /= len;
     }
     return { x, y };
   }
@@ -4045,6 +5365,15 @@ class AudioEngine {
   toggleMute() {
     this.setMuted(!this.muted);
     return this.muted;
+  }
+
+  /** Live volume changes, also from the settings panel. 0..1. */
+  setVolume(v) {
+    this.volume = Math.min(1, Math.max(0, Number(v) || 0));
+    if (this.master && !this.muted) {
+      this.master.gain.cancelScheduledValues(this.ctx.currentTime);
+      this.master.gain.setTargetAtTime(this.volume, this.ctx.currentTime, 0.05);
+    }
   }
 
   _impulse(seconds, decay) {
@@ -4334,6 +5663,19 @@ class AudioEngine {
     for (const [f, i] of [[2400, 0], [3100, 0.045], [4200, 0.09]]) {
       this.tone({ freq: f, freqEnd: f * 0.62, type: 'triangle', dur: 0.32, gain: 0.03, send: 0.6, delay: i });
     }
+  }
+
+  /** The silent hunter finds a wall and screams down it. */
+  screech(pan = 0, loud = 1) {
+    this.tone({ freq: 3200, freqEnd: 1400, type: 'sawtooth', dur: 0.55, gain: 0.05 * loud, pan, send: 1.2 });
+    this.tone({ freq: 4700, freqEnd: 2200, type: 'square', dur: 0.35, gain: 0.025 * loud, pan, send: 1.1 });
+    this.noise({ dur: 0.4, gain: 0.06 * loud, type: 'highpass', freq: 1800, pan, send: 1.0 });
+  }
+
+  /** A brute winding up before the six-second charge. */
+  bruteCharge(pan = 0, loud = 1) {
+    this.tone({ freq: 70, freqEnd: 120, type: 'sawtooth', dur: 0.9, gain: 0.09 * loud, pan, send: 0.6 });
+    this.noise({ dur: 0.8, gain: 0.04 * loud, type: 'lowpass', freq: 380, pan, send: 0.5 });
   }
 
   /** b2 breaks: the whole structure drops a floor. */
@@ -4864,7 +6206,7 @@ const ITEM_GLYPH = {
 // Startup self-check: proves the build the browser actually loaded is intact.
 // This exists because a stale module cache once made bug fixes look absent
 // until Ctrl+F5 — so the boot screen now shows what loaded and what works.
-const VERSION = '0.8.11';
+const VERSION = '0.8.12';
 
 const SCRIPT_VERSION = () => {
   const s = [...document.scripts].map((el) => el.src).find((src) => src.includes('main.js'));
@@ -4878,7 +6220,7 @@ const AUDIO_VOICES = [
   'tone', 'noise', 'setSector', 'ping', 'echo', 'skitterTick', 'gateHum',
   'deny', 'alert', 'footstep', 'hunterStep', 'shard', 'shardEcho', 'gateOpen',
   'heartbeat', 'death', 'clear', 'click', 'update', 'setMuted',
-  'floorChime', 'swapRumble', 'glassBreak', 'b2Quake', 'mcStopped',
+  'floorChime', 'swapRumble', 'glassBreak', 'b2Quake', 'mcStopped', 'screech', 'bruteCharge',
 ];
 
 function collectChecks(game) {
@@ -5155,10 +6497,13 @@ class Renderer {
     ctx.translate(this.cw / 2 - cx * this.scale + sx, this.ch / 2 - cy * this.scale + sy);
     ctx.scale(this.scale, this.scale);
 
+    this._drawLab(game, now);
+
     // ---- sonar: sparks fly out, bounce off walls, leave short comet tails ---
     // Stealth is silence, and silence is blindness: nothing renders at all.
     const vision = !game.blind;
     const rays = vision ? game.rays || [] : [];
+    const brightness = Math.max(0.3, Math.min(1.8, game.settings ? game.settings.brightness : 1));
     if (rays.length) {
       ctx.globalCompositeOperation = 'lighter';
       ctx.lineCap = 'round';
@@ -5169,8 +6514,12 @@ class Renderer {
         const fade = r.age <= r.life ? 1 : Math.max(0, 1 - (r.age - r.life) / 1.2);
         if (fade <= 0.02) continue;
         const head = Math.min(1, r.age / r.life);
-        const a = (0.34 - head * 0.2) * fade * (r.tint ? 1.2 : 1);
+        const a = (0.34 - head * 0.2) * fade * (r.tint ? 1.2 : 1) * brightness;
         if (a <= 0.02) continue;
+        // Fog is invisible; a brighter green line is the only cue that a ray
+        // is travelling through it.
+        const fogBoost = r.fog ? 1.85 : 1;
+        const col = r.fog ? '170, 255, 190' : r.tint || RAY_RGB;
         const pts = r.pts;
         const n = pts.length;
         const start = Math.max(0, n - 10);
@@ -5186,15 +6535,15 @@ class Renderer {
             ctx.moveTo(pts[i0].x, pts[i0].y);
             for (let j = i0 + 1; j <= i1; j++) ctx.lineTo(pts[j].x, pts[j].y);
             if (b === batches - 1) ctx.lineTo(r.x, r.y);
-            ctx.strokeStyle = `rgba(${r.tint || RAY_RGB}, ${Math.min(1, ta * (r.hot ? 1.9 : r.tint ? 1.3 : 1))})`;
-            ctx.lineWidth = (r.hot ? 1.6 : r.tint ? 1.0 : 0.8) + ta * (r.hot ? 2.4 : 1.4);
+            ctx.strokeStyle = `rgba(${col}, ${Math.min(1, ta * (r.hot ? 1.9 : r.tint ? 1.3 : 1) * fogBoost)})`;
+            ctx.lineWidth = (r.hot ? 1.6 : r.tint ? 1.0 : 0.8) + ta * (r.hot ? 2.4 : 1.4) + (r.fog ? 0.9 : 0);
             ctx.stroke();
           }
         }
         if (r.age <= r.life) {
-          ctx.fillStyle = `rgba(${r.tint || RAY_RGB}, ${Math.min(0.62, a * (r.hot ? 2.6 : 1.25))})`;
+          ctx.fillStyle = `rgba(${col}, ${Math.min(0.9, a * (r.hot ? 2.6 : 1.25) * fogBoost)})`;
           ctx.beginPath();
-          ctx.arc(r.x, r.y, r.hot ? 2.6 : 1.4, 0, Math.PI * 2);
+          ctx.arc(r.x, r.y, r.hot ? 2.6 : r.fog ? 2.2 : 1.4, 0, Math.PI * 2);
           ctx.fill();
         }
       }
@@ -5517,6 +6866,21 @@ class Renderer {
         ctx.strokeStyle = 'rgba(110, 180, 255, 0.95)';
         ctx.strokeRect(sk.x - 9, sk.y - 9, 18, 18);
       }
+      for (const e of game.labEnemies || []) {
+        const col = e.type === 'lab2' ? '255, 150, 80' : '150, 255, 190';
+        ctx.strokeStyle = `rgba(${col}, 0.95)`;
+        ctx.strokeRect(e.x - e.r, e.y - e.r, e.r * 2, e.r * 2);
+        if (e.path && e.path.length) {
+          ctx.beginPath();
+          ctx.moveTo(e.x, e.y);
+          for (const wp of e.path) ctx.lineTo(wp.x, wp.y);
+          ctx.strokeStyle = `rgba(${col}, 0.4)`;
+          ctx.stroke();
+        }
+        ctx.fillStyle = `rgba(${col}, 0.9)`;
+        ctx.font = '9px monospace';
+        ctx.fillText(`${e.type}:${e.state}`, e.x - 14, e.y - e.r - 5);
+      }
       ctx.restore();
     }
 
@@ -5666,6 +7030,14 @@ class Renderer {
     ctx.restore();
 
     // ---- screen space overlays ---------------------------------------------
+    if (game.stunT > 0) {
+      const r = Math.min(this.cw, this.ch) * 0.46;
+      const g = ctx.createRadialGradient(this.cw / 2, this.ch / 2, r * 0.2, this.cw / 2, this.ch / 2, r);
+      g.addColorStop(0, 'rgba(80, 220, 120, 0)');
+      g.addColorStop(1, `rgba(60, 190, 100, ${Math.min(0.42, 0.18 + game.stunT * 0.1)})`);
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, this.cw, this.ch);
+    }
     const danger = game.danger || 0;
     if (danger > 0.02) {
       const g = ctx.createRadialGradient(
@@ -5704,6 +7076,66 @@ class Renderer {
       ctx.fillStyle = `rgba(190, 255, 245, ${game.flash * 0.06})`;
       ctx.fillRect(0, 0, this.cw, this.ch);
     }
+  }
+
+  /** Lab-only scenery: fog, dishes, gates, cards and the two experimental bodies. */
+  _drawLab(game, now) {
+    const lab = game.lab;
+    const level = game.level;
+    if (!lab || !level) return;
+    const { ctx } = this;
+
+    // Culture dishes: three green sound particles bouncing forever inside the
+    // sealed one-tile cell, drawn exactly like a moving-maze core.
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (const t of game.dishTrails || []) {
+      const d = lab.dishes[t.dish];
+      const pts = t.pts;
+      if (!d || d.broken || !pts || pts.length < 2) continue;
+      const n = pts.length;
+      const start = Math.max(0, n - 22);
+      const tail = pts[start];
+      const grad = ctx.createLinearGradient(tail.x, tail.y, t.x, t.y);
+      grad.addColorStop(0, 'rgba(90, 255, 130, 0)');
+      grad.addColorStop(0.45, 'rgba(90, 255, 130, 0.18)');
+      grad.addColorStop(1, 'rgba(120, 255, 150, 0.8)');
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(pts[start].x, pts[start].y);
+      for (let i = start + 1; i < n - 1; i++) {
+        const mx = (pts[i].x + pts[i + 1].x) / 2;
+        const my = (pts[i].y + pts[i + 1].y) / 2;
+        ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, my);
+      }
+      ctx.lineTo(pts[n - 1].x, pts[n - 1].y);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(170, 255, 185, 0.95)';
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+
+    // Key cards are carried objects, so they stay visible.
+    for (const c of game.mapCards || []) {
+      if (c.taken) continue;
+      const pulse = 0.55 + 0.45 * Math.sin(now * 2.6 + c.zone);
+      ctx.save();
+      ctx.translate(c.x, c.y);
+      ctx.strokeStyle = `rgba(${c.color}, ${0.45 + 0.45 * pulse})`;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.rect(-5, -3.5, 10, 7);
+      ctx.stroke();
+      ctx.fillStyle = `rgba(${c.color}, ${0.5 * pulse})`;
+      ctx.fillRect(-2, -1, 4, 2);
+      ctx.restore();
+    }
+
+    if (lab.finalExit) this._drawExit(lab.finalExit.x, lab.finalExit.y, 0.75, GREEN, now, true);
   }
 
   _drawExit(x, y, a, color, now, open) {
@@ -6009,6 +7441,7 @@ const ICON = {
   muted: '<svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l5 6M22 9l-5 6" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>',
   pencil: '<svg viewBox="0 0 24 24"><path d="M4 20l4-1 11-11-3-3L5 16z" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
   bars: '<svg viewBox="0 0 24 24"><rect x="7" y="5" width="3" height="14"/><rect x="14" y="5" width="3" height="14"/></svg>',
+  gear: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 3.2v2.2M12 18.6v2.2M3.2 12h2.2M18.6 12h2.2M5.8 5.8l1.6 1.6M16.6 16.6l1.6 1.6M18.2 5.8l-1.6 1.6M7.4 16.6l-1.6 1.6" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
 };
 
 function icon(name, cls = '') {
@@ -6040,6 +7473,7 @@ class UI {
           <div class="start-row">
             <button class="btn primary" id="btn-start" aria-label="进入">${icon('play')}</button>
             <button class="btn build" id="btn-edit" aria-label="造图">${icon('pencil')}</button>
+            <button class="btn build" id="btn-settings-title" aria-label="设置">${icon('gear')}</button>
           </div>
           <div class="nest-glyph" id="nest-glyph"></div>
           <div class="chamber-grid" id="chamber-grid"></div>
@@ -6053,6 +7487,7 @@ class UI {
           <div class="icon-row">
             <button class="btn icon" id="btn-resume" aria-label="继续">${icon('resume')}</button>
             <button class="btn icon" id="btn-restart" aria-label="重来">${icon('retry')}</button>
+            <button class="btn icon" id="btn-settings-pause" aria-label="设置">${icon('gear')}</button>
             <button class="btn icon" id="btn-mute" aria-label="静音">${icon('sound')}</button>
             <button class="btn icon" id="btn-title" aria-label="标题">${icon('home')}</button>
           </div>
@@ -6099,6 +7534,42 @@ class UI {
         </div>
       </section>
 
+      <section class="screen settings-screen hidden" id="scr-settings">
+        <div class="panel settings-panel">
+          <div class="settings-head">
+            <span class="settings-title">设置</span>
+            <button class="btn icon small" id="btn-settings-x" aria-label="关闭">&times;</button>
+          </div>
+          <div class="set-row">
+            <span class="set-name">音量</span>
+            <input type="range" id="set-volume" min="0" max="1" step="0.01" aria-label="音量">
+            <span class="set-val" id="set-volume-val">85%</span>
+          </div>
+          <div class="set-row">
+            <span class="set-name">声线亮度</span>
+            <input type="range" id="set-bright" min="0.3" max="1.8" step="0.05" aria-label="声线亮度">
+            <span class="set-val" id="set-bright-val">100%</span>
+          </div>
+          <div class="set-row">
+            <span class="set-name">控制方式</span>
+            <div class="seg" id="set-device">
+              <button class="seg-btn" data-device="keyboard">键鼠</button>
+              <button class="seg-btn" data-device="gamepad">手柄</button>
+            </div>
+            <span class="set-val pad-state" id="set-pad-state">未连接</span>
+          </div>
+          <div class="settings-head binds-head">
+            <span class="set-name">键位</span>
+            <span class="set-hint" id="set-hint">点击一行，再按下新的键</span>
+          </div>
+          <div class="set-binds" id="set-binds"></div>
+          <div class="set-actions">
+            <button class="btn" id="btn-set-reset">恢复默认</button>
+            <button class="btn primary" id="btn-set-close">完成</button>
+          </div>
+        </div>
+      </section>
+
       <div class="hud hidden" id="hud">
         <div class="hud-left">
           <span class="hud-num" id="hud-num" data-sector="I"></span>
@@ -6129,6 +7600,7 @@ class UI {
       dead: $('scr-dead'),
       clear: $('scr-clear'),
       victory: $('scr-victory'),
+      settings: $('scr-settings'),
     };
     this.hud = $('hud');
     this.grid = $('chamber-grid');
@@ -6146,6 +7618,18 @@ class UI {
     this.clearStats = $('clear-stats');
     this.victoryStats = $('victory-stats');
     this.deadDeep = $('dead-deep');
+    this.setVolume = $('set-volume');
+    this.setBright = $('set-bright');
+    this.setVolumeVal = $('set-volume-val');
+    this.setBrightVal = $('set-bright-val');
+    this.setBinds = $('set-binds');
+    this.setHint = $('set-hint');
+    this.setDevice = $('set-device');
+    this.setPadState = $('set-pad-state');
+    this.settingsOpen = false;
+    this.settingsFrom = 'title';
+    this.listen = null;
+    this.listenTimer = 0;
 
     // Buttons blur themselves so Space never triggers twice.
     const bind = (id, fn) => {
@@ -6169,7 +7653,147 @@ class UI {
     bind('btn-next', () => g.next());
     bind('btn-clear-title', () => g.quitToTitle());
     bind('btn-victory-home', () => g.quitToTitle());
+    bind('btn-settings-title', () => g.openSettings());
+    bind('btn-settings-pause', () => g.openSettings());
+    bind('btn-settings-x', () => this.closeSettings());
+    bind('btn-set-close', () => this.closeSettings());
+    bind('btn-set-reset', () => {
+      resetSettings(this.game.settings);
+      this.game.applySettings();
+      this.renderSettings();
+    });
     this.muteBtn = $('btn-mute');
+
+    this.setVolume.addEventListener('input', () => {
+      this.game.settings.volume = Number(this.setVolume.value);
+      this.game.applySettings();
+      this.renderSettings();
+    });
+    this.setBright.addEventListener('input', () => {
+      this.game.settings.brightness = Number(this.setBright.value);
+      this.game.applySettings();
+      this.renderSettings();
+    });
+    this.setDevice.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-device]');
+      if (!btn) return;
+      btn.blur();
+      this.game.settings.device = btn.dataset.device;
+      this.game.applySettings();
+      this.cancelListen();
+      this.renderSettings();
+    });
+    // While a binding row is listening, the next key belongs to it — even
+    // Escape, which would otherwise close the panel.
+    window.addEventListener('keydown', (e) => this.captureKey(e), true);
+  }
+
+  captureKey(e) {
+    if (!this.listen) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (e.code === 'Escape') {
+      this.cancelListen();
+      return;
+    }
+    if (this.listen.device !== 'keyboard') return;
+    bindKey(this.game.settings, this.listen.action, e.code);
+    this.game.applySettings();
+    this.cancelListen();
+  }
+
+  openSettings(from = 'title') {
+    this.settingsFrom = from === 'paused' ? 'paused' : 'title';
+    this.settingsOpen = true;
+    this.hideGuide();
+    this.showScreen('settings');
+    this.renderSettings();
+  }
+
+  closeSettings() {
+    this.cancelListen();
+    this.settingsOpen = false;
+    this.hideScreens();
+    if (this.settingsFrom === 'paused') this.showPause();
+    else this.showTitle(this.game.progress);
+  }
+
+  cancelListen() {
+    if (this.listenTimer) clearInterval(this.listenTimer);
+    this.listenTimer = 0;
+    this.listen = null;
+    this.renderSettings();
+  }
+
+  bindListen(action) {
+    const gp = this.game.settings.device === 'gamepad';
+    this.cancelListen();
+    this.listen = { action, device: gp ? 'gamepad' : 'keyboard' };
+    if (gp) {
+      const prev = [];
+      this.listenTimer = setInterval(() => {
+        if (!this.listen) return;
+        const pads = typeof navigator !== 'undefined' && navigator.getGamepads ? navigator.getGamepads() : null;
+        const pad = pads ? Array.from(pads).find(Boolean) : null;
+        if (!pad) return;
+        const buttons = pad.buttons || [];
+        for (let i = 0; i < buttons.length; i++) {
+          const on = !!buttons[i] && (buttons[i].pressed || buttons[i].value > 0.5);
+          if (on && !prev[i]) {
+            bindPad(this.game.settings, this.listen.action, i);
+            this.game.applySettings();
+            this.cancelListen();
+            return;
+          }
+          prev[i] = on;
+        }
+      }, 90);
+    }
+    this.renderSettings();
+  }
+
+  renderSettings() {
+    if (!this.settingsOpen) return;
+    const s = this.game.settings;
+    this.setVolume.value = String(s.volume);
+    this.setVolumeVal.textContent = `${Math.round(s.volume * 100)}%`;
+    this.setBright.value = String(s.brightness);
+    this.setBrightVal.textContent = `${Math.round((s.brightness / 1.8) * 100)}%`;
+    for (const b of this.setDevice.querySelectorAll('[data-device]')) {
+      b.classList.toggle('on', b.dataset.device === s.device);
+    }
+    const padOk = this.game.input && this.game.input.padConnected;
+    if (this.setPadState) this.setPadState.textContent = padOk ? '已连接' : '未连接';
+    this.setBinds.innerHTML = '';
+    for (const a of ACTIONS) {
+      const row = document.createElement('div');
+      const listening = this.listen && this.listen.action === a.id;
+      row.className = 'bind-row' + (listening ? ' listening' : '');
+      const name = document.createElement('span');
+      name.className = 'bind-name';
+      name.textContent = a.name;
+      const btn = document.createElement('button');
+      btn.className = 'bind-key';
+      const b = s.bindings[a.id];
+      btn.textContent = listening
+        ? '按下…'
+        : s.device === 'gamepad'
+          ? padLabel(b.pad[0])
+          : keyLabel(b.keys[0]);
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        btn.blur();
+        this.bindListen(a.id);
+      });
+      row.appendChild(name);
+      row.appendChild(btn);
+      this.setBinds.appendChild(row);
+    }
+    if (this.setHint) {
+      this.setHint.textContent = this.listen
+        ? (this.listen.device === 'gamepad' ? '按下一个手柄按钮…（Esc 取消）' : '按下新的键…（Esc 取消）')
+        : (s.device === 'gamepad' ? '点击一行，再按下一个手柄按钮' : '点击一行，再按下新的键');
+    }
   }
 
   hideScreens() {
@@ -6184,7 +7808,7 @@ class UI {
   showTitle(progress = {}) {
     this.showScreen('title');
     this.hideHUD();
-    this.guide('摁下空格键以开始', { sticky: true });
+    this.guide(`摁下${this.game.keyName('ping')}以开始`, { sticky: true });
     this.grid.innerHTML = '';
     const unlocked = progress.unlocked || 1;
     const cleared = new Set(progress.cleared || []);
@@ -6811,7 +8435,10 @@ class Game {
   constructor(canvas, uiRoot) {
     this.canvas = canvas;
     this.audio = new AudioEngine();
+    this.settings = loadSettings();
+    this.audio.volume = this.settings.volume;
     this.input = new Input(window, canvas);
+    this.input.settings = this.settings;
     this.renderer = new Renderer(canvas);
     this.ui = new UI(uiRoot, this);
     this.state = 'title';
@@ -6823,6 +8450,15 @@ class Game {
     this.level = null;
     this.player = null;
     this.hunters = [];
+    this.lab = null;
+    this.labEnemies = [];
+    this.mapCards = [];
+    this.dishTrails = [];
+    this.hasCard = new Set();
+    this.stunT = 0;
+    this.fogImmuneT = 0;
+    this.inFog = false;
+    this.deconSeen = new Set();
     this.skitters = [];
     this.shards = [];
     this.particles = [];
@@ -6897,13 +8533,19 @@ class Game {
     this.loadDemo();
 
     this.input.onAnyKey = (e) => {
-      if (this.state !== 'title') return;
+      if (this.state !== 'title' || this.ui.settingsOpen || this.ui.listen) return;
       // Space is the game's one gesture; Enter is the polite alternative.
       if (e && (e.code === 'Space' || e.code === 'Enter')) {
         this.audio.unlock();
         this.startBest();
       }
     };
+    // The first gesture is also the first chance to build the audio graph.
+    // Doing it here (and not only on the start key) means a player who enters
+    // by clicking the play button still hears the game.
+    const wake = () => this.audio.unlock();
+    window.addEventListener('pointerdown', wake, { once: true });
+    window.addEventListener('keydown', wake, { once: true });
     window.addEventListener('resize', () => this.renderer.resize());
     document.addEventListener('visibilitychange', () => {
       if (document.hidden && this.state === 'playing') this.pause();
@@ -7036,6 +8678,7 @@ class Game {
   }
 
   startBest() {
+    this.audio.unlock();
     this.resetRunState();
     if (this.startMap('room', (Math.random() * 1e9) | 0)) { this.beginTutorial(); return; }
     if (this.state !== 'title') { this.beginTutorial(); return; }
@@ -7179,7 +8822,9 @@ class Game {
       ? buildMazeMap(seed)
       : node.kind === 'moving'
         ? buildMovingMap(seed)
-        : buildRoomMap(seed);
+        : node.kind === 'lab'
+          ? buildLabMap(seed)
+          : buildRoomMap(seed);
     this.mapMode = true;
     this.mapId = node.id;
     this.mapSeed = seed;
@@ -7213,12 +8858,27 @@ class Game {
     this.hunters = this.mapNodes.map((m) => {
       const h = new Hunter(m.x * level.tile + level.tile / 2, m.y * level.tile + level.tile / 2, m.type);
       h.speedCap = m.speed || (node.kind === 'maze' ? 76 : node.kind === 'moving' ? 184 : 84);
+      h.alertSpeed = m.alertSpeed || 0;
       h.block = m.block;
       h.layer = m.layer ?? 0;
       h.reserve = !!level.moving && m.layer !== 0;
       h.state = 'idle';
       return h;
     });
+    this.lab = level.lab || null;
+    this.labEnemies = (level.labEnemies || []).map((m) => {
+      const C = m.type === 'lab2' ? LabBrute : LabStalker;
+      const e = new C(m.x, m.y, m.home, { guardCard: m.guardCard ?? -1, locked: !!m.locked });
+      e.tile = level.tile;
+      return e;
+    });
+    this.mapCards = this.lab ? this.lab.cards.map((c) => ({ ...c })) : [];
+    this.dishTrails = this.makeDishTrails(level);
+    this.hasCard = new Set();
+    this.stunT = 0;
+    this.fogImmuneT = 0;
+    this.inFog = false;
+    this.deconSeen = new Set();
     if (level.moving) {
       // Both faces exist in the data, but the guard that rides the room is
       // always the same body. It never blinks out when the room turns over;
@@ -7433,6 +9093,67 @@ class Game {
         if (!last || Math.abs(t.x - last.x) + Math.abs(t.y - last.y) >= 2) {
           t.pts.push({ x: t.x, y: t.y });
           if (t.pts.length > 32) t.pts.shift();
+        }
+      }
+    }
+  }
+
+  /** Three real sound particles per culture dish, bouncing inside its sealed
+   *  one-tile 口 exactly like a moving-maze core. */
+  makeDishTrails(level) {
+    const out = [];
+    if (!level || !level.lab) return out;
+    for (let i = 0; i < level.lab.dishes.length; i++) {
+      const d = level.lab.dishes[i];
+      if (d.broken) continue;
+      for (let k = 0; k < 3; k++) {
+        const a = -Math.PI / 2 + (38 * Math.PI) / 180 + (k * Math.PI * 2) / 3;
+        out.push({ dish: i, x: d.x, y: d.y, dx: Math.cos(a), dy: Math.sin(a), pts: [{ x: d.x, y: d.y }] });
+      }
+    }
+    return out;
+  }
+
+  updateDishTrails(dt) {
+    const L = this.level;
+    if (!L || !this.lab) return;
+    const T = L.tile;
+    for (const t of this.dishTrails || []) {
+      const d = this.lab.dishes[t.dish];
+      if (!d || d.broken) {
+        t.pts.length = 0;
+        continue;
+      }
+      const x0 = d.tx * T + 2;
+      const x1 = (d.tx + 1) * T - 2;
+      const y0 = d.ty * T + 2;
+      const y1 = (d.ty + 1) * T - 2;
+      let left = (RAY_SPEED / 3) * dt;
+      while (left > 0) {
+        const step = Math.min(2, left);
+        left -= step;
+        let nx = t.x + t.dx * step;
+        let ny = t.y + t.dy * step;
+        if (nx < x0) {
+          nx = x0 + (x0 - nx);
+          t.dx = Math.abs(t.dx);
+        } else if (nx > x1) {
+          nx = x1 - (nx - x1);
+          t.dx = -Math.abs(t.dx);
+        }
+        if (ny < y0) {
+          ny = y0 + (y0 - ny);
+          t.dy = Math.abs(t.dy);
+        } else if (ny > y1) {
+          ny = y1 - (ny - y1);
+          t.dy = -Math.abs(t.dy);
+        }
+        t.x = clamp(nx, x0, x1);
+        t.y = clamp(ny, y0, y1);
+        const last = t.pts[t.pts.length - 1];
+        if (!last || Math.abs(t.x - last.x) + Math.abs(t.y - last.y) >= 2) {
+          t.pts.push({ x: t.x, y: t.y });
+          if (t.pts.length > 28) t.pts.shift();
         }
       }
     }
@@ -7719,6 +9440,51 @@ class Game {
     return true;
   }
 
+  /** True when the world point sits inside lab poison fog. */
+  fogAt(x, y) {
+    const lab = this.lab;
+    if (!lab || !lab.fog || !this.level) return false;
+    const tx = Math.floor(x / this.level.tile);
+    const ty = Math.floor(y / this.level.tile);
+    if (tx < 0 || ty < 0 || tx >= this.level.w || ty >= this.level.h) return false;
+    return lab.fog[ty * this.level.w + tx] === 1;
+  }
+
+  /** The bare 5x5 airlock room containing this point, if any. */
+  deconAt(x, y) {
+    const lab = this.lab;
+    if (!lab || !this.level) return null;
+    const T = this.level.tile;
+    for (const r of lab.deconRooms) {
+      if (x > r.x * T && x < (r.x + r.w) * T && y > r.y * T && y < (r.y + r.h) * T) return r;
+    }
+    return null;
+  }
+
+  /** Break a culture dish if the point is close enough. Returns true on break. */
+  tryBreakDishAt(x, y, r = 12) {
+    const lab = this.lab;
+    if (!lab) return false;
+    for (const d of lab.dishes) {
+      if (d.broken) continue;
+      if (dist(x, y, d.x, d.y) > r + 16) continue;
+      d.broken = true;
+      for (const i of d.cells || []) this.level.grid[i] = 0;
+      this.audio.glassBreak();
+      this.spawnRays(d.x, d.y, {
+        count: 24,
+        speed: 300,
+        life: 0.9,
+        tint: '130, 240, 150',
+        kind: 'dish',
+      });
+      this.stepEcho(d.x, d.y, '130, 240, 150', { count: 20, speed: 320, life: 0.8, tagged: false });
+      this.ui.feed('培养皿碎了');
+      return true;
+    }
+    return false;
+  }
+
   /** Nearest thing the player can press F on: loot, key, portal or stair. */
   interactAt() {
     const p = this.player;
@@ -7741,6 +9507,11 @@ class Game {
         }
       }
       for (const e of this.mapExits) take('exit', e, e.x, e.y, 50);
+      if (this.lab) {
+        for (const c of this.mapCards) if (!c.taken) take('card', c, c.x, c.y, 34);
+        for (const g of this.lab.gates) if (!g.open) take('gate', g, g.x, g.y, 56);
+        take('final', this.lab.finalExit, this.lab.finalExit.x, this.lab.finalExit.y, 50);
+      }
     } else if (this.level && this.level.exit) {
       const e = this.level.exit;
       take('stair', e, e.x, e.y, 50);
@@ -7764,13 +9535,27 @@ class Game {
       const it = near.ref;
       const txt = it.kind === 'charm' ? CHARM_TEXT[it.id] : ITEM_TEXT[it.id];
       title = txt.name;
-      body = `${it.kind === 'charm' ? charmText(it.id, 1) : txt.line}\n\n[ F ] 拾取`;
+      body = `${it.kind === 'charm' ? charmText(it.id, 1) : txt.line}\n\n[ ${this.keyName('interact')} ] 拾取`;
     } else if (near.kind === 'key') {
       title = '地图钥匙';
-      body = '按 [ F ] 拾取。\n取得之后，上锁的门才会回应你。';
+      body = `按 [ ${this.keyName('interact')} ] 拾取。\n取得之后，上锁的门才会回应你。`;
     } else if (near.kind === 'button') {
       title = '楼层开关';
-      body = '按 [ F ] 停下整座迷宫。\\n走遍九间屋子，只有这一颗在发金光。';
+      body = `按 [ ${this.keyName('interact')} ] 停下整座迷宫。\\n走遍九间屋子，只有这一颗在发金光。`;
+    } else if (near.kind === 'card') {
+      const c = near.ref;
+      title = `门禁卡 · 第${['一', '二', '三'][c.zone] || '?'}区`;
+      body = `按 [ ${this.keyName('interact')} ] 拾取。\n取得之后，它每十秒都会发出一圈声线。`;
+    } else if (near.kind === 'gate') {
+      const g = near.ref;
+      const has = this.hasCard.has(g.require);
+      title = '区域闸门';
+      body = has
+        ? `按 [ ${this.keyName('interact')} ] 刷开门禁。`
+        : `需要第${['一', '二', '三'][g.zone] || '?'}区的门禁卡。`;
+    } else if (near.kind === 'final') {
+      title = '实验室出口';
+      body = `按 [ ${this.keyName('interact')} ] 离开实验室。`;
     } else if (near.kind === 'exit') {
       const ex = near.ref;
       const dest = mapNode(ex.to);
@@ -7778,11 +9563,11 @@ class Game {
       if (!BUILT_MAPS.has(ex.to)) body = '此路尚未开通。';
       else if (ex.require === 'key' && !this.hasKey) body = '需要地图钥匙。';
       else if (ex.require === 'castle' && !this.castleKey) body = '需要城堡钥匙。';
-      else body = `按 [ F ] 前往「${dest.name}」。`;
+      else body = `按 [ ${this.keyName('interact')} ] 前往「${dest.name}」。`;
       if (dest && dest.sub && BUILT_MAPS.has(ex.to)) body += `\n${dest.sub}`;
     } else {
       title = '出口';
-      body = this.exitOpen ? '按 [ F ] 下行。' : `还需 ${this.shards.length} 块碎片。`;
+      body = this.exitOpen ? `按 [ ${this.keyName('interact')} ] 下行。` : `还需 ${this.shards.length} 块碎片。`;
     }
     this.ui.showTip(title, body, sx + 18, sy - 34);
   }
@@ -7804,6 +9589,35 @@ class Game {
       this.ui.hideTip();
       return this.clearMovingMaze();
     }
+    if (near.kind === 'card') {
+      const c = near.ref;
+      if (c.taken) return false;
+      c.taken = true;
+      this.hasCard.add(c.id);
+      for (const e of this.labEnemies) if (e.guardCard === c.zone) e.locked = false;
+      this.audio.shard();
+      this.flash = 1;
+      this.stepEcho(c.x, c.y, c.color, { count: 30, speed: 360, life: 0.8 });
+      this.ui.feed(`取得第${['一', '二', '三'][c.zone] || '?'}区门禁卡`);
+      this.ui.hideTip();
+      return false;
+    }
+    if (near.kind === 'gate') {
+      const g = near.ref;
+      if (this.hasCard.has(g.require)) {
+        g.open = true;
+        for (const i of g.cells) this.level.grid[i] = 0;
+        this.audio.gateOpen();
+        this.stepEcho(g.x, g.y, g.color, { count: 22, speed: 320, life: 0.7 });
+        this.ui.feed('闸门开了');
+      } else {
+        this.audio.deny();
+        this.ui.toast('deny');
+      }
+      this.ui.hideTip();
+      return false;
+    }
+    if (near.kind === 'final') { this.ui.hideTip(); this.complete(); return true; }
     if (near.kind === 'exit') { this.ui.hideTip(); return this.enterMapExit(near.ref); }
     if (this.exitOpen) { this.complete(); return true; }
     this.audio.deny();
@@ -7820,7 +9634,7 @@ class Game {
     if (res === 'full' || res === 'max') {
       this.audio.deny();
       this.ui.toast('deny');
-      this.ui.guide('背包已满：按 Tab 打开背包，把物品拖到外面即可丢弃');
+      this.ui.guide(`背包已满：按 ${this.keyName('inventory')} 打开背包，把物品拖到外面即可丢弃`);
       return;
     }
     this.loot.splice(this.loot.indexOf(it), 1);
@@ -7837,9 +9651,9 @@ class Game {
     this.ui.feed(`拾取 ${label}`);
     // One introduction per kind: charms are socketed, usable items are bound
     // to the hotkey row, throwables are taught when they are first bound.
-    if (it.kind === 'charm') this.maybeGuide('charm', '你捡到了一个护符，摁下tab以装配');
+    if (it.kind === 'charm') this.maybeGuide('charm', `你捡到了一个护符，摁下${this.keyName('inventory')}以装配`);
     else if (ITEMS[it.id].kind !== 'throw') {
-      this.maybeGuide('item', '你捡到了一个道具，摁下tab以将其绑定在快捷键上');
+      this.maybeGuide('item', `你捡到了一个道具，摁下${this.keyName('inventory')}以将其绑定在快捷键上`);
     }
   }
 
@@ -7868,7 +9682,7 @@ class Game {
     }
     if (!slot) {
       this.audio.deny();
-      this.ui.feed(`${i + 1} 号键是空的`);
+      this.ui.feed(`${this.keyName('hot' + (i + 1))} 是空的`);
       return;
     }
     const def = ITEMS[slot.id];
@@ -7955,7 +9769,8 @@ class Game {
   }
 
   openMapSelect() {
-    const entries = MAP_ORDER.map((id) => {
+    // The lab is found through the moving maze, not from the title menu.
+    const entries = MAP_ORDER.filter((id) => id !== 'lab' || this.debugMode).map((id) => {
       const node = mapNode(id);
       return { id, name: node.name, sub: node.sub || '', built: BUILT_MAPS.has(id) };
     });
@@ -8093,6 +9908,7 @@ class Game {
         const ny = t.y + t.dy * 6;
         const tx = Math.floor(nx / TILE);
         const ty = Math.floor(ny / TILE);
+        if (this.tryBreakDishAt(nx, ny, 6)) { hitWall = true; break; }
         const core = this.level.moving ? coreHitAt(this.level, nx, ny, 32) : null;
         if (core) {
           this.breakCore(core);
@@ -8108,6 +9924,12 @@ class Game {
         if (!t.trail || t.trail.length === 0 || dist2(t.trail[t.trail.length - 1].x, t.trail[t.trail.length - 1].y, nx, ny) > 9) {
           t.trail.push({ x: nx, y: ny });
           if (t.trail.length > 16) t.trail.shift();
+        }
+        for (const e of this.labEnemies || []) {
+          if (dist(t.x, t.y, e.x, e.y) < (e.type === 'lab2' ? 16 : 10)) {
+            hitWall = true;
+            break;
+          }
         }
         for (const h of this.hunters) {
           if (dist(t.x, t.y, h.x, h.y) < 15) {
@@ -8165,6 +9987,9 @@ class Game {
         if (!def.lure) {
           for (const h of this.hunters) {
             if (dist(t.x, t.y, h.x, h.y) < 620) this.alertHunter(h, t.x, t.y, 0.1);
+          }
+          for (const e of this.labEnemies || []) {
+            if (dist(t.x, t.y, e.x, e.y) < 620) e.hear(t.x, t.y);
           }
         }
         this.audio.noise({ dur: 0.22, gain: 0.06, type: 'bandpass', freq: 900, send: 0.5 });
@@ -8510,6 +10335,26 @@ class Game {
     return muted;
   }
 
+  /** The label a prompt should print for an action, honouring gamepad mode. */
+  keyName(action) {
+    const b = (this.settings && this.settings.bindings ? this.settings : defaultSettings()).bindings[action];
+    if (!b) return '';
+    const padMode = this.settings && this.settings.device === 'gamepad' && this.input && this.input.padConnected;
+    if (padMode) return padLabel(b.pad[0]);
+    return keyLabel(b.keys[0]);
+  }
+
+  openSettings() {
+    this.ui.openSettings(this.state);
+  }
+
+  /** Persist and apply the settings the panel just edited. */
+  applySettings() {
+    this.input.settings = this.settings;
+    this.audio.setVolume(this.settings.volume);
+    saveSettings(this.settings);
+  }
+
   pause() {
     if (this.state !== 'playing') return;
     this.state = 'paused';
@@ -8564,6 +10409,11 @@ class Game {
 
     if (!this.frozen) {
       if (this.state !== 'paused') this.now += dt;
+      this.input.poll();
+      if (this.state === 'title' && !this.ui.settingsOpen && this.input.padJustPressed()) {
+        this.audio.unlock();
+        this.startBest();
+      }
       this.handleGlobalKeys();
 
       if (this.state === 'playing') this.update(dt);
@@ -8579,9 +10429,13 @@ class Game {
   };
 
   handleGlobalKeys() {
-    if (this.input.consume('KeyM')) this.toggleMute();
-    if (this.input.consume('Tab')) this.ui.toggleInventory(this);
-    if (this.input.consume('Backquote')) {
+    if (this.ui.settingsOpen) {
+      if (this.input.consume('pause') || this.input.consumeCode('Enter')) this.ui.closeSettings();
+      return;
+    }
+    if (this.input.consume('mute')) this.toggleMute();
+    if (this.input.consume('inventory')) this.ui.toggleInventory(this);
+    if (this.input.consumeCode('Backquote')) {
       this.debugMode = !this.debugMode;
       this.debugInvincible = this.debugMode;
       if (!this.debugMode) this.debugFreeze = false;
@@ -8589,26 +10443,26 @@ class Game {
     }
     // Debug digits must win over the hotkey row, or 2 would just use slot 2.
     let debugDigit = false;
-    if (this.debugMode && this.input.consume('Digit2') && !this.ui.mapSel) {
+    if (this.debugMode && this.input.consumeCode('Digit2') && !this.ui.mapSel) {
       debugDigit = true;
       this.openMapSelect();
     }
-    if (this.debugMode && this.input.consume('Digit1')) {
+    if (this.debugMode && this.input.consumeCode('Digit1')) {
       debugDigit = true;
       this.debugFreeze = !this.debugFreeze;
       this.ui.toast(this.debugFreeze ? 'deny' : 'shard');
     }
     if (!debugDigit) {
       for (let i = 0; i < 4; i++) {
-        if (this.input.consume(`Digit${HOTKEY_ORDER[i]}`)) this.useHotkey(i);
+        if (this.input.consume(`hot${i + 1}`)) this.useHotkey(i);
       }
     }
-    if (this.state === 'edit' && this.input.consume('Escape')) this.closeEditor();
-    else if (this.state === 'playing' && this.input.consume('Escape')) this.pause();
-    else if (this.state === 'paused' && this.input.consume('Escape')) this.resume();
-    else if (this.state === 'dead' && this.input.consume('KeyR')) this.restart();
-    else if (this.state === 'playing' && this.input.consume('KeyR')) this.restart();
-    else if (this.state === 'complete' && (this.input.consume('Enter') || this.input.consume('Space'))) {
+    if (this.state === 'edit' && this.input.consume('pause')) this.closeEditor();
+    else if (this.state === 'playing' && this.input.consume('pause')) this.pause();
+    else if (this.state === 'paused' && this.input.consume('pause')) this.resume();
+    else if (this.state === 'dead' && this.input.consume('restart')) this.restart();
+    else if (this.state === 'playing' && this.input.consume('restart')) this.restart();
+    else if (this.state === 'complete' && (this.input.consumeCode('Enter') || this.input.consume('ping'))) {
       this.next();
     }
   }
@@ -8720,7 +10574,7 @@ class Game {
     }
 
     // Shift is HELD, not toggled: silent and blind while the key is down.
-    const sneaking = this.input.down('ShiftLeft') || this.input.down('ShiftRight');
+    const sneaking = this.input.down('sneak');
     if (sneaking !== this.sneak) {
       this.sneak = sneaking;
       this.audio.click(0.4);
@@ -8729,7 +10583,10 @@ class Game {
     this.blind = false; // sneaking is silence, not blindness: you still see every line
     const creeping = this.sneak;
     const run = false;
-    const move = this.debugMove || this.input.moveVector();
+    const stunned = this.stunT > 0;
+    if (stunned) this.stunT = Math.max(0, this.stunT - dt);
+    this.fogImmuneT = Math.max(0, this.fogImmuneT - dt);
+    const move = stunned ? { x: 0, y: 0 } : (this.debugMove || this.input.moveVector());
 
     const listen = !this.sneak && (this.debugListen === true || (this.listenT > 0.26 && !p.moving));
     this.listen = listen;
@@ -8740,10 +10597,30 @@ class Game {
       this.speedMul = 1 + 2;
       if (this.speedT <= 0) this.speedMul = 1;
     }
-    const motion = p.update(dt, move, { run, listen, creep: this.sneak, creepMul, mul: this.speedMul });
+    const inFog = !this.fogImmuneT && this.fogAt(p.x, p.y);
+    this.inFog = inFog;
+    const motion = p.update(dt, move, { run, listen, creep: this.sneak, creepMul, mul: this.speedMul * (inFog ? 0.8 : 1) });
     const resolved = this.resolve(p, motion.x, motion.y);
     p.x = resolved.x;
     p.y = resolved.y;
+
+    // Decontamination rooms scrub the stun and grant a short fog immunity.
+    if (this.lab) {
+      const tile = this.level.tile;
+      for (const room of this.lab.deconRooms) {
+        const inside = p.x > room.x * tile && p.x < (room.x + room.w) * tile
+          && p.y > room.y * tile && p.y < (room.y + room.h) * tile;
+        if (inside) {
+          this.fogImmuneT = Math.max(this.fogImmuneT, 3);
+          this.stunT = 0;
+          if (!room._wasInside) {
+            this.stepEcho(p.x, p.y, '235, 245, 255', { count: 26, speed: 300, life: 0.9, tagged: false });
+            this.ui.feed('消毒间：声呐被洗净了');
+          }
+        }
+        room._wasInside = inside;
+      }
+    }
     const k = Math.min(1, dt * 7);
     this.camX += (p.x - this.camX) * k;
     this.camY += (p.y - this.camY) * k;
@@ -8781,11 +10658,11 @@ class Game {
     // pinging
     // The left button only throws what a hotkey has bound to the cursor;
     // without a bound throwable it is just the sonar.
-    if (this.input.consume('Mouse0')) {
+    if (!stunned && this.input.consumeCode('Mouse0')) {
       if (this.activeItem) this.throwItem(this.activeItem);
       else this.tryPing();
     }
-    if (this.input.consume('Space') || this.input.consume('KeyJ')) this.firePing();
+    if (!stunned && this.input.consume('ping')) this.firePing();
 
 
     const aim = this.aimPoint();
@@ -8872,12 +10749,22 @@ class Game {
       if (!it.kind && dist2(p.x, p.y, it.x, it.y) < LOOT_REVEAL * LOOT_REVEAL) this.revealLoot(it);
     }
 
+    // 门禁卡 pulse: only the card still in its room calls out; once taken,
+    // the beacon goes quiet.
+    for (const c of this.mapCards || []) {
+      if (c.taken) continue;
+      c.pulseT = (c.pulseT ?? 1) - dt;
+      if (c.pulseT > 0) continue;
+      c.pulseT = 4;
+      this.spawnRays(c.x, c.y, { count: 14, speed: 260, life: 0.7, tint: c.color, tag: null, kind: 'card' });
+    }
+
     // Everything you can touch answers to F: walk close, read the prompt, press it.
     const near = this.interactAt();
     this.nearLoot = near && near.kind === 'loot' ? near.ref : null;
     if (near) this.showInteractTip(near);
     else this.ui.hideTip();
-    if (near && this.input.consume('KeyF')) {
+    if (near && !stunned && this.input.consume('interact')) {
       if (this.doInteract(near)) return;
     }
     this.alertCd -= dt;
@@ -8901,11 +10788,48 @@ class Game {
     // hunters
     let nearest = Infinity;
     for (const h of this.hunters) {
+      const ox = h.x;
+      const oy = h.y;
       h.update(dt, this);
+      if (this.deconAt(h.x, h.y) && !this.deconAt(ox, oy)) {
+        // The airlock scrubs everything that hunts. Bounce the body back to
+        // the threshold and drop its trail so it cannot camp the doorway.
+        h.x = ox;
+        h.y = oy;
+        h.path = [];
+        h.pending = null;
+        h.alertT = 0;
+        h.state = 'idle';
+      }
       const d = dist(p.x, p.y, h.x, h.y);
       if (d < nearest) nearest = d;
       if (d < p.r + h.r - 1) {
         this.hurt(h);
+        return;
+      }
+    }
+
+    for (const e of this.labEnemies || []) {
+      const ox = e.x;
+      const oy = e.y;
+      e.update(dt, this);
+      if (this.deconAt(e.x, e.y) && !this.deconAt(ox, oy)) {
+        e.x = ox;
+        e.y = oy;
+        e.path = [];
+        e.target = null;
+        e.alertT = 0;
+        e.state = 'wander';
+      }
+      const d = dist(p.x, p.y, e.x, e.y);
+      if (d < nearest) nearest = d;
+      if (d < p.r + e.r - 1) {
+        if (this.starT > 0) {
+          this.labEnemies.splice(this.labEnemies.indexOf(e), 1);
+          this.stepEcho(e.x, e.y, '255, 120, 70', { count: 20, speed: 320, life: 0.6, tagged: false });
+          continue;
+        }
+        this.hurt(e);
         return;
       }
     }
@@ -8921,7 +10845,7 @@ class Game {
       }
     }
 
-    this.danger = this.hunters.length
+    this.danger = (this.hunters.length || (this.labEnemies && this.labEnemies.length))
       ? clamp(1 - (nearest - 55) / 300, 0, 1)
       : 0;
     if (this.danger > 0.4) this.danger = Math.min(1, this.danger + 0.1);
@@ -8945,6 +10869,7 @@ class Game {
     this.updateThrows(dt);
     if (this.invulnT > 0) this.invulnT = Math.max(0, this.invulnT - dt);
     this.audio.update(dt, { danger: this.danger });
+    this.updateDishTrails(dt);
     this.updateRays(dt);
     this.updateParticles(dt);
     this.flipFreeze = Math.max(0, (this.flipFreeze || 0) - dt);
@@ -9027,7 +10952,7 @@ class Game {
 
   alertHunter(h, x, y, delay) {
     if (!this.guides?.hunter) {
-      this.maybeGuide('hunter', '你惊扰了一只猎手，按下shift以潜行');
+      this.maybeGuide('hunter', `你惊扰了一只猎手，按下${this.keyName('sneak')}以潜行`);
       this.laterGuide('hunterSound', '猎手可以听到你发出来的声音', 3600);
     }
     const tracking = h.state === 'investigate';
@@ -9072,9 +10997,9 @@ class Game {
     if (this.state !== 'playing' || this.tutorialStarted) return;
     this.tutorialStarted = true;
     // The key that started the game must not also be spent on a ping.
-    this.input.pressed.delete('Space');
+    this.input.clearAction('ping');
     this.input.pressed.delete('Enter');
-    this.ui.guide('空格键可以发出声呐，探索更大的范围');
+    this.ui.guide(`${this.keyName('ping')}可以发出声呐，探索更大的范围`);
   }
 
   /** A follow-up hint with a beat in between, skipped if the moment passed. */
@@ -9123,6 +11048,17 @@ class Game {
    *  Newer tags overwrite older ones; an equal tag changes nothing. */
   onRayTouch(e, tag) {
     if (!e || !tag) return;
+    if (tag.kind === 'dish') {
+      // The shattered dish's ring is a stimulant to everything that hunts.
+      if (e instanceof Hunter || e instanceof LabBrute || e instanceof LabStalker) e.boostT = 2;
+      return;
+    }
+    if (e instanceof LabBrute || e instanceof LabStalker) {
+      if (tag.t <= (e.lastTag ?? -1)) return;
+      e.lastTag = tag.t;
+      e.hear(tag.x, tag.y);
+      return;
+    }
     if (e instanceof Hunter) {
       if (tag.kind === 'lure') {
         // The corpse's call owns the body until it physically arrives, and a
@@ -9166,6 +11102,10 @@ class Game {
     for (const sk of this.skitters) {
       if (dist(x, y, sk.x, sk.y) < 12) return { e: sk, kind: 'skitter', tint: '255,58,58', hot: true };
     }
+    for (const e of this.labEnemies || []) {
+      const rr = e.type === 'lab2' ? 16 : 10;
+      if (dist(x, y, e.x, e.y) < rr) return { e, kind: 'lab', tint: '255,120,70', hot: true };
+    }
     return null;
   }
 
@@ -9181,10 +11121,10 @@ class Game {
     this.spawnRays(x, y, { count, speed, life, tint, tag, kind: opts.kind || 'step', ghost: !!opts.ghost });
   }
 
-  spawnRays(x, y, { count = RAY_COUNT, speed = RAY_SPEED, life = RAY_LIFE, tint = null, kind = 'ping', tag = undefined, sweep = null, ghost = false } = {}) {
+  spawnRays(x, y, { count = RAY_COUNT, speed = RAY_SPEED, life = RAY_LIFE, tint = null, kind = 'ping', tag = undefined, sweep = null, ghost = false, even = false } = {}) {
     const stamp = tag === null ? null : tag || { x, y, t: this.now, kind };
     for (let i = 0; i < count; i++) {
-      const a = (i / count) * Math.PI * 2 + Math.random() * 0.035;
+      const a = (i / count) * Math.PI * 2 + (even ? 0 : Math.random() * 0.035);
       const o = 6 + Math.random() * 9;
       const ox = x + Math.cos(a) * o;
       const oy = y + Math.sin(a) * o;
@@ -9217,6 +11157,9 @@ class Game {
       const r = this.rays[i];
       r.age += dt;
       if (r.age > r.life + 1.5) continue;
+      const ftx = Math.floor(r.x / L.tile);
+      const fty = Math.floor(r.y / L.tile);
+      r.fog = !!(this.lab && this.lab.fog && ftx >= 0 && fty >= 0 && ftx < L.w && fty < L.h && this.lab.fog[fty * L.w + ftx]);
       if (r.ghost && r.age <= r.life) {
         const step = (r.speed || RAY_SPEED) * dt;
         r.x += r.dx * step;
@@ -9236,6 +11179,11 @@ class Game {
           move -= d;
           const nx = r.x + r.dx * d;
           const ny = r.y + r.dy * d;
+          if (r.tag && r.tag.kind === 'dish' && !r.dishHit && dist(nx, ny, this.player.x, this.player.y) < 16) {
+            r.dishHit = true;
+            this.stunT = 2;
+            this.audio.deny();
+          }
           // Only tagged (player-made) sound can touch a body. A hunter's own
           // footstep is scenery: it must not collide with the hunter itself.
           const ent = r.tag ? this.hitEntity(nx, ny) : null;
@@ -9380,6 +11328,25 @@ class Game {
       }
       return;
     }
+    if (this.mapMode && this.mapId === 'lab') {
+      const time = Math.max(0, this.levelTime);
+      const prev = this.progress.labBest;
+      const isRecord = !prev || time < prev.time;
+      if (isRecord) this.progress.labBest = { time, pings: this.pingsUsed };
+      this.progress.labCleared = true;
+      this.saveProgress();
+      this.state = 'victory';
+      this.audio.clear();
+      this.ui.dismiss();
+      this.ui.showWorldVictory({
+        time,
+        pings: this.pingsUsed,
+        best: this.progress.labBest,
+        isRecord,
+        shards: this.collected,
+      });
+      return;
+    }
     if (this.worldMode) {
       const time = Math.max(0, this.levelTime);
       const prev = this.progress.worldBest;
@@ -9514,9 +11481,15 @@ try { sessionStorage.removeItem('hushReload'); } catch {}
 runSelfCheck(game);
 
 // Chrome can suspend/interrupt the audio context after a reload or device change.
+// If the game was entered with a click, the context may not exist yet: build it
+// on this first real gesture instead of waiting for a hard refresh.
 const resumeAudio = () => {
   const a = game.audio;
-  if (!a || !a.ready || !a.ctx) return;
+  if (!a) return;
+  if (!a.ready) {
+    a.unlock();
+    return;
+  }
   if (a.ctx.state === 'suspended' || a.ctx.state === 'interrupted') a.ctx.resume();
 };
 window.addEventListener('pointerdown', resumeAudio, true);

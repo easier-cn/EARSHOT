@@ -4,7 +4,7 @@
 import { Inventory, ITEMS } from './loot.js';
 import { ITEM_TEXT } from './desc.js';
 
-export const VERSION = '0.8.11';
+export const VERSION = '0.8.12';
 
 const SCRIPT_VERSION = () => {
   const s = [...document.scripts].map((el) => el.src).find((src) => src.includes('main.js'));
@@ -18,7 +18,7 @@ const AUDIO_VOICES = [
   'tone', 'noise', 'setSector', 'ping', 'echo', 'skitterTick', 'gateHum',
   'deny', 'alert', 'footstep', 'hunterStep', 'shard', 'shardEcho', 'gateOpen',
   'heartbeat', 'death', 'clear', 'click', 'update', 'setMuted',
-  'floorChime', 'swapRumble', 'glassBreak', 'b2Quake', 'mcStopped',
+  'floorChime', 'swapRumble', 'glassBreak', 'b2Quake', 'mcStopped', 'screech', 'bruteCharge',
 ];
 
 export function collectChecks(game) {
