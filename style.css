@@ -201,7 +201,7 @@ kbd {
 /* chamber picker */
 .chamber-grid {
   display: grid;
-  grid-template-columns: repeat(8, 34px);
+  grid-template-columns: repeat(5, 34px);
   gap: 7px;
   margin-top: 12px;
   animation: fadeUp 1s 0.75s ease both;
@@ -287,6 +287,63 @@ kbd {
   font-size: 9px;
   letter-spacing: 0.28em;
   color: rgba(220, 250, 245, 0.16);
+}
+
+/* ---- boss room name card ------------------------------------------------ */
+.map-title {
+  position: fixed;
+  inset: 0;
+  z-index: 34;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 46%, rgba(4, 10, 12, 0.72), rgba(3, 6, 8, 0.24) 58%, transparent 78%);
+}
+.map-title.hidden { display: none; }
+.mt-name {
+  font-family: var(--mono);
+  font-size: clamp(28px, 5.2vw, 66px);
+  letter-spacing: 0.26em;
+  text-indent: 0.26em;
+  color: #eafffb;
+  text-shadow: 0 0 34px rgba(127, 227, 212, 0.35), 0 0 90px rgba(127, 227, 212, 0.12);
+  opacity: 0;
+}
+.mt-rule {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: min(640px, 68vw);
+  margin-top: 26px;
+  opacity: 0;
+}
+.mt-rule i {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(127, 227, 212, 0.55), transparent);
+}
+.mt-rule b {
+  width: 7px;
+  height: 7px;
+  border: 1px solid rgba(127, 227, 212, 0.8);
+  transform: rotate(45deg);
+  box-shadow: 0 0 14px rgba(127, 227, 212, 0.55);
+}
+.map-title.in .mt-name { animation: mtName 1.5s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.map-title.in .mt-rule { animation: mtRule 1.7s 0.18s ease-out both; }
+.no-anim .map-title .mt-name,
+.no-anim .map-title .mt-rule { opacity: 1; }
+@keyframes mtName {
+  0% { opacity: 0; letter-spacing: 0.48em; filter: blur(7px); transform: translateY(8px); }
+  35% { opacity: 1; }
+  100% { opacity: 1; letter-spacing: 0.26em; filter: blur(0); transform: translateY(0); }
+}
+@keyframes mtRule {
+  0% { opacity: 0; transform: scaleX(0.3); }
+  55% { opacity: 1; }
+  100% { opacity: 1; transform: scaleX(1); }
 }
 
 /* ------------------------------------------------------------------- panels */
@@ -588,7 +645,7 @@ kbd {
   .hud-bottom { left: 18px; right: 18px; bottom: 16px; }
   .hud-hint { display: none; }
   .panel { padding: 34px 26px; }
-  .chamber-grid { grid-template-columns: repeat(4, 34px); }
+  .chamber-grid { grid-template-columns: repeat(5, 34px); }
   .title-inner { gap: 12px; padding: 20px 18px 78px; }
   .logo { font-size: clamp(42px, 12vw, 62px); letter-spacing: 0.22em; text-indent: 0.22em; }
   .emblem { width: 66px; height: 66px; }
@@ -710,7 +767,7 @@ kbd {
 #ui.flash-amber::before { opacity: 1; background: radial-gradient(circle at 50% 60%, rgba(255, 205, 110, 0.10), transparent 60%); }
 #ui.flash-red::before { opacity: 1; background: radial-gradient(circle at 50% 60%, rgba(255, 86, 86, 0.14), transparent 60%); }
 @keyframes introRing { 0% { opacity: 0.9; } 100% { opacity: 0; } }
-.chamber-grid { grid-template-columns: repeat(8, 46px); gap: 6px; }
+.chamber-grid { grid-template-columns: repeat(5, 46px); gap: 6px; }
 .chamber-grid .cell { background: transparent; border: 1px solid rgba(234, 247, 244, 0.14); border-radius: 2px; color: inherit; padding: 0; }
 .chamber-grid .cell.cleared { border-color: rgba(127, 227, 212, 0.45); }
 .chamber-grid .cell:not(.locked):hover { border-color: rgba(127, 227, 212, 0.8); background: rgba(127, 227, 212, 0.05); }
@@ -1161,7 +1218,7 @@ kbd {
 /* Phones: the chamber picker must not widen the title column. The 8x46 grid
    is declared late in the file, so this repeat comes last to win the cascade. */
 @media (max-width: 640px) {
-  .chamber-grid { grid-template-columns: repeat(4, 46px); gap: 6px; }
+  .chamber-grid { grid-template-columns: repeat(5, 46px); gap: 6px; }
 }
 
 /* Very short phones: drop the ornament and tighten, so the start guide never

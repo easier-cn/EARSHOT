@@ -220,3 +220,21 @@ test('death or a new map clears the ceremony instantly', () => {
   assert.equal(g.invertT, 0);
   assert.equal(g.invertHold, false);
 });
+
+test('socketing 绝地求生 mid-run raises the live pool at once', () => {
+  const g = fakeGame();
+  g.inv = new Inventory();
+  g.lives = 1;
+  g.livesMax = 1;
+  g.inv.charms[0] = { kind: 'charm', id: 'survive', lvl: 1 };
+  g.syncLives();
+  assert.equal(g.lives, 2, 'the new life is usable on this map');
+  assert.equal(g.livesMax, 2);
+  g.inv.charms[0].lvl = 2;
+  g.syncLives();
+  assert.equal(g.lives, 3, 'an upgrade adds only the difference');
+  g.inv.charms[0] = null;
+  g.syncLives();
+  assert.equal(g.lives, 1, 'removing the charm clamps the pool');
+  assert.equal(g.livesMax, 1);
+});

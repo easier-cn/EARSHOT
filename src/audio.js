@@ -289,6 +289,42 @@ export class AudioEngine {
     this.noise({ dur: 0.07, gain: 0.035 * loud, type: 'bandpass', freq: 900 + Math.random() * 300, q: 1.2, pan, send: 0.12 });
   }
 
+  /** A pool is never seen; only the footfall changes. */
+  splash(pan = 0, loud = 1) {
+    this.noise({ dur: 0.13, gain: 0.05 * loud, type: 'lowpass', freq: 700, q: 0.9, pan, send: 0.3 });
+    this.noise({ dur: 0.05, gain: 0.025 * loud, type: 'highpass', freq: 2400, pan, send: 0.2, delay: 0.01 });
+    this.tone({ freq: 240, freqEnd: 120, type: 'sine', dur: 0.1, gain: 0.018 * loud, pan, send: 0.15 });
+  }
+
+  /** The cat answers the ping once: close, wrong, and impossible to place. */
+  catCall(pan = 0) {
+    this.tone({ freq: 520, freqEnd: 880, type: 'sine', dur: 0.28, gain: 0.07, pan, send: 0.9, detune: 30 });
+    this.tone({ freq: 880, freqEnd: 430, type: 'sine', dur: 0.42, gain: 0.05, pan, send: 1.1, delay: 0.2 });
+    this.noise({ dur: 0.18, gain: 0.012, type: 'bandpass', freq: 1500, q: 5, pan, send: 0.7 });
+  }
+
+  /** The room is rebuilt while you are still standing in it. */
+  cageShift() {
+    this.noise({ dur: 0.7, gain: 0.05, type: 'bandpass', freq: 320, q: 1.1, send: 0.8 });
+    this.noise({ dur: 0.28, gain: 0.025, type: 'highpass', freq: 2600, send: 0.4, delay: 0.12 });
+    this.tone({ freq: 74, freqEnd: 49, type: 'sine', dur: 0.9, gain: 0.07, send: 0.6 });
+  }
+
+  /** A breaker cracks and lets one purple ring into the room. */
+  deviceBreak(pan = 0) {
+    this.noise({ dur: 0.2, gain: 0.08, type: 'bandpass', freq: 1800, q: 1.4, pan, send: 0.5 });
+    this.tone({ freq: 340, freqEnd: 980, type: 'triangle', dur: 0.45, gain: 0.06, pan, send: 1.0 });
+    this.tone({ freq: 170, freqEnd: 80, type: 'sine', dur: 0.3, gain: 0.05, pan, send: 0.5 });
+  }
+
+  /** The fifth breaker: the observation ends all at once. */
+  cageCollapse() {
+    this.tone({ freq: 62, freqEnd: 28, type: 'sawtooth', dur: 2.4, gain: 0.2, send: 1.4 });
+    this.noise({ dur: 2.2, gain: 0.16, type: 'lowpass', freq: 900, send: 1.6 });
+    this.tone({ freq: 1240, freqEnd: 180, type: 'sine', dur: 1.6, gain: 0.06, send: 1.8 });
+    this.noise({ dur: 0.5, gain: 0.07, type: 'highpass', freq: 3200, send: 0.8, delay: 0.05 });
+  }
+
   hunterStep(pan = 0, closeness = 0.3) {
     this.noise({ dur: 0.1, gain: 0.09 * closeness, type: 'lowpass', freq: 190, q: 0.8, pan, send: 0.25 });
     this.tone({ freq: 62, freqEnd: 44, type: 'sine', dur: 0.16, gain: 0.06 * closeness, pan, send: 0.1 });

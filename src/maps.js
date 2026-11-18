@@ -24,6 +24,7 @@ export const MAPS = {
   rot: { id: 'rot', name: '腐臭之地', kind: 'plain' },
   moving: { id: 'moving', name: '移动迷宫', kind: 'moving' },
   lab: { id: 'lab', name: '实验室', kind: 'lab' },
+  cage: { id: 'cage', name: '薛定谔的猫笼', sub: '实验室核心', kind: 'cage' },
   mech: { id: 'mech', name: '机械地牢', sub: '机械核心', kind: 'mech' },
 };
 
@@ -31,7 +32,7 @@ export const MAPS = {
 export const MAP_ORDER = [
   'room', 'maze', 'meadow', 'swamp', 'witch', 'forestEdge', 'forestCore',
   'castle', 'mountain', 'canyon', 'ruins', 'volcano', 'vault', 'vaultCellar',
-  'vaultSafe', 'sewer', 'gas', 'rot', 'moving', 'lab', 'mech',
+  'vaultSafe', 'sewer', 'gas', 'rot', 'moving', 'lab', 'cage', 'mech',
 ];
 
 export function mapNode(id) {

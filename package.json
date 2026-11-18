@@ -1,13 +1,13 @@
 {
   "name": "earshot",
-  "version": "0.8.17",
+  "version": "0.8.21",
   "private": true,
   "type": "module",
   "description": "EARSHOT — a sonar stealth game played in the dark",
   "scripts": {
     "serve": "python -m http.server 8080 --bind 127.0.0.1",
     "build": "node tools/build.mjs",
-    "test": "node --test tests/levelgen.test.js tests/ai.test.js tests/rooms.test.js tests/worldgen.test.js tests/loot.test.js tests/aim.test.js tests/effects.test.js tests/interact.test.js tests/moving.test.js tests/tutorial.test.js tests/settings.test.js tests/restart.test.js",
+    "test": "node --test tests/levelgen.test.js tests/ai.test.js tests/rooms.test.js tests/worldgen.test.js tests/loot.test.js tests/aim.test.js tests/effects.test.js tests/interact.test.js tests/moving.test.js tests/tutorial.test.js tests/settings.test.js tests/restart.test.js tests/cage.test.js",
     "playtest": "node tools/playtest.mjs",
     "probe": "node tools/probe.mjs",
     "keytest": "node tools/keytest.mjs",

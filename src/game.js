@@ -27,13 +27,17 @@ import {
   nearestOpenInBlock,
 } from './worldgen.js';
 import { mapNode, MAP_ORDER } from './maps.js';
+import { CAGE, buildCageMap, regenerateCage, cageMarkScan, cageWaterAt, cageFogAt, cageLootPixels } from './cage.js';
 import { CHARMS, ITEMS, Inventory } from './loot.js';
 import { CHARM_TEXT, ITEM_TEXT, charmText } from './desc.js';
 import { ACTIONS, loadSettings, saveSettings, bindKey, bindPad, resetSettings, keyLabel, padLabel, defaultSettings } from './settings.js';
 
 const SAVE_KEY = 'hush.save.v1';
 const FLOORS = 5;
-const BUILT_MAPS = new Set(['room', 'maze', 'moving', 'mech', 'lab']);
+// 'mech' has no buildMechMap yet: startMap('mech') falls back to buildRoomMap
+// and ordinary clears loop back into a room. Kept here only as the target of
+// the eight doors until the real map exists.
+const BUILT_MAPS = new Set(['room', 'maze', 'moving', 'mech', 'lab', 'cage']);
 const PING_MAX = 3;
 const PING_REGEN = 2.4;
 const PING_SPEED = 720;
@@ -159,6 +163,8 @@ export class Game {
     this.speedT = 0;
     this.speedMul = 1;
     this.invulnT = 0;
+    this.lives = 1;
+    this.livesMax = 1;
     this.stressCharges = 0;
     this.starT = 0;
     this.counterT = 0;
@@ -221,7 +227,11 @@ export class Game {
 
   // ---------------------------------------------------------------- progress
   loadProgress() {
-    const fallback = { unlocked: 1, cleared: [], last: 0, best: {} };
+    const fallback = {
+      unlocked: 1, cleared: [], last: 0, best: {},
+      labBest: null, labCleared: false,
+      bossBest: null, bossCleared: false,
+    };
     try {
       const raw = localStorage.getItem(SAVE_KEY);
       if (!raw) return fallback;
@@ -235,11 +245,18 @@ export class Game {
           best[i] = { time: v.time, pings: Math.max(0, v.pings | 0) };
         }
       }
+      const rec = (v) => (v && typeof v.time === 'number'
+        ? { time: v.time, pings: Math.max(0, v.pings | 0) }
+        : null);
       return {
         unlocked: clamp(data.unlocked, 1, CHAMBERS.length),
         cleared: Array.isArray(data.cleared) ? data.cleared : [],
         last: typeof data.last === 'number' ? data.last : 0,
         best,
+        labBest: rec(data.labBest),
+        labCleared: !!data.labCleared,
+        bossBest: rec(data.bossBest),
+        bossCleared: !!data.bossCleared,
       };
     } catch {
       return fallback;
@@ -303,6 +320,7 @@ export class Game {
       this.diamonds = snap.diamonds;
       this.gold = snap.gold;
       this.lives = snap.lives;
+      this.livesMax = this.maxLives();
       this.stressCharges = snap.stressCharges;
     }
     this._suppressSnapshot = false;
@@ -334,12 +352,15 @@ export class Game {
     this.counterUsed = false;
     this.rewindUsed = false;
     this.lives = this.maxLives();
+    this.livesMax = this.lives;
     this.guides = {};
     this.clearGuideTimers();
     this.tutorialStarted = false;
     this.throwBound = false;
   }
 
+  /** Normal start: mapMode's room map. The run/world/chamber fallbacks below
+   *  are legacy (?run= / ?world= / ?c=) and only run if room generation fails. */
   startBest() {
     this.audio.unlock();
     this.resetRunState();
@@ -352,7 +373,8 @@ export class Game {
     this.beginTutorial();
   }
 
-  /** Roguelike run: five floors, each one a room-graph floor. */
+  /** Legacy roguelike run (only via ?run): five floors of room-graph maps.
+   *  Not reachable from the normal title start. */
   startRun(seed = (Math.random() * 1e9) | 0) {
     this.guides = {};
     this.clearGuideTimers();
@@ -389,6 +411,15 @@ export class Game {
     return true;
   }
 
+  /** Body-agnostic kill, so the star and counter can answer the cat too. */
+  killThreat(source) {
+    if (!source) return false;
+    if (this.cage && source === this.cage.cat) return this.killCat();
+    return this.killHunter(source);
+  }
+
+  /** Legacy floor body for startRun (?run): a single key is put in the shard
+   *  array; it is not the old world's 16-shard progression. */
   startFloor(depth) {
     this._entryPending = true;
     this.depth = clamp(depth, 1, FLOORS);
@@ -467,6 +498,7 @@ export class Game {
     this.speedMul = 1;
     this.invulnT = 0;
     this.lives = this.maxLives();
+    this.livesMax = this.lives;
     this.starT = 0;
     this.clearInvert();
     this.stressUsed = false;
@@ -488,7 +520,9 @@ export class Game {
         ? buildMovingMap(seed)
         : node.kind === 'lab'
           ? buildLabMap(seed)
-          : buildRoomMap(seed);
+          : node.kind === 'cage'
+            ? buildCageMap(seed)
+            : buildRoomMap(seed);
     this.mapMode = true;
     this.mapId = node.id;
     this.mapSeed = seed;
@@ -530,6 +564,7 @@ export class Game {
       return h;
     });
     this.lab = level.lab || null;
+    this.cage = level.cage || null;
     this.labEnemies = (level.labEnemies || []).map((m) => {
       const C = m.type === 'lab2' ? LabBrute : LabStalker;
       const e = new C(m.x, m.y, m.home, { guardCard: m.guardCard ?? -1, locked: !!m.locked });
@@ -578,12 +613,211 @@ export class Game {
     this.activeItem = null;
     this.state = 'playing';
     this.ui.showGame();
+    this.ui.hideMapTitle();
+    if (this.cage) this.beginCage();
     const startBlock = level.moving ? blockAt(level, Math.floor(this.player.x / level.tile), Math.floor(this.player.y / level.tile)) : null;
     this.mcFloorBlock = startBlock ? startBlock.i : -1;
     this.mcFloor = level.moving ? (startBlock ? startBlock.z + 1 : 1) : 0;
     this.ui.updateHUD({ chamber: 0, title: node.name, shards: 0, total: 0, charges: this.charges, listen: false, muted: this.audio.muted, danger: 0, depth: 0, diamonds: this.diamonds, gold: this.gold, floor: level.moving ? this.movingFloor() : 0 });
     if (level.moving) this.maybeGuide('moving', '这些房间都在动。去对角那一间的二层。');
     return true;
+  }
+
+  /** The cat cage opens with its name, and nobody moves until it fades. */
+  beginCage() {
+    const c = this.cage;
+    c.activations = 0;
+    c.finished = false;
+    c.end = null;
+    c.device = null;
+    c.rings = [];
+    c.scan = null;
+    c.pending = null;
+    c.reviveDist = null;
+    c.introT = 3.4;
+    c.cat.dead = false;
+    c.cat.target = null;
+    c.cat.path = [];
+    c.cat.repath = 0;
+    this.inWater = false;
+    this.danger = 0;
+    this.ui.hideGuide();
+    this.ui.showMapTitle(this.mapNode ? this.mapNode.name : '薛定谔的猫笼');
+  }
+
+  /** A ring that is not a sonar ping: the cat's answer, or a breaker's death. */
+  cageRing(x, y, col, r1, life) {
+    if (!this.cage) return;
+    this.cage.rings.push({ x, y, t: this.now, col, r0: 3, r1, life });
+  }
+
+  /** The scan is over: rebuild around what it touched, then let the cat out. */
+  applyCageScan() {
+    const c = this.cage;
+    const pend = c.pending;
+    if (!pend) return;
+    const scanned = c.scan || new Uint8Array(CAGE.W * CAGE.H);
+    const catDistance = c.reviveDist != null ? c.reviveDist : pend.d;
+    const playerTile = {
+      x: Math.floor(this.player.x / this.level.tile),
+      y: Math.floor(this.player.y / this.level.tile),
+    };
+    regenerateCage(this.level, { scanned, playerTile, catDistance });
+    // Remember what this scan actually measured. A cat that revives on its old
+    // ring still leaves the newest scan as the reference for the next death.
+    if (pend.d > 0) c.lastScanDist = pend.d;
+    c.pending = null;
+    c.scan = null;
+    c.reviveDist = null;
+    c.cat.target = pend.target || null;
+    c.cat.path = [];
+    c.cat.repath = 0;
+    this.loot = cageLootPixels(this.level);
+    this.cageRing(c.cat.x, c.cat.y, '255, 64, 64', 170, 1.5);
+    // A short red answer, thrown out from wherever the cat was. It carries no
+    // information back: the cat is not a thing the sonar is allowed to see.
+    this.spawnRays(c.cat.x, c.cat.y, {
+      count: 64,
+      speed: 470,
+      life: 1.45,
+      tint: '255, 64, 64',
+      ghost: true,
+    });
+    this.audio.catCall(clamp((c.cat.x - this.player.x) / 520, -1, 1));
+    this.audio.cageShift();
+    this.flash = 1;
+    this.shake = Math.max(this.shake, 5);
+    this.ui.hideTip();
+  }
+
+  /**
+   * The cat can be killed, but never for good: the next scan remembers the
+   * distance it was last heard at and puts it back on that ring.
+   */
+  killCat() {
+    const c = this.cage;
+    const cat = c && c.cat;
+    if (!cat || cat.dead || c.finished) return false;
+    c.reviveDist = c.pending
+      ? c.pending.d
+      : (c.lastScanDist || dist(this.player.x, this.player.y, cat.x, cat.y));
+    cat.dead = true;
+    cat.path = [];
+    cat.target = null;
+    this.cageRing(cat.x, cat.y, '255, 64, 64', 92, 0.75);
+    this.stepEcho(cat.x, cat.y, '255, 64, 64', { count: 28, speed: 340, life: 0.6, ghost: true });
+    this.audio.shard();
+    this.shake = Math.max(this.shake, 4);
+    return true;
+  }
+
+  /** Advance the cat along the floor; it walks to where the last ping was. */
+  stepCageCat(dt) {
+    const c = this.cage;
+    const cat = c.cat;
+    if (!cat || cat.dead || !cat.target) return;
+    const L = this.level;
+    cat.repath -= dt;
+    if (cat.repath <= 0 || !cat.path.length) {
+      cat.repath = 0.4;
+      let tx = Math.floor(cat.target.x / L.tile);
+      let ty = Math.floor(cat.target.y / L.tile);
+      if (isSolid(L.grid, L.w, L.h, tx, ty)) {
+        const op = nearestOpen(L.grid, L.w, L.h, tx, ty);
+        if (op) { tx = op.x; ty = op.y; }
+      }
+      const path = findPath(
+        L.grid, L.w, L.h,
+        Math.floor(cat.x / L.tile), Math.floor(cat.y / L.tile),
+        tx, ty,
+      );
+      cat.path = path ? path.map((p) => ({ x: (p.x + 0.5) * L.tile, y: (p.y + 0.5) * L.tile })) : [];
+    }
+    if (!cat.path.length) return;
+    let wp = cat.path[0];
+    if (Math.hypot(wp.x - cat.x, wp.y - cat.y) < 4) {
+      cat.path.shift();
+      wp = cat.path[0];
+      if (!wp) return;
+    }
+    const slow = cageWaterAt(L, cat.x, cat.y) ? 0.8 : 1;
+    const speed = 92 * 0.8 * slow;
+    const d = Math.hypot(wp.x - cat.x, wp.y - cat.y) || 1;
+    const step = Math.min(d, speed * dt);
+    cat.x += ((wp.x - cat.x) / d) * step;
+    cat.y += ((wp.y - cat.y) / d) * step;
+    cat.face = Math.atan2(wp.y - cat.y, wp.x - cat.x);
+  }
+
+  updateCage(dt) {
+    const c = this.cage;
+    if (!c) return;
+    if (c.introT > 0) {
+      c.introT = Math.max(0, c.introT - dt);
+      if (c.introT === 0) this.ui.hideMapTitle();
+      return;
+    }
+    if (c.pending && this.now >= c.pending.at) this.applyCageScan();
+    for (let i = c.rings.length - 1; i >= 0; i--) {
+      if (this.now - c.rings[i].t > c.rings[i].life) c.rings.splice(i, 1);
+    }
+    if (c.device && c.device.hitT > 0) c.device.hitT = Math.max(0, c.device.hitT - dt);
+    if (c.finished) {
+      this.danger = 0;
+      return;
+    }
+    if (c.cat && !c.cat.dead) {
+      this.stepCageCat(dt);
+      const d = dist(this.player.x, this.player.y, c.cat.x, c.cat.y);
+      this.danger = clamp(1 - (d - 48) / 280, 0, 1);
+      if (d < this.player.r + c.cat.r - 1) {
+        // The cat is just another body for the charms: the star and counter
+        // kill it, stress and the totem save the player, lives still count.
+        this.hurt(c.cat);
+      }
+    } else {
+      this.danger = 0;
+    }
+  }
+
+  activateCageDevice() {
+    const c = this.cage;
+    const d = c && c.device;
+    if (!d || !d.alive) return false;
+    d.alive = false;
+    this.level.grid[d.ty * CAGE.W + d.tx] = 0;
+    this.cage.activations++;
+    this.cageRing(d.x, d.y, '196, 132, 255', 170, 1.3);
+    this.audio.deviceBreak(clamp((d.x - this.player.x) / 520, -1, 1));
+    this.flash = 0.9;
+    this.shake = Math.max(this.shake, 4);
+    c.device = null;
+    if (c.activations >= 5) this.finishCage(d.x, d.y);
+    this.ui.hideTip();
+    return true;
+  }
+
+  /** Five breakers: the room stops being observed, and the cat is gone. */
+  finishCage(x, y) {
+    const c = this.cage;
+    c.finished = true;
+    c.cat.dead = true;
+    c.device = null;
+    c.end = { x: (CAGE.W / 2) * this.level.tile, y: (CAGE.H / 2) * this.level.tile };
+    this.level.grid.fill(0);
+    c.fog.fill(0);
+    c.water.fill(0);
+    this.cageRing(x, y, '196, 132, 255', 640, 2.4);
+    this.audio.cageCollapse();
+    this.flash = 1.2;
+    this.shake = 22;
+    this.ui.hideTip();
+  }
+
+  /** The laboratory's last door is the cat cage, not the ending. */
+  enterCage() {
+    this.ui.hideTip();
+    this.startMap('cage', (Math.random() * 1e9) | 0);
   }
 
   /** Step through a map exit (or bounce when the door is locked). */
@@ -1106,8 +1340,10 @@ export class Game {
 
   /** True when the world point sits inside lab poison fog. */
   fogAt(x, y) {
+    if (!this.level) return false;
+    if (this.cage) return cageFogAt(this.level, x, y);
     const lab = this.lab;
-    if (!lab || !lab.fog || !this.level) return false;
+    if (!lab || !lab.fog) return false;
     const tx = Math.floor(x / this.level.tile);
     const ty = Math.floor(y / this.level.tile);
     if (tx < 0 || ty < 0 || tx >= this.level.w || ty >= this.level.h) return false;
@@ -1176,6 +1412,13 @@ export class Game {
         for (const g of this.lab.gates) if (!g.open) take('gate', g, g.x, g.y, 56);
         take('final', this.lab.finalExit, this.lab.finalExit.x, this.lab.finalExit.y, 50);
       }
+      if (this.cage) {
+        const dev = this.cage.device;
+        if (dev && dev.alive) take('device', dev, dev.x, dev.y, 48);
+        if (this.cage.finished && this.cage.end) {
+          take('cageExit', this.cage.end, this.cage.end.x, this.cage.end.y, 66);
+        }
+      }
     } else if (this.level && this.level.exit) {
       const e = this.level.exit;
       take('stair', e, e.x, e.y, 50);
@@ -1218,8 +1461,14 @@ export class Game {
         ? `按 [ ${this.keyName('interact')} ] 刷开门禁。`
         : `需要第${['一', '二', '三'][g.zone] || '?'}区的门禁卡。`;
     } else if (near.kind === 'final') {
-      title = '实验室出口';
-      body = `按 [ ${this.keyName('interact')} ] 离开实验室。`;
+      title = '猫笼入口';
+      body = `按 [ ${this.keyName('interact')} ] 进入猫笼。`;
+    } else if (near.kind === 'device') {
+      title = '激活装置';
+      body = `按 [ ${this.keyName('interact')} ] 激活。`;
+    } else if (near.kind === 'cageExit') {
+      title = '坍缩点';
+      body = `按 [ ${this.keyName('interact')} ] 离开猫笼。`;
     } else if (near.kind === 'exit') {
       const ex = near.ref;
       const dest = mapNode(ex.to);
@@ -1281,7 +1530,9 @@ export class Game {
       this.ui.hideTip();
       return false;
     }
-    if (near.kind === 'final') { this.ui.hideTip(); this.complete(); return true; }
+    if (near.kind === 'final') { this.ui.hideTip(); this.enterCage(); return true; }
+    if (near.kind === 'device') { this.ui.hideTip(); this.activateCageDevice(); return false; }
+    if (near.kind === 'cageExit') { this.ui.hideTip(); this.complete(); return true; }
     if (near.kind === 'exit') { this.ui.hideTip(); return this.enterMapExit(near.ref); }
     if (this.exitOpen) { this.complete(); return true; }
     this.audio.deny();
@@ -1434,8 +1685,11 @@ export class Game {
   }
 
   openMapSelect() {
-    // The lab is found through the moving maze, not from the title menu.
-    const entries = MAP_ORDER.filter((id) => id !== 'lab' || this.debugMode).map((id) => {
+    // The lab is found through the moving maze, and the cage through the lab;
+    // neither is a normal destination on the debug map picker.
+    const entries = MAP_ORDER
+      .filter((id) => (id !== 'lab' && id !== 'cage') || this.debugMode)
+      .map((id) => {
       const node = mapNode(id);
       return { id, name: node.name, sub: node.sub || '', built: BUILT_MAPS.has(id) };
     });
@@ -1586,6 +1840,12 @@ export class Game {
         }
         t.x = nx;
         t.y = ny;
+        const cat = this.cage && this.cage.cat;
+        if (cat && !cat.dead && dist(t.x, t.y, cat.x, cat.y) < cat.r + 4) {
+          if (t.kills) this.killCat();
+          hitWall = true;
+          break;
+        }
         if (!t.trail || t.trail.length === 0 || dist2(t.trail[t.trail.length - 1].x, t.trail[t.trail.length - 1].y, nx, ny) > 9) {
           t.trail.push({ x: nx, y: ny });
           if (t.trail.length > 16) t.trail.shift();
@@ -1668,13 +1928,31 @@ export class Game {
     return 1 + (lvl ? CHARMS.survive.extraLives[lvl - 1] : 0);
   }
 
+  /**
+   * 绝地求生 raises the cap while you are still in the run: keep the lives
+   * you already have and add the newly granted ones. Taking the charm out
+   * clamps the pool back down. Without this, a charm socketed after the map
+   * started did nothing until the next map reset the pool.
+   */
+  syncLives() {
+    const max = this.maxLives();
+    if (this.livesMax == null) {
+      this.livesMax = max;
+      return;
+    }
+    const gain = max - this.livesMax;
+    this.livesMax = max;
+    if (gain > 0 && this.lives > 0) this.lives += gain;
+    else if (this.lives > max) this.lives = max;
+  }
+
   /** Everything that can hurt you comes through here: charms get a say first. */
   hurt(source) {
     if (this.state !== 'playing') return;
     // The star kills on contact, so its own invulnerability must not swallow
     // the contact first (that made it behave like a plain shield).
     if (this.starT > 0) {
-      if (source && source.x != null) this.killHunter(source);
+      if (source && source.x != null) this.killThreat(source);
       this.invulnT = Math.max(this.invulnT, 0.6);
       return;
     }
@@ -1691,7 +1969,7 @@ export class Game {
     }
     if (this.inv.level('counter') > 0 && !this.counterUsed) {
       this.counterUsed = true;
-      if (source && source.x != null) this.killHunter(source);
+      if (source && source.x != null) this.killThreat(source);
       this.invulnT = CHARMS.counter.window;
       this.counterT = CHARMS.counter.window;
       this.flash = 1;
@@ -1807,7 +2085,8 @@ export class Game {
     return this.inv.count('sharpStone') + this.inv.count('pebbles');
   }
 
-  /** Dev/experimental: one continuous map, no chamber select. */
+  /** Legacy 37-room / 16-shard world (only via ?world), with the echo gate.
+   *  The normal start does not use shards; mapMode uses mapKey instead. */
   startWorld(seed = 424242) {
     this._entryPending = true;
     const level = generateWorld(seed);
@@ -2265,7 +2544,8 @@ export class Game {
       });
       return;
     }
-    this.levelTime += dt;
+    const inIntro = !!(this.cage && this.cage.introT > 0);
+    if (!inIntro) this.levelTime += dt;
     this.updateMoving(dt);
 
     // A moving room takes the whole cast with it. For 0.7 s nobody but a thrown
@@ -2317,7 +2597,7 @@ export class Game {
     const stunned = this.stunT > 0;
     if (stunned) this.stunT = Math.max(0, this.stunT - dt);
     this.fogImmuneT = Math.max(0, this.fogImmuneT - dt);
-    const move = stunned ? { x: 0, y: 0 } : (this.debugMove || this.input.moveVector());
+    const move = stunned || inIntro ? { x: 0, y: 0 } : (this.debugMove || this.input.moveVector());
 
     const listen = !this.sneak && (this.debugListen === true || (this.listenT > 0.26 && !p.moving));
     this.listen = listen;
@@ -2330,7 +2610,15 @@ export class Game {
     }
     const inFog = !this.fogImmuneT && this.fogAt(p.x, p.y);
     this.inFog = inFog;
-    const motion = p.update(dt, move, { run, listen, creep: this.sneak, creepMul, mul: this.speedMul * (inFog ? 0.8 : 1) });
+    const inWater = !!(this.cage && cageWaterAt(this.level, p.x, p.y));
+    this.inWater = inWater;
+    const motion = p.update(dt, move, {
+      run,
+      listen,
+      creep: this.sneak,
+      creepMul,
+      mul: this.speedMul * (inFog ? 0.8 : 1) * (inWater ? 0.8 : 1),
+    });
     const resolved = this.resolve(p, motion.x, motion.y);
     p.x = resolved.x;
     p.y = resolved.y;
@@ -2363,7 +2651,8 @@ export class Game {
     if (p.moving && !this.sneak) {
       if (p.stepPhase > 58) {
         p.stepPhase = 0;
-        this.audio.footstep(0, 0.85);
+        if (this.inWater) this.audio.splash(0, 1);
+        else this.audio.footstep(0, 0.85);
         this.stepEcho(p.x, p.y);
       }
     }
@@ -2389,11 +2678,11 @@ export class Game {
     // pinging
     // The left button only throws what a hotkey has bound to the cursor;
     // without a bound throwable it is just the sonar.
-    if (!stunned && this.input.consumeCode('Mouse0')) {
+    if (!stunned && !inIntro && this.input.consumeCode('Mouse0')) {
       if (this.activeItem) this.throwItem(this.activeItem);
       else this.tryPing();
     }
-    if (!stunned && this.input.consume('ping')) this.firePing();
+    if (!stunned && !inIntro && this.input.consume('ping')) this.firePing();
 
 
     const aim = this.aimPoint();
@@ -2492,7 +2781,7 @@ export class Game {
     }
 
     // Everything you can touch answers to F: walk close, read the prompt, press it.
-    const near = this.interactAt();
+    const near = inIntro ? null : this.interactAt();
     this.nearLoot = near && near.kind === 'loot' ? near.ref : null;
     if (near) this.showInteractTip(near);
     else this.ui.hideTip();
@@ -2603,6 +2892,10 @@ export class Game {
     this.audio.update(dt, { danger: this.danger });
     this.updateDishTrails(dt);
     this.updateRays(dt);
+    if (this.cage) {
+      this.updateCage(dt);
+      if (this.state !== 'playing') return;
+    }
     this.updateParticles(dt);
     this.flipFreeze = Math.max(0, (this.flipFreeze || 0) - dt);
     if (this.shakeT > 0) {
@@ -2891,7 +3184,12 @@ export class Game {
       if (r.age > r.life + 1.5) continue;
       const ftx = Math.floor(r.x / L.tile);
       const fty = Math.floor(r.y / L.tile);
-      r.fog = !!(this.lab && this.lab.fog && ftx >= 0 && fty >= 0 && ftx < L.w && fty < L.h && this.lab.fog[fty * L.w + ftx]);
+      const inBounds = ftx >= 0 && fty >= 0 && ftx < L.w && fty < L.h;
+      const fi = inBounds ? fty * L.w + ftx : -1;
+      const wet = !!(this.cage && inBounds && this.cage.water[fi] === 1);
+      r.wet = wet;
+      const fogGrid = this.cage ? this.cage.fog : (this.lab && this.lab.fog);
+      r.fog = !!(fogGrid && inBounds && !wet && fogGrid[fi] === 1);
       if (r.ghost && r.age <= r.life) {
         const step = (r.speed || RAY_SPEED) * dt;
         r.x += r.dx * step;
@@ -2905,12 +3203,17 @@ export class Game {
         continue;
       }
       if (r.age <= r.life) {
-        let move = (r.speed || RAY_SPEED) * dt;
+        // Sound runs twice as fast in the pools, and the water is never drawn:
+        // a blue line is the only tell that a pool is there.
+        let move = (r.speed || RAY_SPEED) * dt * (wet ? 2 : 1);
         while (move > 0.001) {
           const d = Math.min(6, move);
           move -= d;
           const nx = r.x + r.dx * d;
           const ny = r.y + r.dy * d;
+          if (this.cage && this.cage.scan && r.tag && r.tag.kind === 'ping') {
+            cageMarkScan(L, nx, ny);
+          }
           if (r.tag && r.tag.kind === 'dish' && !r.dishHit && dist(nx, ny, this.player.x, this.player.y) < 16) {
             r.dishHit = true;
             this.stunT = 2;
@@ -2942,6 +3245,17 @@ export class Game {
           }
           const hitX = isSolid(L.grid, L.w, L.h, Math.floor(nx / TILE), Math.floor(r.y / TILE));
           const hitY = isSolid(L.grid, L.w, L.h, Math.floor(r.x / TILE), Math.floor(ny / TILE));
+          const wx = hitX ? Math.floor(nx / TILE) : Math.floor(r.x / TILE);
+          const wy = hitY ? Math.floor(ny / TILE) : Math.floor(r.y / TILE);
+          const dev = this.cage && this.cage.device;
+          if ((hitX || hitY) && dev && dev.alive && wx === dev.tx && wy === dev.ty) {
+            // The breaker itself has no colour; only a line that strikes it
+            // comes back purple.
+            r.tint = '196, 132, 255';
+            r.hot = false;
+            r.life += 0.3;
+            dev.hitT = 0.4;
+          }
           if (hitX) r.dx *= -1;
           if (hitY) r.dy *= -1;
           if (hitX || hitY) {
@@ -2974,6 +3288,7 @@ export class Game {
   }
 
   firePing() {
+    if (this.cage && this.cage.introT > 0) return;
     if (this.charges < 1) {
       this.audio.deny();
       return;
@@ -2981,6 +3296,19 @@ export class Game {
     this.charges--;
     if (this.chargeTimer <= 0) this.chargeTimer = PING_REGEN;
     const p = this.player;
+    if (this.cage) {
+      const c = this.cage;
+      if (c.pending) this.applyCageScan();
+      if (!c.finished && !c.cat.dead) {
+        c.scan = new Uint8Array(CAGE.W * CAGE.H);
+        cageMarkScan(this.level, p.x, p.y);
+        c.pending = {
+          at: this.now + 1.02,
+          d: dist(p.x, p.y, c.cat.x, c.cat.y),
+          target: { x: p.x, y: p.y },
+        };
+      }
+    }
     this.pings.push({
       x: p.x,
       y: p.y,
@@ -3060,6 +3388,25 @@ export class Game {
         this.ui.dismiss();
         this.ui.showRunVictory({ time: t, best: this.progress.bestRun, depth: FLOORS });
       }
+      return;
+    }
+    if (this.mapMode && this.mapId === 'cage') {
+      const time = Math.max(0, this.levelTime);
+      const prev = this.progress.bossBest;
+      const isRecord = !prev || time < prev.time;
+      if (isRecord) this.progress.bossBest = { time, pings: this.pingsUsed };
+      this.progress.bossCleared = true;
+      this.saveProgress();
+      this.state = 'victory';
+      this.audio.clear();
+      this.ui.dismiss();
+      this.ui.showWorldVictory({
+        time,
+        pings: this.pingsUsed,
+        best: this.progress.bossBest,
+        isRecord,
+        shards: this.collected,
+      });
       return;
     }
     if (this.mapMode && this.mapId === 'lab') {

@@ -27,6 +27,7 @@ const MODULES = [
   'src/audio.js',
   'src/chambers.js',
   'src/loot.js',
+  'src/cage.js',
   'src/desc.js',
   'src/selfcheck.js',
   'src/render.js',

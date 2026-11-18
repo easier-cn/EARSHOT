@@ -35,6 +35,10 @@ export class UI {
     this.root.innerHTML = `
       <div class="vignette"></div>
       <div class="grain"></div>
+      <div class="map-title hidden" id="map-title">
+        <div class="mt-name" id="map-title-name"></div>
+        <div class="mt-rule"><i></i><b></b><i></i></div>
+      </div>
 
       <section class="screen title-screen" id="scr-title">
         <div class="title-inner">
@@ -181,6 +185,8 @@ export class UI {
     this.grid = $('chamber-grid');
     this.nestGlyph = $('nest-glyph');
     this.foot = $('title-foot');
+    this.mapTitle = $('map-title');
+    this.mapTitleName = $('map-title-name');
     this.hudNum = $('hud-num');
     this.hudSector = $('hud-sector');
     this.hudFloor = $('hud-floor');
@@ -385,23 +391,21 @@ export class UI {
     this.hideHUD();
     this.guide(`摁下${this.game.keyName('ping')}以开始`, { sticky: true });
     this.grid.innerHTML = '';
-    const unlocked = progress.unlocked || 1;
-    const cleared = new Set(progress.cleared || []);
-    for (let i = 0; i < 8; i++) {
+    // Five difficulty slots, not chambers. They stay dark until the difficulty
+    // pass exists; nothing here opens the old map picker.
+    for (let i = 0; i < 5; i++) {
       const cell = document.createElement('button');
-      cell.className = 'cell' + (i < unlocked ? '' : ' locked') + (cleared.has(i) ? ' cleared' : '');
-      // The chamber's number is drawn as bars, not written.
+      cell.className = 'cell locked';
       let bars = '<span class="cell-bars">';
       for (let b = 0; b <= i; b++) bars += '<i></i>';
       bars += '</span>';
-      cell.innerHTML = bars + (i < unlocked ? '' : '<span class="cell-slash"></span>');
-      cell.disabled = i >= unlocked;
-      cell.addEventListener('click', () => {
-        cell.blur();
-        this.game.openMapSelect();
-      });
+      cell.innerHTML = bars + '<span class="cell-slash"></span>';
+      cell.disabled = true;
+      cell.setAttribute('aria-label', `难度 ${i + 1}（尚未开放）`);
       this.grid.appendChild(cell);
     }
+    // 16 ticks are a leftover from the old 37-room / 16-shard world; in
+    // mapMode they are pure ornament and only fill after worldCleared.
     this.nestGlyph.innerHTML = '';
     for (let i = 0; i < 16; i++) {
       const p = document.createElement('i');
@@ -409,6 +413,23 @@ export class UI {
       this.nestGlyph.appendChild(p);
     }
     this.foot.innerHTML = progress.worldCleared ? `<span class="foot-rings">${icon('sound')}</span>` : '';
+  }
+
+  /** The boss room pauses on its name, then gets out of the way. */
+  showMapTitle(name) {
+    if (!this.mapTitle) return;
+    this.mapTitleName.textContent = name;
+    this.mapTitle.classList.remove('hidden');
+    // Restart the CSS entrance even when two boss rooms arrive back to back.
+    this.mapTitle.classList.remove('in');
+    void this.mapTitle.offsetWidth;
+    this.mapTitle.classList.add('in');
+  }
+
+  hideMapTitle() {
+    if (!this.mapTitle) return;
+    this.mapTitle.classList.add('hidden');
+    this.mapTitle.classList.remove('in');
   }
 
   showGame() {
@@ -726,6 +747,8 @@ export class UI {
   }
 
   renderInventory(game) {
+    // Socketing or removing 绝地求生 changes the life pool immediately.
+    game.syncLives();
     const inv = game.inv;
     const cells = [];
     const push = (kind, i, o, cls = '') => {

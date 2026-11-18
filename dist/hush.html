@@ -215,7 +215,7 @@ kbd {
 /* chamber picker */
 .chamber-grid {
   display: grid;
-  grid-template-columns: repeat(8, 34px);
+  grid-template-columns: repeat(5, 34px);
   gap: 7px;
   margin-top: 12px;
   animation: fadeUp 1s 0.75s ease both;
@@ -301,6 +301,63 @@ kbd {
   font-size: 9px;
   letter-spacing: 0.28em;
   color: rgba(220, 250, 245, 0.16);
+}
+
+/* ---- boss room name card ------------------------------------------------ */
+.map-title {
+  position: fixed;
+  inset: 0;
+  z-index: 34;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 46%, rgba(4, 10, 12, 0.72), rgba(3, 6, 8, 0.24) 58%, transparent 78%);
+}
+.map-title.hidden { display: none; }
+.mt-name {
+  font-family: var(--mono);
+  font-size: clamp(28px, 5.2vw, 66px);
+  letter-spacing: 0.26em;
+  text-indent: 0.26em;
+  color: #eafffb;
+  text-shadow: 0 0 34px rgba(127, 227, 212, 0.35), 0 0 90px rgba(127, 227, 212, 0.12);
+  opacity: 0;
+}
+.mt-rule {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: min(640px, 68vw);
+  margin-top: 26px;
+  opacity: 0;
+}
+.mt-rule i {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(127, 227, 212, 0.55), transparent);
+}
+.mt-rule b {
+  width: 7px;
+  height: 7px;
+  border: 1px solid rgba(127, 227, 212, 0.8);
+  transform: rotate(45deg);
+  box-shadow: 0 0 14px rgba(127, 227, 212, 0.55);
+}
+.map-title.in .mt-name { animation: mtName 1.5s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.map-title.in .mt-rule { animation: mtRule 1.7s 0.18s ease-out both; }
+.no-anim .map-title .mt-name,
+.no-anim .map-title .mt-rule { opacity: 1; }
+@keyframes mtName {
+  0% { opacity: 0; letter-spacing: 0.48em; filter: blur(7px); transform: translateY(8px); }
+  35% { opacity: 1; }
+  100% { opacity: 1; letter-spacing: 0.26em; filter: blur(0); transform: translateY(0); }
+}
+@keyframes mtRule {
+  0% { opacity: 0; transform: scaleX(0.3); }
+  55% { opacity: 1; }
+  100% { opacity: 1; transform: scaleX(1); }
 }
 
 /* ------------------------------------------------------------------- panels */
@@ -602,7 +659,7 @@ kbd {
   .hud-bottom { left: 18px; right: 18px; bottom: 16px; }
   .hud-hint { display: none; }
   .panel { padding: 34px 26px; }
-  .chamber-grid { grid-template-columns: repeat(4, 34px); }
+  .chamber-grid { grid-template-columns: repeat(5, 34px); }
   .title-inner { gap: 12px; padding: 20px 18px 78px; }
   .logo { font-size: clamp(42px, 12vw, 62px); letter-spacing: 0.22em; text-indent: 0.22em; }
   .emblem { width: 66px; height: 66px; }
@@ -724,7 +781,7 @@ kbd {
 #ui.flash-amber::before { opacity: 1; background: radial-gradient(circle at 50% 60%, rgba(255, 205, 110, 0.10), transparent 60%); }
 #ui.flash-red::before { opacity: 1; background: radial-gradient(circle at 50% 60%, rgba(255, 86, 86, 0.14), transparent 60%); }
 @keyframes introRing { 0% { opacity: 0.9; } 100% { opacity: 0; } }
-.chamber-grid { grid-template-columns: repeat(8, 46px); gap: 6px; }
+.chamber-grid { grid-template-columns: repeat(5, 46px); gap: 6px; }
 .chamber-grid .cell { background: transparent; border: 1px solid rgba(234, 247, 244, 0.14); border-radius: 2px; color: inherit; padding: 0; }
 .chamber-grid .cell.cleared { border-color: rgba(127, 227, 212, 0.45); }
 .chamber-grid .cell:not(.locked):hover { border-color: rgba(127, 227, 212, 0.8); background: rgba(127, 227, 212, 0.05); }
@@ -1175,7 +1232,7 @@ kbd {
 /* Phones: the chamber picker must not widen the title column. The 8x46 grid
    is declared late in the file, so this repeat comes last to win the cascade. */
 @media (max-width: 640px) {
-  .chamber-grid { grid-template-columns: repeat(4, 46px); gap: 6px; }
+  .chamber-grid { grid-template-columns: repeat(5, 46px); gap: 6px; }
 }
 
 /* Very short phones: drop the ornament and tighten, so the start guide never
@@ -2591,6 +2648,7 @@ const MAPS = {
   rot: { id: 'rot', name: '腐臭之地', kind: 'plain' },
   moving: { id: 'moving', name: '移动迷宫', kind: 'moving' },
   lab: { id: 'lab', name: '实验室', kind: 'lab' },
+  cage: { id: 'cage', name: '薛定谔的猫笼', sub: '实验室核心', kind: 'cage' },
   mech: { id: 'mech', name: '机械地牢', sub: '机械核心', kind: 'mech' },
 };
 
@@ -2598,7 +2656,7 @@ const MAPS = {
 const MAP_ORDER = [
   'room', 'maze', 'meadow', 'swamp', 'witch', 'forestEdge', 'forestCore',
   'castle', 'mountain', 'canyon', 'ruins', 'volcano', 'vault', 'vaultCellar',
-  'vaultSafe', 'sewer', 'gas', 'rot', 'moving', 'lab', 'mech',
+  'vaultSafe', 'sewer', 'gas', 'rot', 'moving', 'lab', 'cage', 'mech',
 ];
 
 function mapNode(id) {
@@ -3581,6 +3639,8 @@ function clearMoving(level) {
   // The clear is terminal: b2 is gone, so its whole 3x3 centre is wall. The
   // broken-core rule in writeMovingBlock only applies while the maze still runs.
   level.grid[(b2.oy + 12) * level.w + b2.ox + 12] = 1;
+  // Placeholder target: 'mech' has no buildMechMap yet, so these doors drop
+  // the player into a fallback room map (a loop). The real exit is collapseB2.
   level.exits = movingDoors(b2).map((d) => ({
     to: 'mech',
     x: d.x,
@@ -5766,6 +5826,42 @@ class AudioEngine {
     this.noise({ dur: 0.07, gain: 0.035 * loud, type: 'bandpass', freq: 900 + Math.random() * 300, q: 1.2, pan, send: 0.12 });
   }
 
+  /** A pool is never seen; only the footfall changes. */
+  splash(pan = 0, loud = 1) {
+    this.noise({ dur: 0.13, gain: 0.05 * loud, type: 'lowpass', freq: 700, q: 0.9, pan, send: 0.3 });
+    this.noise({ dur: 0.05, gain: 0.025 * loud, type: 'highpass', freq: 2400, pan, send: 0.2, delay: 0.01 });
+    this.tone({ freq: 240, freqEnd: 120, type: 'sine', dur: 0.1, gain: 0.018 * loud, pan, send: 0.15 });
+  }
+
+  /** The cat answers the ping once: close, wrong, and impossible to place. */
+  catCall(pan = 0) {
+    this.tone({ freq: 520, freqEnd: 880, type: 'sine', dur: 0.28, gain: 0.07, pan, send: 0.9, detune: 30 });
+    this.tone({ freq: 880, freqEnd: 430, type: 'sine', dur: 0.42, gain: 0.05, pan, send: 1.1, delay: 0.2 });
+    this.noise({ dur: 0.18, gain: 0.012, type: 'bandpass', freq: 1500, q: 5, pan, send: 0.7 });
+  }
+
+  /** The room is rebuilt while you are still standing in it. */
+  cageShift() {
+    this.noise({ dur: 0.7, gain: 0.05, type: 'bandpass', freq: 320, q: 1.1, send: 0.8 });
+    this.noise({ dur: 0.28, gain: 0.025, type: 'highpass', freq: 2600, send: 0.4, delay: 0.12 });
+    this.tone({ freq: 74, freqEnd: 49, type: 'sine', dur: 0.9, gain: 0.07, send: 0.6 });
+  }
+
+  /** A breaker cracks and lets one purple ring into the room. */
+  deviceBreak(pan = 0) {
+    this.noise({ dur: 0.2, gain: 0.08, type: 'bandpass', freq: 1800, q: 1.4, pan, send: 0.5 });
+    this.tone({ freq: 340, freqEnd: 980, type: 'triangle', dur: 0.45, gain: 0.06, pan, send: 1.0 });
+    this.tone({ freq: 170, freqEnd: 80, type: 'sine', dur: 0.3, gain: 0.05, pan, send: 0.5 });
+  }
+
+  /** The fifth breaker: the observation ends all at once. */
+  cageCollapse() {
+    this.tone({ freq: 62, freqEnd: 28, type: 'sawtooth', dur: 2.4, gain: 0.2, send: 1.4 });
+    this.noise({ dur: 2.2, gain: 0.16, type: 'lowpass', freq: 900, send: 1.6 });
+    this.tone({ freq: 1240, freqEnd: 180, type: 'sine', dur: 1.6, gain: 0.06, send: 1.8 });
+    this.noise({ dur: 0.5, gain: 0.07, type: 'highpass', freq: 3200, send: 0.8, delay: 0.05 });
+  }
+
   hunterStep(pan = 0, closeness = 0.3) {
     this.noise({ dur: 0.1, gain: 0.09 * closeness, type: 'lowpass', freq: 190, q: 0.8, pan, send: 0.25 });
     this.tone({ freq: 62, freqEnd: 44, type: 'sine', dur: 0.16, gain: 0.06 * closeness, pan, send: 0.1 });
@@ -6249,6 +6345,440 @@ class Inventory {
   }
 }
 
+// ---- src/cage.js ----
+// 「薛定谔的猫笼」— the laboratory's boss room.
+//
+// The arena is 25x25 tiles and is rebuilt every time the player pings. Only
+// what the outgoing sonar actually touched is carried over; the player's own
+// tile is always floor. The cat is a single-tile body that is never drawn: it
+// answers with one red ring, then walks toward the place the last ping came
+// from. Five purple breakers end the observation and open the exit.
+
+
+
+const CAGE = { W: 25, H: 25 };
+// (duplicate TILE removed by the bundler)
+const WALL_CHANCE = 0.56;
+const RATIO_MIN = 0.45;
+const RATIO_MAX = 0.55;
+const CHARM_IDS = Object.keys(CHARMS);
+const ITEM_IDS = Object.keys(ITEMS);
+
+const at = (x, y) => y * CAGE.W + x;
+const inside = (x, y) => x > 0 && y > 0 && x < CAGE.W - 1 && y < CAGE.H - 1;
+const centerX = (x) => (x + 0.5) * TILE;
+const centerY = (y) => (y + 0.5) * TILE;
+
+function cageReachable(grid, w, h, sx, sy) {
+  const seen = new Uint8Array(w * h);
+  if (sx < 0 || sy < 0 || sx >= w || sy >= h || grid[sy * w + sx] !== 0) return seen;
+  const q = [sx, sy];
+  seen[sy * w + sx] = 1;
+  while (q.length) {
+    const y = q.pop();
+    const x = q.pop();
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+      const i = ny * w + nx;
+      if (seen[i] || grid[i] !== 0) continue;
+      seen[i] = 1;
+      q.push(nx, ny);
+    }
+  }
+  return seen;
+}
+
+function countRatio(grid) {
+  let wall = 0;
+  let floor = 0;
+  for (let y = 1; y < CAGE.H - 1; y++) {
+    for (let x = 1; x < CAGE.W - 1; x++) {
+      if (grid[at(x, y)] === 0) floor++;
+      else wall++;
+    }
+  }
+  return { wall, floor, ratio: wall / Math.max(1, wall + floor) };
+}
+
+function carveCorridor(grid, water, fog, from, to, rnd, scanned) {
+  let x = from.x;
+  let y = from.y;
+  let guard = 0;
+  const kept = (tx, ty) => !!(scanned && scanned[at(tx, ty)] && grid[at(tx, ty)] !== 0);
+  while ((x !== to.x || y !== to.y) && guard++ < 200) {
+    const dx = Math.sign(to.x - x);
+    const dy = Math.sign(to.y - y);
+    // Mostly a right-angle route, with a little wobble so the boss room never
+    // reads as a perfect grid.
+    const horizontal = dx !== 0 && (dy === 0 || rnd() < 0.52);
+    let nx = x;
+    let ny = y;
+    if (horizontal) nx += dx;
+    else if (dy !== 0) ny += dy;
+    else nx += dx;
+    if (!inside(nx, ny) || kept(nx, ny)) {
+      // A remembered wall is not ours to cut. Try the other axis, and if that
+      // is also kept, stop: the preserved fragment wins over the corridor.
+      if (horizontal && dy !== 0) {
+        nx = x;
+        ny = y + dy;
+        if (!inside(nx, ny) || kept(nx, ny)) break;
+      } else if (!horizontal && dx !== 0) {
+        nx = x + dx;
+        ny = y;
+        if (!inside(nx, ny) || kept(nx, ny)) break;
+      } else {
+        break;
+      }
+    }
+    x = nx;
+    y = ny;
+    const i = at(x, y);
+    grid[i] = 0;
+    water[i] = 0;
+    fog[i] = 0;
+  }
+}
+
+function placeCat(grid, reach, player, want, rnd) {
+  const px = player.x;
+  const py = player.y;
+  const floors = [];
+  for (let y = 1; y < CAGE.H - 1; y++) {
+    for (let x = 1; x < CAGE.W - 1; x++) {
+      const i = at(x, y);
+      if (grid[i] !== 0 || !reach[i]) continue;
+      floors.push({ x, y, d: Math.hypot(centerX(x) - px, centerY(y) - py) });
+    }
+  }
+  if (!floors.length) return null;
+  const rings = [26, 56, 96];
+  for (const tol of rings) {
+    const near = floors.filter((f) => Math.abs(f.d - want) <= tol);
+    if (near.length) return near[(rnd() * near.length) | 0];
+  }
+  // No tile at the remembered radius survived: take the closest ring tile.
+  floors.sort((a, b) => Math.abs(a.d - want) - Math.abs(b.d - want));
+  return floors[0];
+}
+
+function placeDevice(grid, reach, scanned, player, rnd, catTile = null) {
+  const px = player.x;
+  const py = player.y;
+  const cands = [];
+  for (let y = 1; y < CAGE.H - 1; y++) {
+    for (let x = 1; x < CAGE.W - 1; x++) {
+      const i = at(x, y);
+      if (grid[i] === 0) continue;
+      if (scanned && scanned[i]) continue;
+      if (catTile && catTile.x === x && catTile.y === y) continue;
+      let linked = false;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= CAGE.W || ny >= CAGE.H) continue;
+        const ni = at(nx, ny);
+        if (grid[ni] === 0 && reach[ni]) { linked = true; break; }
+      }
+      if (!linked) continue;
+      const d = Math.hypot(centerX(x) - px, centerY(y) - py);
+      if (d < TILE * 2.5 || d > TILE * 11) continue;
+      cands.push({ x, y, d });
+    }
+  }
+  if (cands.length) return cands[(rnd() * cands.length) | 0];
+  // Walled-in arena: turn one reachable, untouched floor tile into the breaker.
+  for (let y = 1; y < CAGE.H - 1; y++) {
+    for (let x = 1; x < CAGE.W - 1; x++) {
+      const i = at(x, y);
+      if (grid[i] !== 0 || !reach[i] || (scanned && scanned[i])) continue;
+      if (catTile && catTile.x === x && catTile.y === y) continue;
+      const d = Math.hypot(centerX(x) - px, centerY(y) - py);
+      if (d < TILE * 3) continue;
+      grid[i] = 1;
+      return { x, y, d };
+    }
+  }
+  return null;
+}
+
+function paintBlob(grid, mask, reach, player, rnd, count, avoid, scanned = null) {
+  for (let tries = 0; tries < 40; tries++) {
+    const x = 1 + ((rnd() * (CAGE.W - 2)) | 0);
+    const y = 1 + ((rnd() * (CAGE.H - 2)) | 0);
+    const i = at(x, y);
+    if (grid[i] !== 0 || !reach[i]) continue;
+    if (scanned && scanned[i]) continue;
+    if (Math.hypot(centerX(x) - player.x, centerY(y) - player.y) < TILE * 2.2) continue;
+    if (mask[i]) continue;
+    let ok = true;
+    for (const a of avoid) {
+      if (Math.hypot(centerX(x) - a.x, centerY(y) - a.y) < TILE * 1.4) { ok = false; break; }
+    }
+    if (!ok) continue;
+    const cells = [{ x, y }];
+    for (let k = 0; k < count; k++) {
+      const last = cells[(rnd() * cells.length) | 0];
+      const dir = [[1, 0], [-1, 0], [0, 1], [0, -1]][(rnd() * 4) | 0];
+      const nx = last.x + dir[0];
+      const ny = last.y + dir[1];
+      if (!inside(nx, ny)) continue;
+      if (scanned && scanned[at(nx, ny)]) continue;
+      if (grid[at(nx, ny)] !== 0) continue;
+      cells.push({ x: nx, y: ny });
+    }
+    for (const c of cells) mask[at(c.x, c.y)] = 1;
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Rebuild the arena around the player. `scanned` is the set of tiles the last
+ * outgoing ping actually touched; those keep their exact contents.
+ */
+function regenerateCage(level, {
+  scanned = null,
+  playerTile = null,
+  catDistance = null,
+  withDevice = true,
+  first = false,
+} = {}) {
+  const c = level.cage;
+  const grid = level.grid;
+  const water = level.cage.water;
+  const fog = level.cage.fog;
+  c.gen = (c.gen || 0) + 1;
+  const rnd = mulberry32((level.seed ^ Math.imul(c.gen, 0x9e3779b1)) >>> 0);
+  const player = playerTile || level.spawnTile;
+  const pi = at(player.x, player.y);
+
+  // 1. Random terrain, keeping every scanned tile as it was.
+  for (let y = 0; y < CAGE.H; y++) {
+    for (let x = 0; x < CAGE.W; x++) {
+      const i = at(x, y);
+      if (x === 0 || y === 0 || x === CAGE.W - 1 || y === CAGE.H - 1) {
+        grid[i] = 1;
+        water[i] = 0;
+        fog[i] = 0;
+        continue;
+      }
+      if (scanned && scanned[i]) {
+        if (grid[i] !== 0) { water[i] = 0; fog[i] = 0; }
+        continue;
+      }
+      grid[i] = rnd() < WALL_CHANCE ? 1 : 0;
+      water[i] = 0;
+      fog[i] = 0;
+    }
+  }
+  // The player's own tile is the one guarantee.
+  grid[pi] = 0;
+  water[pi] = 0;
+  fog[pi] = 0;
+
+
+  // 2. Nudge the wall/floor ratio back toward 1:1 before carving routes.
+  let guard = 0;
+  let ratio = countRatio(grid);
+  while (ratio.ratio > RATIO_MAX && guard++ < 220) {
+    const x = 1 + ((rnd() * (CAGE.W - 2)) | 0);
+    const y = 1 + ((rnd() * (CAGE.H - 2)) | 0);
+    const i = at(x, y);
+    if (grid[i] === 1 && !(scanned && scanned[i])) grid[i] = 0;
+    ratio = countRatio(grid);
+  }
+  guard = 0;
+  while (ratio.ratio < RATIO_MIN && guard++ < 220) {
+    const x = 1 + ((rnd() * (CAGE.W - 2)) | 0);
+    const y = 1 + ((rnd() * (CAGE.H - 2)) | 0);
+    const i = at(x, y);
+    if (grid[i] === 0 && i !== pi && !(scanned && scanned[i])) grid[i] = 1;
+    ratio = countRatio(grid);
+  }
+
+  // 3. At least a few far rooms must be reachable, scanned walls or not.
+  const far = [
+    { x: CAGE.W - 3, y: 3 },
+    { x: 3, y: CAGE.H - 3 },
+    { x: CAGE.W - 3, y: CAGE.H - 3 },
+    { x: 3, y: 3 },
+    { x: (CAGE.W - 1) >> 1, y: 2 },
+  ];
+  let reach = cageReachable(grid, CAGE.W, CAGE.H, player.x, player.y);
+  for (const t of far) {
+    if (!inside(t.x, t.y)) continue;
+    if (reach[at(t.x, t.y)] && grid[at(t.x, t.y)] === 0) continue;
+    const route = findPath(grid, CAGE.W, CAGE.H, player.x, player.y, t.x, t.y);
+    if (!route) carveCorridor(grid, water, fog, player, t, rnd, scanned);
+    reach = cageReachable(grid, CAGE.W, CAGE.H, player.x, player.y);
+  }
+
+  // 4. The cat arrives somewhere on the ring the player last heard it at.
+  const want = Math.max(TILE * 3, Math.min(TILE * 11, catDistance ?? TILE * 8));
+  if (!first) c.lastScanDist = want;
+  let catTile = placeCat(grid, reach, { x: centerX(player.x), y: centerY(player.y) }, want, rnd);
+  if (!catTile) {
+    carveCorridor(grid, water, fog, player, far[0], rnd, scanned);
+    reach = cageReachable(grid, CAGE.W, CAGE.H, player.x, player.y);
+    catTile = placeCat(grid, reach, { x: centerX(player.x), y: centerY(player.y) }, want, rnd);
+  }
+  if (catTile) {
+    grid[at(catTile.x, catTile.y)] = 0;
+  } else {
+    catTile = { x: player.x, y: player.y };
+  }
+  c.cat = {
+    x: centerX(catTile.x),
+    y: centerY(catTile.y),
+    tx: catTile.x,
+    ty: catTile.y,
+    r: 10,
+    dead: false,
+    target: c.cat && c.cat.target ? c.cat.target : null,
+    path: [],
+    repath: 0,
+    face: 0,
+  };
+  if (first) c.cat.target = null;
+
+  // 5. Water and poison are floors, invisible, and remembered if scanned.
+  const avoid = [{ x: c.cat.x, y: c.cat.y }];
+  for (let k = 0; k < 4; k++) paintBlob(grid, water, reach, { x: centerX(player.x), y: centerY(player.y) }, rnd, 5 + ((rnd() * 7) | 0), avoid, scanned);
+  for (let k = 0; k < 3; k++) paintBlob(grid, fog, reach, { x: centerX(player.x), y: centerY(player.y) }, rnd, 3 + ((rnd() * 5) | 0), avoid, scanned);
+
+  // 6. One breaker, always outside what this ping could see.
+  if (withDevice && (c.activations || 0) < 5) {
+    const d = placeDevice(
+      grid, reach, scanned,
+      { x: centerX(player.x), y: centerY(player.y) }, rnd,
+      c.cat ? { x: c.cat.tx, y: c.cat.ty } : null,
+    );
+    if (d && c.cat) {
+      // The fallback breaker is carved out of a floor. Never let it cut the
+      // only route between the player and the cat.
+      const after = cageReachable(grid, CAGE.W, CAGE.H, player.x, player.y);
+      if (!after[at(c.cat.tx, c.cat.ty)]) {
+        grid[at(d.x, d.y)] = 0;
+        d.disabled = true;
+      }
+    }
+    c.device = d && !d.disabled
+      ? { tx: d.x, ty: d.y, x: centerX(d.x), y: centerY(d.y), alive: true, hitT: 0 }
+      : null;
+  } else {
+    c.device = null;
+  }
+
+  // 7. Exactly three pieces of loot, and everything left on the floor is gone.
+  const loot = [];
+  const used = new Set();
+  let bad = 0;
+  while (loot.length < 3 && bad++ < 200) {
+    const x = 1 + ((rnd() * (CAGE.W - 2)) | 0);
+    const y = 1 + ((rnd() * (CAGE.H - 2)) | 0);
+    const i = at(x, y);
+    if (grid[i] !== 0 || !reach[i] || used.has(i)) continue;
+    if (Math.hypot(centerX(x) - centerX(player.x), centerY(y) - centerY(player.y)) < TILE * 2) continue;
+    if (c.cat && Math.hypot(centerX(x) - c.cat.x, centerY(y) - c.cat.y) < TILE * 1.5) continue;
+    used.add(i);
+    const charm = rnd() < 0.5;
+    loot.push({
+      x,
+      y,
+      kind: charm ? 'charm' : 'item',
+      id: charm
+        ? CHARM_IDS[(rnd() * CHARM_IDS.length) | 0]
+        : ITEM_IDS[(rnd() * ITEM_IDS.length) | 0],
+    });
+  }
+  level.loot = loot;
+  return { cat: c.cat, device: c.device, loot };
+}
+
+function buildCageMap(seed) {
+  const w = CAGE.W;
+  const h = CAGE.H;
+  const grid = new Uint8Array(w * h).fill(1);
+  const level = {
+    mapId: 'cage',
+    w,
+    h,
+    tile: TILE,
+    size: { w: w * TILE, h: h * TILE },
+    grid,
+    spawnTile: { x: 12, y: 12 },
+    spawn: { x: 12.5 * TILE, y: 12.5 * TILE },
+    key: null,
+    exit: null,
+    exits: [],
+    absorb: [],
+    monsters: [],
+    labEnemies: [],
+    loot: [],
+    seed,
+    cage: {
+      fog: new Uint8Array(w * h),
+      water: new Uint8Array(w * h),
+      gen: 0,
+      activations: 0,
+      finished: false,
+      end: null,
+      rings: [],
+      scan: null,
+      pending: null,
+      introT: 0,
+      device: null,
+      cat: null,
+      lastScanDist: 0,
+      reviveDist: null,
+    },
+  };
+  const rnd = mulberry32(seed);
+  const sx = 12 + ((rnd() * 5) | 0) - 2;
+  const sy = 12 + ((rnd() * 5) | 0) - 2;
+  level.spawnTile = { x: sx, y: sy };
+  level.spawn = { x: centerX(sx), y: centerY(sy) };
+  regenerateCage(level, { first: true, catDistance: TILE * 8, withDevice: false });
+  return level;
+}
+
+function cageWaterAt(level, x, y) {
+  if (!level || !level.cage) return false;
+  const tx = Math.floor(x / level.tile);
+  const ty = Math.floor(y / level.tile);
+  if (tx < 0 || ty < 0 || tx >= level.w || ty >= level.h) return false;
+  return level.cage.water[ty * level.w + tx] === 1;
+}
+
+function cageFogAt(level, x, y) {
+  if (!level || !level.cage) return false;
+  const tx = Math.floor(x / level.tile);
+  const ty = Math.floor(y / level.tile);
+  if (tx < 0 || ty < 0 || tx >= level.w || ty >= level.h) return false;
+  return level.cage.fog[ty * level.w + tx] === 1;
+}
+
+function cageMarkScan(level, x, y) {
+  if (!level || !level.cage || !level.cage.scan) return;
+  const tx = Math.floor(x / level.tile);
+  const ty = Math.floor(y / level.tile);
+  if (tx < 0 || ty < 0 || tx >= level.w || ty >= level.h) return;
+  level.cage.scan[ty * level.w + tx] = 1;
+}
+
+function cageLootPixels(level) {
+  return (level.loot || []).map((l) => ({
+    x: l.x * level.tile + level.tile / 2,
+    y: l.y * level.tile + level.tile / 2,
+    kind: l.kind,
+    id: l.id,
+    seenAt: -9,
+  }));
+}
+
 // ---- src/desc.js ----
 // Words for things. Riddles, in the voice of someone who has been down here
 // longer than you: classical cadence, second person 汝, never a manual.
@@ -6379,7 +6909,7 @@ const ITEM_GLYPH = {
 // Startup self-check: proves the build the browser actually loaded is intact.
 // This exists because a stale module cache once made bug fixes look absent
 // until Ctrl+F5 — so the boot screen now shows what loaded and what works.
-const VERSION = '0.8.17';
+const VERSION = '0.8.21';
 
 const SCRIPT_VERSION = () => {
   const s = [...document.scripts].map((el) => el.src).find((src) => src.includes('main.js'));
@@ -6673,6 +7203,7 @@ class Renderer {
     ctx.scale(this.scale, this.scale);
 
     this._drawLab(game, now);
+    this._drawCage(game, now);
 
     // ---- sonar: sparks fly out, bounce off walls, leave short comet tails ---
     // Stealth is silence, and silence is blindness: nothing renders at all.
@@ -6694,7 +7225,9 @@ class Renderer {
         // Fog is invisible; a brighter green line is the only cue that a ray
         // is travelling through it.
         const fogBoost = r.fog ? 1.85 : 1;
-        const col = r.fog ? '170, 255, 190' : r.tint || RAY_RGB;
+        // Water is never drawn. A pool only exists as a stretch of blue sound
+        // running twice as fast as the rest of the room.
+        const col = r.wet && !r.tint ? '104, 178, 255' : r.fog ? '170, 255, 190' : r.tint || RAY_RGB;
         const pts = r.pts;
         const n = pts.length;
         const start = Math.max(0, n - 10);
@@ -7253,6 +7786,84 @@ class Renderer {
     }
   }
 
+  /**
+   * The cat cage draws almost nothing: no cat, no water, no fog, no walls.
+   * Only the answer rings, a breaker strike, and the hole left at the end.
+   */
+  _drawCage(game, now) {
+    const { ctx } = this;
+    const c = game.cage;
+    if (!c) return;
+    for (const r of c.rings || []) {
+      const k = clamp((now - r.t) / r.life, 0, 1);
+      if (k >= 1) continue;
+      const rad = lerp(r.r0, r.r1, 1 - (1 - k) ** 2);
+      const a = (1 - k) ** 1.45;
+      ctx.strokeStyle = `rgba(${r.col}, ${0.55 * a})`;
+      ctx.lineWidth = 1.2 + a * 2.2;
+      ctx.beginPath();
+      ctx.arc(r.x, r.y, rad, 0, TAU);
+      ctx.stroke();
+      ctx.strokeStyle = `rgba(${r.col}, ${0.14 * a})`;
+      ctx.lineWidth = 7 * a + 1;
+      ctx.beginPath();
+      ctx.arc(r.x, r.y, rad, 0, TAU);
+      ctx.stroke();
+    }
+    const d = c.device;
+    if (d && d.alive && d.hitT > 0) {
+      // The breaker is a wall tile, and walls are invisible. Only a line that
+      // lands on it reveals a purple seam for a moment.
+      const k = d.hitT / 0.4;
+      ctx.strokeStyle = `rgba(196, 132, 255, ${0.18 + k * 0.5})`;
+      ctx.lineWidth = 1.4;
+      ctx.strokeRect(d.x - 16, d.y - 16, 32, 32);
+      ctx.fillStyle = `rgba(196, 132, 255, ${0.025 + k * 0.06})`;
+      ctx.fillRect(d.x - 16, d.y - 16, 32, 32);
+    }
+    if (c.finished && c.end) {
+      const x = c.end.x;
+      const y = c.end.y;
+      const R = 46 + Math.sin(now * 1.3) * 1.5;
+      const seed = 917;
+      drawPortalFx(ctx, x, y, R, now, '196, 132, 255', false, 1, seed, 3, PORTAL.spin);
+      ctx.save();
+      ctx.strokeStyle = 'rgba(206, 166, 255, 0.5)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(x, y, R * 1.08, 0, TAU);
+      ctx.stroke();
+      // Missing wedges and a few dead pixels: this is a portal with holes in it.
+      const step = Math.floor(now * 9);
+      ctx.fillStyle = 'rgba(4, 7, 10, 0.9)';
+      for (let i = 0; i < 9; i++) {
+        const h = (n) => {
+          const v = Math.sin((seed + step * 13 + i * 71 + n * 191) * 12.9898) * 43758.5453;
+          return v - Math.floor(v);
+        };
+        const a0 = h(1) * TAU;
+        const a1 = a0 + 0.08 + h(2) * 0.34;
+        const rr = R * (0.25 + h(3) * 0.72);
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.arc(x, y, rr, a0, a1);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.fillStyle = 'rgba(236, 220, 255, 0.45)';
+      for (let i = 0; i < 7; i++) {
+        const h = (n) => {
+          const v = Math.sin((seed + step * 7 + i * 53 + n * 97) * 78.233) * 12345.678;
+          return v - Math.floor(v);
+        };
+        const a = h(4) * TAU;
+        const rr = R * (0.3 + h(5) * 0.8);
+        ctx.fillRect(x + Math.cos(a) * rr, y + Math.sin(a) * rr, 2, 2);
+      }
+      ctx.restore();
+    }
+  }
+
   /** Lab-only scenery: fog, dishes, gates, cards and the two experimental bodies. */
   _drawLab(game, now) {
     const lab = game.lab;
@@ -7636,6 +8247,10 @@ class UI {
     this.root.innerHTML = `
       <div class="vignette"></div>
       <div class="grain"></div>
+      <div class="map-title hidden" id="map-title">
+        <div class="mt-name" id="map-title-name"></div>
+        <div class="mt-rule"><i></i><b></b><i></i></div>
+      </div>
 
       <section class="screen title-screen" id="scr-title">
         <div class="title-inner">
@@ -7782,6 +8397,8 @@ class UI {
     this.grid = $('chamber-grid');
     this.nestGlyph = $('nest-glyph');
     this.foot = $('title-foot');
+    this.mapTitle = $('map-title');
+    this.mapTitleName = $('map-title-name');
     this.hudNum = $('hud-num');
     this.hudSector = $('hud-sector');
     this.hudFloor = $('hud-floor');
@@ -7986,23 +8603,21 @@ class UI {
     this.hideHUD();
     this.guide(`摁下${this.game.keyName('ping')}以开始`, { sticky: true });
     this.grid.innerHTML = '';
-    const unlocked = progress.unlocked || 1;
-    const cleared = new Set(progress.cleared || []);
-    for (let i = 0; i < 8; i++) {
+    // Five difficulty slots, not chambers. They stay dark until the difficulty
+    // pass exists; nothing here opens the old map picker.
+    for (let i = 0; i < 5; i++) {
       const cell = document.createElement('button');
-      cell.className = 'cell' + (i < unlocked ? '' : ' locked') + (cleared.has(i) ? ' cleared' : '');
-      // The chamber's number is drawn as bars, not written.
+      cell.className = 'cell locked';
       let bars = '<span class="cell-bars">';
       for (let b = 0; b <= i; b++) bars += '<i></i>';
       bars += '</span>';
-      cell.innerHTML = bars + (i < unlocked ? '' : '<span class="cell-slash"></span>');
-      cell.disabled = i >= unlocked;
-      cell.addEventListener('click', () => {
-        cell.blur();
-        this.game.openMapSelect();
-      });
+      cell.innerHTML = bars + '<span class="cell-slash"></span>';
+      cell.disabled = true;
+      cell.setAttribute('aria-label', `难度 ${i + 1}（尚未开放）`);
       this.grid.appendChild(cell);
     }
+    // 16 ticks are a leftover from the old 37-room / 16-shard world; in
+    // mapMode they are pure ornament and only fill after worldCleared.
     this.nestGlyph.innerHTML = '';
     for (let i = 0; i < 16; i++) {
       const p = document.createElement('i');
@@ -8010,6 +8625,23 @@ class UI {
       this.nestGlyph.appendChild(p);
     }
     this.foot.innerHTML = progress.worldCleared ? `<span class="foot-rings">${icon('sound')}</span>` : '';
+  }
+
+  /** The boss room pauses on its name, then gets out of the way. */
+  showMapTitle(name) {
+    if (!this.mapTitle) return;
+    this.mapTitleName.textContent = name;
+    this.mapTitle.classList.remove('hidden');
+    // Restart the CSS entrance even when two boss rooms arrive back to back.
+    this.mapTitle.classList.remove('in');
+    void this.mapTitle.offsetWidth;
+    this.mapTitle.classList.add('in');
+  }
+
+  hideMapTitle() {
+    if (!this.mapTitle) return;
+    this.mapTitle.classList.add('hidden');
+    this.mapTitle.classList.remove('in');
   }
 
   showGame() {
@@ -8327,6 +8959,8 @@ class UI {
   }
 
   renderInventory(game) {
+    // Socketing or removing 绝地求生 changes the life pool immediately.
+    game.syncLives();
     const inv = game.inv;
     const cells = [];
     const push = (kind, i, o, cls = '') => {
@@ -8560,7 +9194,10 @@ class UI {
 
 const SAVE_KEY = 'hush.save.v1';
 const FLOORS = 5;
-const BUILT_MAPS = new Set(['room', 'maze', 'moving', 'mech', 'lab']);
+// 'mech' has no buildMechMap yet: startMap('mech') falls back to buildRoomMap
+// and ordinary clears loop back into a room. Kept here only as the target of
+// the eight doors until the real map exists.
+const BUILT_MAPS = new Set(['room', 'maze', 'moving', 'mech', 'lab', 'cage']);
 const PING_MAX = 3;
 const PING_REGEN = 2.4;
 const PING_SPEED = 720;
@@ -8686,6 +9323,8 @@ class Game {
     this.speedT = 0;
     this.speedMul = 1;
     this.invulnT = 0;
+    this.lives = 1;
+    this.livesMax = 1;
     this.stressCharges = 0;
     this.starT = 0;
     this.counterT = 0;
@@ -8748,7 +9387,11 @@ class Game {
 
   // ---------------------------------------------------------------- progress
   loadProgress() {
-    const fallback = { unlocked: 1, cleared: [], last: 0, best: {} };
+    const fallback = {
+      unlocked: 1, cleared: [], last: 0, best: {},
+      labBest: null, labCleared: false,
+      bossBest: null, bossCleared: false,
+    };
     try {
       const raw = localStorage.getItem(SAVE_KEY);
       if (!raw) return fallback;
@@ -8762,11 +9405,18 @@ class Game {
           best[i] = { time: v.time, pings: Math.max(0, v.pings | 0) };
         }
       }
+      const rec = (v) => (v && typeof v.time === 'number'
+        ? { time: v.time, pings: Math.max(0, v.pings | 0) }
+        : null);
       return {
         unlocked: clamp(data.unlocked, 1, CHAMBERS.length),
         cleared: Array.isArray(data.cleared) ? data.cleared : [],
         last: typeof data.last === 'number' ? data.last : 0,
         best,
+        labBest: rec(data.labBest),
+        labCleared: !!data.labCleared,
+        bossBest: rec(data.bossBest),
+        bossCleared: !!data.bossCleared,
       };
     } catch {
       return fallback;
@@ -8830,6 +9480,7 @@ class Game {
       this.diamonds = snap.diamonds;
       this.gold = snap.gold;
       this.lives = snap.lives;
+      this.livesMax = this.maxLives();
       this.stressCharges = snap.stressCharges;
     }
     this._suppressSnapshot = false;
@@ -8861,12 +9512,15 @@ class Game {
     this.counterUsed = false;
     this.rewindUsed = false;
     this.lives = this.maxLives();
+    this.livesMax = this.lives;
     this.guides = {};
     this.clearGuideTimers();
     this.tutorialStarted = false;
     this.throwBound = false;
   }
 
+  /** Normal start: mapMode's room map. The run/world/chamber fallbacks below
+   *  are legacy (?run= / ?world= / ?c=) and only run if room generation fails. */
   startBest() {
     this.audio.unlock();
     this.resetRunState();
@@ -8879,7 +9533,8 @@ class Game {
     this.beginTutorial();
   }
 
-  /** Roguelike run: five floors, each one a room-graph floor. */
+  /** Legacy roguelike run (only via ?run): five floors of room-graph maps.
+   *  Not reachable from the normal title start. */
   startRun(seed = (Math.random() * 1e9) | 0) {
     this.guides = {};
     this.clearGuideTimers();
@@ -8916,6 +9571,15 @@ class Game {
     return true;
   }
 
+  /** Body-agnostic kill, so the star and counter can answer the cat too. */
+  killThreat(source) {
+    if (!source) return false;
+    if (this.cage && source === this.cage.cat) return this.killCat();
+    return this.killHunter(source);
+  }
+
+  /** Legacy floor body for startRun (?run): a single key is put in the shard
+   *  array; it is not the old world's 16-shard progression. */
   startFloor(depth) {
     this._entryPending = true;
     this.depth = clamp(depth, 1, FLOORS);
@@ -8994,6 +9658,7 @@ class Game {
     this.speedMul = 1;
     this.invulnT = 0;
     this.lives = this.maxLives();
+    this.livesMax = this.lives;
     this.starT = 0;
     this.clearInvert();
     this.stressUsed = false;
@@ -9015,7 +9680,9 @@ class Game {
         ? buildMovingMap(seed)
         : node.kind === 'lab'
           ? buildLabMap(seed)
-          : buildRoomMap(seed);
+          : node.kind === 'cage'
+            ? buildCageMap(seed)
+            : buildRoomMap(seed);
     this.mapMode = true;
     this.mapId = node.id;
     this.mapSeed = seed;
@@ -9057,6 +9724,7 @@ class Game {
       return h;
     });
     this.lab = level.lab || null;
+    this.cage = level.cage || null;
     this.labEnemies = (level.labEnemies || []).map((m) => {
       const C = m.type === 'lab2' ? LabBrute : LabStalker;
       const e = new C(m.x, m.y, m.home, { guardCard: m.guardCard ?? -1, locked: !!m.locked });
@@ -9105,12 +9773,211 @@ class Game {
     this.activeItem = null;
     this.state = 'playing';
     this.ui.showGame();
+    this.ui.hideMapTitle();
+    if (this.cage) this.beginCage();
     const startBlock = level.moving ? blockAt(level, Math.floor(this.player.x / level.tile), Math.floor(this.player.y / level.tile)) : null;
     this.mcFloorBlock = startBlock ? startBlock.i : -1;
     this.mcFloor = level.moving ? (startBlock ? startBlock.z + 1 : 1) : 0;
     this.ui.updateHUD({ chamber: 0, title: node.name, shards: 0, total: 0, charges: this.charges, listen: false, muted: this.audio.muted, danger: 0, depth: 0, diamonds: this.diamonds, gold: this.gold, floor: level.moving ? this.movingFloor() : 0 });
     if (level.moving) this.maybeGuide('moving', '这些房间都在动。去对角那一间的二层。');
     return true;
+  }
+
+  /** The cat cage opens with its name, and nobody moves until it fades. */
+  beginCage() {
+    const c = this.cage;
+    c.activations = 0;
+    c.finished = false;
+    c.end = null;
+    c.device = null;
+    c.rings = [];
+    c.scan = null;
+    c.pending = null;
+    c.reviveDist = null;
+    c.introT = 3.4;
+    c.cat.dead = false;
+    c.cat.target = null;
+    c.cat.path = [];
+    c.cat.repath = 0;
+    this.inWater = false;
+    this.danger = 0;
+    this.ui.hideGuide();
+    this.ui.showMapTitle(this.mapNode ? this.mapNode.name : '薛定谔的猫笼');
+  }
+
+  /** A ring that is not a sonar ping: the cat's answer, or a breaker's death. */
+  cageRing(x, y, col, r1, life) {
+    if (!this.cage) return;
+    this.cage.rings.push({ x, y, t: this.now, col, r0: 3, r1, life });
+  }
+
+  /** The scan is over: rebuild around what it touched, then let the cat out. */
+  applyCageScan() {
+    const c = this.cage;
+    const pend = c.pending;
+    if (!pend) return;
+    const scanned = c.scan || new Uint8Array(CAGE.W * CAGE.H);
+    const catDistance = c.reviveDist != null ? c.reviveDist : pend.d;
+    const playerTile = {
+      x: Math.floor(this.player.x / this.level.tile),
+      y: Math.floor(this.player.y / this.level.tile),
+    };
+    regenerateCage(this.level, { scanned, playerTile, catDistance });
+    // Remember what this scan actually measured. A cat that revives on its old
+    // ring still leaves the newest scan as the reference for the next death.
+    if (pend.d > 0) c.lastScanDist = pend.d;
+    c.pending = null;
+    c.scan = null;
+    c.reviveDist = null;
+    c.cat.target = pend.target || null;
+    c.cat.path = [];
+    c.cat.repath = 0;
+    this.loot = cageLootPixels(this.level);
+    this.cageRing(c.cat.x, c.cat.y, '255, 64, 64', 170, 1.5);
+    // A short red answer, thrown out from wherever the cat was. It carries no
+    // information back: the cat is not a thing the sonar is allowed to see.
+    this.spawnRays(c.cat.x, c.cat.y, {
+      count: 64,
+      speed: 470,
+      life: 1.45,
+      tint: '255, 64, 64',
+      ghost: true,
+    });
+    this.audio.catCall(clamp((c.cat.x - this.player.x) / 520, -1, 1));
+    this.audio.cageShift();
+    this.flash = 1;
+    this.shake = Math.max(this.shake, 5);
+    this.ui.hideTip();
+  }
+
+  /**
+   * The cat can be killed, but never for good: the next scan remembers the
+   * distance it was last heard at and puts it back on that ring.
+   */
+  killCat() {
+    const c = this.cage;
+    const cat = c && c.cat;
+    if (!cat || cat.dead || c.finished) return false;
+    c.reviveDist = c.pending
+      ? c.pending.d
+      : (c.lastScanDist || dist(this.player.x, this.player.y, cat.x, cat.y));
+    cat.dead = true;
+    cat.path = [];
+    cat.target = null;
+    this.cageRing(cat.x, cat.y, '255, 64, 64', 92, 0.75);
+    this.stepEcho(cat.x, cat.y, '255, 64, 64', { count: 28, speed: 340, life: 0.6, ghost: true });
+    this.audio.shard();
+    this.shake = Math.max(this.shake, 4);
+    return true;
+  }
+
+  /** Advance the cat along the floor; it walks to where the last ping was. */
+  stepCageCat(dt) {
+    const c = this.cage;
+    const cat = c.cat;
+    if (!cat || cat.dead || !cat.target) return;
+    const L = this.level;
+    cat.repath -= dt;
+    if (cat.repath <= 0 || !cat.path.length) {
+      cat.repath = 0.4;
+      let tx = Math.floor(cat.target.x / L.tile);
+      let ty = Math.floor(cat.target.y / L.tile);
+      if (isSolid(L.grid, L.w, L.h, tx, ty)) {
+        const op = nearestOpen(L.grid, L.w, L.h, tx, ty);
+        if (op) { tx = op.x; ty = op.y; }
+      }
+      const path = findPath(
+        L.grid, L.w, L.h,
+        Math.floor(cat.x / L.tile), Math.floor(cat.y / L.tile),
+        tx, ty,
+      );
+      cat.path = path ? path.map((p) => ({ x: (p.x + 0.5) * L.tile, y: (p.y + 0.5) * L.tile })) : [];
+    }
+    if (!cat.path.length) return;
+    let wp = cat.path[0];
+    if (Math.hypot(wp.x - cat.x, wp.y - cat.y) < 4) {
+      cat.path.shift();
+      wp = cat.path[0];
+      if (!wp) return;
+    }
+    const slow = cageWaterAt(L, cat.x, cat.y) ? 0.8 : 1;
+    const speed = 92 * 0.8 * slow;
+    const d = Math.hypot(wp.x - cat.x, wp.y - cat.y) || 1;
+    const step = Math.min(d, speed * dt);
+    cat.x += ((wp.x - cat.x) / d) * step;
+    cat.y += ((wp.y - cat.y) / d) * step;
+    cat.face = Math.atan2(wp.y - cat.y, wp.x - cat.x);
+  }
+
+  updateCage(dt) {
+    const c = this.cage;
+    if (!c) return;
+    if (c.introT > 0) {
+      c.introT = Math.max(0, c.introT - dt);
+      if (c.introT === 0) this.ui.hideMapTitle();
+      return;
+    }
+    if (c.pending && this.now >= c.pending.at) this.applyCageScan();
+    for (let i = c.rings.length - 1; i >= 0; i--) {
+      if (this.now - c.rings[i].t > c.rings[i].life) c.rings.splice(i, 1);
+    }
+    if (c.device && c.device.hitT > 0) c.device.hitT = Math.max(0, c.device.hitT - dt);
+    if (c.finished) {
+      this.danger = 0;
+      return;
+    }
+    if (c.cat && !c.cat.dead) {
+      this.stepCageCat(dt);
+      const d = dist(this.player.x, this.player.y, c.cat.x, c.cat.y);
+      this.danger = clamp(1 - (d - 48) / 280, 0, 1);
+      if (d < this.player.r + c.cat.r - 1) {
+        // The cat is just another body for the charms: the star and counter
+        // kill it, stress and the totem save the player, lives still count.
+        this.hurt(c.cat);
+      }
+    } else {
+      this.danger = 0;
+    }
+  }
+
+  activateCageDevice() {
+    const c = this.cage;
+    const d = c && c.device;
+    if (!d || !d.alive) return false;
+    d.alive = false;
+    this.level.grid[d.ty * CAGE.W + d.tx] = 0;
+    this.cage.activations++;
+    this.cageRing(d.x, d.y, '196, 132, 255', 170, 1.3);
+    this.audio.deviceBreak(clamp((d.x - this.player.x) / 520, -1, 1));
+    this.flash = 0.9;
+    this.shake = Math.max(this.shake, 4);
+    c.device = null;
+    if (c.activations >= 5) this.finishCage(d.x, d.y);
+    this.ui.hideTip();
+    return true;
+  }
+
+  /** Five breakers: the room stops being observed, and the cat is gone. */
+  finishCage(x, y) {
+    const c = this.cage;
+    c.finished = true;
+    c.cat.dead = true;
+    c.device = null;
+    c.end = { x: (CAGE.W / 2) * this.level.tile, y: (CAGE.H / 2) * this.level.tile };
+    this.level.grid.fill(0);
+    c.fog.fill(0);
+    c.water.fill(0);
+    this.cageRing(x, y, '196, 132, 255', 640, 2.4);
+    this.audio.cageCollapse();
+    this.flash = 1.2;
+    this.shake = 22;
+    this.ui.hideTip();
+  }
+
+  /** The laboratory's last door is the cat cage, not the ending. */
+  enterCage() {
+    this.ui.hideTip();
+    this.startMap('cage', (Math.random() * 1e9) | 0);
   }
 
   /** Step through a map exit (or bounce when the door is locked). */
@@ -9633,8 +10500,10 @@ class Game {
 
   /** True when the world point sits inside lab poison fog. */
   fogAt(x, y) {
+    if (!this.level) return false;
+    if (this.cage) return cageFogAt(this.level, x, y);
     const lab = this.lab;
-    if (!lab || !lab.fog || !this.level) return false;
+    if (!lab || !lab.fog) return false;
     const tx = Math.floor(x / this.level.tile);
     const ty = Math.floor(y / this.level.tile);
     if (tx < 0 || ty < 0 || tx >= this.level.w || ty >= this.level.h) return false;
@@ -9703,6 +10572,13 @@ class Game {
         for (const g of this.lab.gates) if (!g.open) take('gate', g, g.x, g.y, 56);
         take('final', this.lab.finalExit, this.lab.finalExit.x, this.lab.finalExit.y, 50);
       }
+      if (this.cage) {
+        const dev = this.cage.device;
+        if (dev && dev.alive) take('device', dev, dev.x, dev.y, 48);
+        if (this.cage.finished && this.cage.end) {
+          take('cageExit', this.cage.end, this.cage.end.x, this.cage.end.y, 66);
+        }
+      }
     } else if (this.level && this.level.exit) {
       const e = this.level.exit;
       take('stair', e, e.x, e.y, 50);
@@ -9745,8 +10621,14 @@ class Game {
         ? `按 [ ${this.keyName('interact')} ] 刷开门禁。`
         : `需要第${['一', '二', '三'][g.zone] || '?'}区的门禁卡。`;
     } else if (near.kind === 'final') {
-      title = '实验室出口';
-      body = `按 [ ${this.keyName('interact')} ] 离开实验室。`;
+      title = '猫笼入口';
+      body = `按 [ ${this.keyName('interact')} ] 进入猫笼。`;
+    } else if (near.kind === 'device') {
+      title = '激活装置';
+      body = `按 [ ${this.keyName('interact')} ] 激活。`;
+    } else if (near.kind === 'cageExit') {
+      title = '坍缩点';
+      body = `按 [ ${this.keyName('interact')} ] 离开猫笼。`;
     } else if (near.kind === 'exit') {
       const ex = near.ref;
       const dest = mapNode(ex.to);
@@ -9808,7 +10690,9 @@ class Game {
       this.ui.hideTip();
       return false;
     }
-    if (near.kind === 'final') { this.ui.hideTip(); this.complete(); return true; }
+    if (near.kind === 'final') { this.ui.hideTip(); this.enterCage(); return true; }
+    if (near.kind === 'device') { this.ui.hideTip(); this.activateCageDevice(); return false; }
+    if (near.kind === 'cageExit') { this.ui.hideTip(); this.complete(); return true; }
     if (near.kind === 'exit') { this.ui.hideTip(); return this.enterMapExit(near.ref); }
     if (this.exitOpen) { this.complete(); return true; }
     this.audio.deny();
@@ -9961,8 +10845,11 @@ class Game {
   }
 
   openMapSelect() {
-    // The lab is found through the moving maze, not from the title menu.
-    const entries = MAP_ORDER.filter((id) => id !== 'lab' || this.debugMode).map((id) => {
+    // The lab is found through the moving maze, and the cage through the lab;
+    // neither is a normal destination on the debug map picker.
+    const entries = MAP_ORDER
+      .filter((id) => (id !== 'lab' && id !== 'cage') || this.debugMode)
+      .map((id) => {
       const node = mapNode(id);
       return { id, name: node.name, sub: node.sub || '', built: BUILT_MAPS.has(id) };
     });
@@ -10113,6 +11000,12 @@ class Game {
         }
         t.x = nx;
         t.y = ny;
+        const cat = this.cage && this.cage.cat;
+        if (cat && !cat.dead && dist(t.x, t.y, cat.x, cat.y) < cat.r + 4) {
+          if (t.kills) this.killCat();
+          hitWall = true;
+          break;
+        }
         if (!t.trail || t.trail.length === 0 || dist2(t.trail[t.trail.length - 1].x, t.trail[t.trail.length - 1].y, nx, ny) > 9) {
           t.trail.push({ x: nx, y: ny });
           if (t.trail.length > 16) t.trail.shift();
@@ -10195,13 +11088,31 @@ class Game {
     return 1 + (lvl ? CHARMS.survive.extraLives[lvl - 1] : 0);
   }
 
+  /**
+   * 绝地求生 raises the cap while you are still in the run: keep the lives
+   * you already have and add the newly granted ones. Taking the charm out
+   * clamps the pool back down. Without this, a charm socketed after the map
+   * started did nothing until the next map reset the pool.
+   */
+  syncLives() {
+    const max = this.maxLives();
+    if (this.livesMax == null) {
+      this.livesMax = max;
+      return;
+    }
+    const gain = max - this.livesMax;
+    this.livesMax = max;
+    if (gain > 0 && this.lives > 0) this.lives += gain;
+    else if (this.lives > max) this.lives = max;
+  }
+
   /** Everything that can hurt you comes through here: charms get a say first. */
   hurt(source) {
     if (this.state !== 'playing') return;
     // The star kills on contact, so its own invulnerability must not swallow
     // the contact first (that made it behave like a plain shield).
     if (this.starT > 0) {
-      if (source && source.x != null) this.killHunter(source);
+      if (source && source.x != null) this.killThreat(source);
       this.invulnT = Math.max(this.invulnT, 0.6);
       return;
     }
@@ -10218,7 +11129,7 @@ class Game {
     }
     if (this.inv.level('counter') > 0 && !this.counterUsed) {
       this.counterUsed = true;
-      if (source && source.x != null) this.killHunter(source);
+      if (source && source.x != null) this.killThreat(source);
       this.invulnT = CHARMS.counter.window;
       this.counterT = CHARMS.counter.window;
       this.flash = 1;
@@ -10334,7 +11245,8 @@ class Game {
     return this.inv.count('sharpStone') + this.inv.count('pebbles');
   }
 
-  /** Dev/experimental: one continuous map, no chamber select. */
+  /** Legacy 37-room / 16-shard world (only via ?world), with the echo gate.
+   *  The normal start does not use shards; mapMode uses mapKey instead. */
   startWorld(seed = 424242) {
     this._entryPending = true;
     const level = generateWorld(seed);
@@ -10792,7 +11704,8 @@ class Game {
       });
       return;
     }
-    this.levelTime += dt;
+    const inIntro = !!(this.cage && this.cage.introT > 0);
+    if (!inIntro) this.levelTime += dt;
     this.updateMoving(dt);
 
     // A moving room takes the whole cast with it. For 0.7 s nobody but a thrown
@@ -10844,7 +11757,7 @@ class Game {
     const stunned = this.stunT > 0;
     if (stunned) this.stunT = Math.max(0, this.stunT - dt);
     this.fogImmuneT = Math.max(0, this.fogImmuneT - dt);
-    const move = stunned ? { x: 0, y: 0 } : (this.debugMove || this.input.moveVector());
+    const move = stunned || inIntro ? { x: 0, y: 0 } : (this.debugMove || this.input.moveVector());
 
     const listen = !this.sneak && (this.debugListen === true || (this.listenT > 0.26 && !p.moving));
     this.listen = listen;
@@ -10857,7 +11770,15 @@ class Game {
     }
     const inFog = !this.fogImmuneT && this.fogAt(p.x, p.y);
     this.inFog = inFog;
-    const motion = p.update(dt, move, { run, listen, creep: this.sneak, creepMul, mul: this.speedMul * (inFog ? 0.8 : 1) });
+    const inWater = !!(this.cage && cageWaterAt(this.level, p.x, p.y));
+    this.inWater = inWater;
+    const motion = p.update(dt, move, {
+      run,
+      listen,
+      creep: this.sneak,
+      creepMul,
+      mul: this.speedMul * (inFog ? 0.8 : 1) * (inWater ? 0.8 : 1),
+    });
     const resolved = this.resolve(p, motion.x, motion.y);
     p.x = resolved.x;
     p.y = resolved.y;
@@ -10890,7 +11811,8 @@ class Game {
     if (p.moving && !this.sneak) {
       if (p.stepPhase > 58) {
         p.stepPhase = 0;
-        this.audio.footstep(0, 0.85);
+        if (this.inWater) this.audio.splash(0, 1);
+        else this.audio.footstep(0, 0.85);
         this.stepEcho(p.x, p.y);
       }
     }
@@ -10916,11 +11838,11 @@ class Game {
     // pinging
     // The left button only throws what a hotkey has bound to the cursor;
     // without a bound throwable it is just the sonar.
-    if (!stunned && this.input.consumeCode('Mouse0')) {
+    if (!stunned && !inIntro && this.input.consumeCode('Mouse0')) {
       if (this.activeItem) this.throwItem(this.activeItem);
       else this.tryPing();
     }
-    if (!stunned && this.input.consume('ping')) this.firePing();
+    if (!stunned && !inIntro && this.input.consume('ping')) this.firePing();
 
 
     const aim = this.aimPoint();
@@ -11019,7 +11941,7 @@ class Game {
     }
 
     // Everything you can touch answers to F: walk close, read the prompt, press it.
-    const near = this.interactAt();
+    const near = inIntro ? null : this.interactAt();
     this.nearLoot = near && near.kind === 'loot' ? near.ref : null;
     if (near) this.showInteractTip(near);
     else this.ui.hideTip();
@@ -11130,6 +12052,10 @@ class Game {
     this.audio.update(dt, { danger: this.danger });
     this.updateDishTrails(dt);
     this.updateRays(dt);
+    if (this.cage) {
+      this.updateCage(dt);
+      if (this.state !== 'playing') return;
+    }
     this.updateParticles(dt);
     this.flipFreeze = Math.max(0, (this.flipFreeze || 0) - dt);
     if (this.shakeT > 0) {
@@ -11418,7 +12344,12 @@ class Game {
       if (r.age > r.life + 1.5) continue;
       const ftx = Math.floor(r.x / L.tile);
       const fty = Math.floor(r.y / L.tile);
-      r.fog = !!(this.lab && this.lab.fog && ftx >= 0 && fty >= 0 && ftx < L.w && fty < L.h && this.lab.fog[fty * L.w + ftx]);
+      const inBounds = ftx >= 0 && fty >= 0 && ftx < L.w && fty < L.h;
+      const fi = inBounds ? fty * L.w + ftx : -1;
+      const wet = !!(this.cage && inBounds && this.cage.water[fi] === 1);
+      r.wet = wet;
+      const fogGrid = this.cage ? this.cage.fog : (this.lab && this.lab.fog);
+      r.fog = !!(fogGrid && inBounds && !wet && fogGrid[fi] === 1);
       if (r.ghost && r.age <= r.life) {
         const step = (r.speed || RAY_SPEED) * dt;
         r.x += r.dx * step;
@@ -11432,12 +12363,17 @@ class Game {
         continue;
       }
       if (r.age <= r.life) {
-        let move = (r.speed || RAY_SPEED) * dt;
+        // Sound runs twice as fast in the pools, and the water is never drawn:
+        // a blue line is the only tell that a pool is there.
+        let move = (r.speed || RAY_SPEED) * dt * (wet ? 2 : 1);
         while (move > 0.001) {
           const d = Math.min(6, move);
           move -= d;
           const nx = r.x + r.dx * d;
           const ny = r.y + r.dy * d;
+          if (this.cage && this.cage.scan && r.tag && r.tag.kind === 'ping') {
+            cageMarkScan(L, nx, ny);
+          }
           if (r.tag && r.tag.kind === 'dish' && !r.dishHit && dist(nx, ny, this.player.x, this.player.y) < 16) {
             r.dishHit = true;
             this.stunT = 2;
@@ -11469,6 +12405,17 @@ class Game {
           }
           const hitX = isSolid(L.grid, L.w, L.h, Math.floor(nx / TILE), Math.floor(r.y / TILE));
           const hitY = isSolid(L.grid, L.w, L.h, Math.floor(r.x / TILE), Math.floor(ny / TILE));
+          const wx = hitX ? Math.floor(nx / TILE) : Math.floor(r.x / TILE);
+          const wy = hitY ? Math.floor(ny / TILE) : Math.floor(r.y / TILE);
+          const dev = this.cage && this.cage.device;
+          if ((hitX || hitY) && dev && dev.alive && wx === dev.tx && wy === dev.ty) {
+            // The breaker itself has no colour; only a line that strikes it
+            // comes back purple.
+            r.tint = '196, 132, 255';
+            r.hot = false;
+            r.life += 0.3;
+            dev.hitT = 0.4;
+          }
           if (hitX) r.dx *= -1;
           if (hitY) r.dy *= -1;
           if (hitX || hitY) {
@@ -11501,6 +12448,7 @@ class Game {
   }
 
   firePing() {
+    if (this.cage && this.cage.introT > 0) return;
     if (this.charges < 1) {
       this.audio.deny();
       return;
@@ -11508,6 +12456,19 @@ class Game {
     this.charges--;
     if (this.chargeTimer <= 0) this.chargeTimer = PING_REGEN;
     const p = this.player;
+    if (this.cage) {
+      const c = this.cage;
+      if (c.pending) this.applyCageScan();
+      if (!c.finished && !c.cat.dead) {
+        c.scan = new Uint8Array(CAGE.W * CAGE.H);
+        cageMarkScan(this.level, p.x, p.y);
+        c.pending = {
+          at: this.now + 1.02,
+          d: dist(p.x, p.y, c.cat.x, c.cat.y),
+          target: { x: p.x, y: p.y },
+        };
+      }
+    }
     this.pings.push({
       x: p.x,
       y: p.y,
@@ -11587,6 +12548,25 @@ class Game {
         this.ui.dismiss();
         this.ui.showRunVictory({ time: t, best: this.progress.bestRun, depth: FLOORS });
       }
+      return;
+    }
+    if (this.mapMode && this.mapId === 'cage') {
+      const time = Math.max(0, this.levelTime);
+      const prev = this.progress.bossBest;
+      const isRecord = !prev || time < prev.time;
+      if (isRecord) this.progress.bossBest = { time, pings: this.pingsUsed };
+      this.progress.bossCleared = true;
+      this.saveProgress();
+      this.state = 'victory';
+      this.audio.clear();
+      this.ui.dismiss();
+      this.ui.showWorldVictory({
+        time,
+        pings: this.pingsUsed,
+        best: this.progress.bossBest,
+        isRecord,
+        shards: this.collected,
+      });
       return;
     }
     if (this.mapMode && this.mapId === 'lab') {

@@ -977,6 +977,8 @@ export function clearMoving(level) {
   // The clear is terminal: b2 is gone, so its whole 3x3 centre is wall. The
   // broken-core rule in writeMovingBlock only applies while the maze still runs.
   level.grid[(b2.oy + 12) * level.w + b2.ox + 12] = 1;
+  // Placeholder target: 'mech' has no buildMechMap yet, so these doors drop
+  // the player into a fallback room map (a loop). The real exit is collapseB2.
   level.exits = movingDoors(b2).map((d) => ({
     to: 'mech',
     x: d.x,

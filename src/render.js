@@ -126,6 +126,7 @@ export class Renderer {
     ctx.scale(this.scale, this.scale);
 
     this._drawLab(game, now);
+    this._drawCage(game, now);
 
     // ---- sonar: sparks fly out, bounce off walls, leave short comet tails ---
     // Stealth is silence, and silence is blindness: nothing renders at all.
@@ -147,7 +148,9 @@ export class Renderer {
         // Fog is invisible; a brighter green line is the only cue that a ray
         // is travelling through it.
         const fogBoost = r.fog ? 1.85 : 1;
-        const col = r.fog ? '170, 255, 190' : r.tint || RAY_RGB;
+        // Water is never drawn. A pool only exists as a stretch of blue sound
+        // running twice as fast as the rest of the room.
+        const col = r.wet && !r.tint ? '104, 178, 255' : r.fog ? '170, 255, 190' : r.tint || RAY_RGB;
         const pts = r.pts;
         const n = pts.length;
         const start = Math.max(0, n - 10);
@@ -703,6 +706,84 @@ export class Renderer {
     if (game.flash > 0) {
       ctx.fillStyle = `rgba(190, 255, 245, ${game.flash * 0.06})`;
       ctx.fillRect(0, 0, this.cw, this.ch);
+    }
+  }
+
+  /**
+   * The cat cage draws almost nothing: no cat, no water, no fog, no walls.
+   * Only the answer rings, a breaker strike, and the hole left at the end.
+   */
+  _drawCage(game, now) {
+    const { ctx } = this;
+    const c = game.cage;
+    if (!c) return;
+    for (const r of c.rings || []) {
+      const k = clamp((now - r.t) / r.life, 0, 1);
+      if (k >= 1) continue;
+      const rad = lerp(r.r0, r.r1, 1 - (1 - k) ** 2);
+      const a = (1 - k) ** 1.45;
+      ctx.strokeStyle = `rgba(${r.col}, ${0.55 * a})`;
+      ctx.lineWidth = 1.2 + a * 2.2;
+      ctx.beginPath();
+      ctx.arc(r.x, r.y, rad, 0, TAU);
+      ctx.stroke();
+      ctx.strokeStyle = `rgba(${r.col}, ${0.14 * a})`;
+      ctx.lineWidth = 7 * a + 1;
+      ctx.beginPath();
+      ctx.arc(r.x, r.y, rad, 0, TAU);
+      ctx.stroke();
+    }
+    const d = c.device;
+    if (d && d.alive && d.hitT > 0) {
+      // The breaker is a wall tile, and walls are invisible. Only a line that
+      // lands on it reveals a purple seam for a moment.
+      const k = d.hitT / 0.4;
+      ctx.strokeStyle = `rgba(196, 132, 255, ${0.18 + k * 0.5})`;
+      ctx.lineWidth = 1.4;
+      ctx.strokeRect(d.x - 16, d.y - 16, 32, 32);
+      ctx.fillStyle = `rgba(196, 132, 255, ${0.025 + k * 0.06})`;
+      ctx.fillRect(d.x - 16, d.y - 16, 32, 32);
+    }
+    if (c.finished && c.end) {
+      const x = c.end.x;
+      const y = c.end.y;
+      const R = 46 + Math.sin(now * 1.3) * 1.5;
+      const seed = 917;
+      drawPortalFx(ctx, x, y, R, now, '196, 132, 255', false, 1, seed, 3, PORTAL.spin);
+      ctx.save();
+      ctx.strokeStyle = 'rgba(206, 166, 255, 0.5)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(x, y, R * 1.08, 0, TAU);
+      ctx.stroke();
+      // Missing wedges and a few dead pixels: this is a portal with holes in it.
+      const step = Math.floor(now * 9);
+      ctx.fillStyle = 'rgba(4, 7, 10, 0.9)';
+      for (let i = 0; i < 9; i++) {
+        const h = (n) => {
+          const v = Math.sin((seed + step * 13 + i * 71 + n * 191) * 12.9898) * 43758.5453;
+          return v - Math.floor(v);
+        };
+        const a0 = h(1) * TAU;
+        const a1 = a0 + 0.08 + h(2) * 0.34;
+        const rr = R * (0.25 + h(3) * 0.72);
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.arc(x, y, rr, a0, a1);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.fillStyle = 'rgba(236, 220, 255, 0.45)';
+      for (let i = 0; i < 7; i++) {
+        const h = (n) => {
+          const v = Math.sin((seed + step * 7 + i * 53 + n * 97) * 78.233) * 12345.678;
+          return v - Math.floor(v);
+        };
+        const a = h(4) * TAU;
+        const rr = R * (0.3 + h(5) * 0.8);
+        ctx.fillRect(x + Math.cos(a) * rr, y + Math.sin(a) * rr, 2, 2);
+      }
+      ctx.restore();
     }
   }
 

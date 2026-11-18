@@ -1,6 +1,6 @@
 # EARSHOT 开发交接文档
 
-> 最后更新：v0.8.17（2026-11-09）
+> 最后更新：v0.8.21（2026-11-10）
 >
 > 显示名是 **EARSHOT**，但内部标识刻意没有改：存档键 `hush.*`、`dist/hush.html`、`HUSH_PORT`、`window.__hush`、`.hush.pid` 都保留，避免旧存档和已有脚本失效。改文案时只改展示层。
 
@@ -18,8 +18,8 @@
 
 现在的完整形态是**肉鸽式地图探索**：
 
-- 主流程：`房间 → 迷宫 → ……` 共 21 张地图，目前建成 4 张（房间 / 迷宫 / 移动迷宫 / 实验室）
-- 每张图有钥匙、出口、护符/道具、被动型猎手（听见才动）
+- 主流程：`房间 → 迷宫 → 移动迷宫 →（B2 坍塌）实验室 → 猫笼`；`src/maps.js` 共 **22** 个地图节点，实际生成器 **5** 张（房间 / 迷宫 / 移动迷宫 / 实验室 / 猫笼）
+- 房间图有钥匙；迷宫、移动迷宫没有钥匙，实验室用门禁卡。所有图都有出口、护符/道具与被动型猎手（听见才动）
 - 护符 10 种（含 3 级升级）、道具 8 种、6 格背包 + 4 快捷键 + 4 护符槽 + 2 格工作台
 - 另有"五层肉鸽"旧模式（`startRun`）与编辑器模式
 
@@ -63,20 +63,22 @@ ni/
 ├─ dist/hush.html        # 单文件构建产物（由 tools/build.mjs 生成）
 ├─ docs/
 │  ├─ DEVELOPMENT.md     # 本文
+│  ├─ INTRO.md           # 对外简介：核心机制 / 逃生肉鸽 / 分支 Boss
 │  └─ img/*.jpg          # README 用截图
 ├─ src/
 │  ├─ main.js            # 启动、URL 调试参数、错误浮层
-│  ├─ game.js            # 核心状态机（最大文件，约 1700 行）
+│  ├─ game.js            # 核心状态机（最大文件，约 3538 行）
 │  ├─ util.js            # clamp/lerp/dist/mulberry32/echoPan...
 │  ├─ input.js           # 键盘鼠标（keys/pressed/consume）
 │  ├─ pathfind.js        # A*（8 向、禁止切角）+ 视线检测
 │  ├─ levelgen.js        # 旧版"密室"关卡
 │  ├─ rooms.js           # 五层肉鸽的房间图生成（走廊优先）
 │  ├─ worldgen.js        # 地图模式：buildRoomMap / buildMazeMap / buildMovingMap / buildLabMap
-│  ├─ maps.js            # 21 张地图的节点表与顺序
+│  ├─ maps.js            # 22 个地图节点的节点表与顺序
 │  ├─ entities.js        # Player / Hunter(5 种) / Skitter
 │  ├─ lab.js             # 实验室专属：LabBrute(ii 型) / LabStalker(iii 型)
 │  ├─ loot.js            # CHARMS / ITEMS / Inventory（背包与合成）
+│  ├─ cage.js            # 猫笼 BOSS：重掷、猫、激活装置
 │  ├─ desc.js            # 护符与道具的文言文案、SVG 纹样
 │  ├─ render.js          # 全部绘制：射线、接触点、实体、UI 世界层
 │  ├─ ui.js              # 界面：标题页只有名字，其余几乎无字（暂停/死亡/结算/背包/选图/浮窗）
@@ -86,7 +88,7 @@ ni/
 └─ tools/                # 全部是 Node 脚本，见第 6 节
 ```
 
-`src/` 里模块之间的依赖是单向的：`util → settings → pathfind → levelgen/rooms/worldgen → maps → entities → lab → loot/desc → audio → chambers → editor → ui → render → game → main`。`tools/build.mjs` 的 `MODULES` 数组就是这个顺序，**新增文件必须同时加进去**。
+`src/` 里模块之间的依赖是单向的：`util → settings → pathfind → levelgen/rooms/worldgen → maps → entities → lab → loot/desc → cage → audio → chambers → editor → ui → render → game → main`。`tools/build.mjs` 的 `MODULES` 数组就是这个顺序，**新增文件必须同时加进去**。
 
 ---
 
@@ -96,7 +98,7 @@ ni/
 
 | key | 内容 |
 |---|---|
-| `hush.save.v1` | `{unlocked, cleared, last, best:{...}, worldCleared, worldBest, bestRun, floorCleared}` |
+| `hush.save.v1` | `{unlocked, cleared, last, best:{...}, worldCleared, worldBest, bestRun, floorCleared, labBest, labCleared, bossBest, bossCleared}` |
 | `hush.map.v1` | 编辑器里画的地图（`{cells, w, h}`） |
 
 ### 游戏状态机（`game.state`）
@@ -180,7 +182,7 @@ ni/
 |---|---|---|
 | 构建 | `node tools/build.mjs` | 把 `src/` 里全部模块内联成单文件 |
 | 传送门调参 | `python tools/serve.py 8080` 后打开 `/tools/portal-tune.html` | 拖滑块实时预览；保存写 `tools/portal-tune.saved.json`，再抄进 `src/portal-config.js` |
-| 单测 | `npm test` | 95 项：连通性、AI、背包、地图生成、迷宫道具分布、投掷瞄准、六项道具效果、无敌星/反击反色仪式、交互提示、移动迷宫、首次引导、设置/改键/标签、实验室生成/门禁/消毒间 |
+| 单测 | `npm test` | 105 项：连通性、AI、背包、地图生成、迷宫道具分布、投掷瞄准、六项道具效果、无敌星/反击反色仪式、交互提示、移动迷宫、首次引导、设置/改键/标签、实验室生成/门禁/消毒间、猫笼重掷/保留/装置/猫环/死后按记忆距离复活 |
 | 端到端 | `node tools/playtest.mjs` | CDP 真实按键：开局→移动→投掷→通关→编辑器 |
 | 单表达式 | `node tools/probe.mjs "<js>"` | 在真实页面执行一段代码并回值（最常用） |
 | 真实时间截图 | `node tools/live.mjs "<js>" out.png 800` | 注入场景、等真实毫秒、截图（抓"冻结时间看不出来"的渲染问题） |
@@ -193,7 +195,7 @@ ni/
 
 验证约定：
 
-1. 逻辑改动 → `npm test` 必须 95/95。
+1. 逻辑改动 → `npm test` 必须 105/105。
 2. 交互改动 → `node tools/playtest.mjs` 必须 `errors: []`。
 3. 视觉改动 → 至少一张 `shots/*.png` 截图，自己看一眼再提交。
 4. 改了 `dist` 相关 → 用 `file://` 再跑一次 playtest。
@@ -261,6 +263,21 @@ ni/
 - 实验体 i 型是 `Hunter`（`speed 83 / alertSpeed 110`，即玩家 0.9× / 1.2×）；ii 型 `LabBrute` 游荡 0.5×（每 0.55 秒一步脚步短声线，仅移动时发）、蓄力 1 秒、冲撞 5.5× 持续 6 秒并反弹；iii 型 `LabStalker` 贴墙 0.5×、听声后沿“墙根活动带”BFS 到离声源最近的可达格（带外视为墙）、以 2.5× 走过去、蓄力 2 秒、尖啸后 3.5× 扑向声源、停 2 秒再沿墙根退回。活动带取 2 格宽：身体有半径，严格 1 格带在 90° 拐角会断成对角两截，走不过去。后两者只在 `level.labEnemies`，不混进 `level.monsters`。
 - 测试在 `tests/worldgen.test.js`：多 seed 检查 3 区/3 卡/3 门、房间与皿数量、房间尺寸上界、室内短墙存在、门临时置 0 后全连通、终室可达、同 seed 确定性，以及两个 7×7 消毒间（内径 5×5）无皿无雾。
 
+### 薛定谔的猫笼
+
+- `MAPS.cage = {kind:'cage', name:'薛定谔的猫笼'}`，`BUILT_MAPS` 含 `cage`；正常入口是实验室终室按 F（`doInteract` 的 `final` 分支调 `enterCage()`），调试模式可直接选图。
+- `buildCageMap(seed)` 在 `src/cage.js`：25×25 格、全墙起步，`level.cage = {grid, fog, water, cat, device, scan, pending, activations, finished, end, rings, introT}`。生成一次后由 `regenerateCage()` 在每次声呐结束时重掷。
+- **扫描不是圆**：`firePing()` 建 `scan = new Uint8Array(625)`，标玩家格；`updateRays()` 每 6px 对 `cageMarkScan()` 记下射线经过/撞到的格。这样“保留”精确等于玩家这一声声呐实际看见的形状。
+- 声呐后 1.02 秒 `applyCageScan()`：`regenerateCage(level,{scanned,playerTile,catDistance})`。scanned 格原样保留（墙、地板、水、毒都不动），其余格按 `WALL_CHANCE=0.56` 重掷，再把墙地比拉回 0.45–0.55。**保留优先于连通，连通优先于 1:1**；`carveCorridor()` 只切非 scanned 墙，所以保留的墙不会被连通性开路切开。
+- 玩家格在重掷后强制为空地（只此一格），水和毒也清掉；不要恢复早期“玩家四邻全清空”的写法，它会覆盖 scanned。
+- 猫在 `regenerateCage()` 里重定位：以当前玩家为圆心、`catDistance` 为半径（clamp 96–352px）的环上找可达地板；失败时放宽 ±56/±96px 再取最接近的。`cat.target` 是这次声呐时玩家的位置，之后 `stepCageCat()` 每 0.4 秒用 `findPath()` 重算，速度 `92*0.8`（水中再 ×0.8）。
+- 猫不画、也不在 `hitEntity()` 里，所以声线永远不会把它显形；回应只有 `applyCageScan()` 里一圈红环和 64 条红色 ghost 射线（`tint:'255, 64, 64'`，不参与碰撞）。
+- 激活装置 `placeDevice()`：必须是 scanned 之外、与可达地板相邻的墙，距玩家 2.5–11 格；两轮候选都排除猫所在格。兜底把它选中的地板变墙后，会重算 `cageReachable()`；猫不可达就回填并放弃这个装置。装置本体不画，只有声线碰到时 `r.tint='196, 132, 255'` 且 `device.hitT=0.4` 画一圈紫。
+- 按 F 激活：装置格写回 0、`activations++`、紫环；第 5 个走 `finishCage()`：`finished=true`、猫 `dead`、`grid.fill(0)`、清 fog/water，在 `(400,400)` 放 `end`，画一台 R≈46 的噪点传送阵；按 F 调 `complete()`。
+- 水与毒都不可见：`cageWaterAt()` 让声线 `r.wet`、渲染蓝色、声速 ×2、单位 ×0.8；`cageFogAt()` 沿用实验室的墨绿与减速。两者都只按像素查询，不画格子。
+- 开局 `beginCage()` 把 `introT=3.4`，`update()` 在此期间冻结移动/声呐并隐藏底部引导；大字标题由 `ui.showMapTitle()` 画，`.no-anim` 下也必须保持可见（样式里有专门覆盖）。
+- 测试在 `tests/cage.test.js`：尺寸/道具、猫初始距离、墙地比、扫描保留（含水和毒）、装置在扫描外且邻接可达地板、猫环重定位、同种子确定性、水毒像素查询。
+
 ### 射线与实体
 
 - 脚步/声呐射线如果从实体中心发出，第一步就会命中自己，全部染成"命中红"并原地反弹 → 表现成"只有一坨红点"。
@@ -316,13 +333,60 @@ ni/
 
 ## 8. 当前进度与下一步
 
-### 本轮交接状态（v0.8.17，2026-11-09）
+### 本轮交接状态（文档一致性 v0.8.21，2026-11-10）
+
+- 这是一次**只改文档与注释**的提交，不改玩法、数值、生成器或存档：`README.md`、`docs/INTRO.md`、`DESIGN.md` 按当前主线和设计意图重写；简介只讲核心机制、逃生肉鸽与分支 Boss，不逐图展开；本文件增加下面的审计表；`src/game.js` / `src/ui.js` / `src/worldgen.js` 的遗留注释写清“旧模式/占位”。
+- `mech` 的行为**没有修**：它仍在 `BUILT_MAPS` 里，但 `worldgen.js` 没有 `buildMechMap`。普通清场会走 `clearMoving() → mech → buildRoomMap()`，形成占位循环；这是已知 bug，不假装它是完成内容。
+- 版本三处均为 `0.8.21`；`npm test` 105 pass / 0 fail；`node tools/build.mjs` 生成 443.9 KB 的 `dist/hush.html`。
+- 文档里的“碎片”只出现在旧模式说明与旧密室表中；当前主线的钥匙是 `mapKey`，不是 shard。
+
+#### 文档/代码一致性审计（v0.8.21）
+
+| 位置（旧行号） | 旧说法 | 当前代码事实 | 处理 |
+|---|---|---|---|
+| `README.md` 首段/玩法 | 37 个相连房间、16 块碎片、回声门是主流程 | `startBest()` 先走 `startMap('room')`；`startMap()` 把 `shards=[]`、`totalShards=0`；碎片/回声门只在 `?world` 旧模式 | 主流程改为房间→迷宫→移动迷宫→B2→实验室→猫笼；旧模式单列 |
+| `README.md` 速度 | 潜行 215 / 走路 340，Shift 奔跑 | `game.js:2587` `const run=false`；实际步行 92、聆听 60、潜行 46；脚步声响半径 215 | 改为三档速度、无奔跑、脚步 215 |
+| `README.md` 操作 | Shift 切换潜行；空格/左键声呐 | Shift 必须按住；空格/左键/J 都是声呐；F 互动、Tab 背包 | 全部改成按住与当前绑定 |
+| `README.md` 颜色 | 金色=碎片 | mapMode 金色是地图钥匙/锁；碎片只在旧模式 | 改为金色=钥匙/锁 |
+| `README.md` 版本 | 只列到 0.8.15 | 当前 0.8.20（本次提交 0.8.21） | 补 0.8.16–0.8.21 |
+| `README.md` 项目树 | 缺 rooms/worldgen/maps/lab/loot/desc/editor/settings | 这些文件都已存在 | 补齐并加 `docs/INTRO.md` |
+| `DESIGN.md` | 8 密室 + 16 碎片是主线；空格聆听/Shift 奔跑 | 主线是 mapMode；听是站定自动累积；无奔跑 | 整篇重写；旧密室只留附录 |
+| `docs/INTRO.md` | 16 碎片/回声门/37 房间，逐图罗列 | 当前主线不是碎片；分支与 Boss 才是卖点 | 重写为核心机制、逃生肉鸽、分支终点 Boss，不逐图 |
+| `DEVELOPMENT.md:21` | “21 张地图，建成 5 张” | `maps.js` 22 个节点；5 个生成器；`BUILT_MAPS` 却有 6 项 | 改为 22 节点/5 生成器，并单列 mech 占位 |
+| `DEVELOPMENT.md:22` | “每张图有钥匙” | 只有房间图有钥匙；迷宫/移动迷宫没有，实验室用门禁卡 | 已改 |
+| `DEVELOPMENT.md:69` | `game.js` 约 1700 行 | 实际约 3538 行 | 已改 |
+| `DEVELOPMENT.md:414` | “补完 21 张图” | 22 个节点，其中 16 个还是 `plain` | 已改，并写明 mech 占位循环 |
+| `DEVELOPMENT.md:415` | 城堡钥匙“掉落逻辑未接” | `killHunter()` 在 room 图首杀已设 `castleKey=true`；缺的是城堡图/消费端 | 已改为“字段已接、城堡未建” |
+| `DEVELOPMENT.md:435/444` | 测试 95/95 | 实际 105 pass | 已改 |
+| `src/ui.js` `nestGlyph` | 16 格像当前进度 | 只在旧 `worldCleared` 时全亮，mapMode 下是遗留装饰 | 注释标明 legacy |
+| `src/game.js` `BUILT_MAPS` | 第六项 mech 像已完成 | 无生成器，`startMap('mech')` 回退 `buildRoomMap` | 注释标 TODO，行为不动 |
+| `src/game.js` `startFloor/startWorld` | 像正常入口 | 只在 `?run` / `?world` 调试时进入 | 注释标明 legacy |
+
+### 上一轮交接状态（绝地求生 v0.8.20，2026-11-10）
+
+- 修复局中装配「绝地求生」不改变当前命数：新增 `syncLives()`，`renderInventory()` 在每次背包变更后调用；上限增加时按差值补当前命数，拆下/降级时收束到新上限。此前 `lives` 只在 `startMap()` / `resetRunState()` 里由 `maxLives()` 重算，所以应激反应触发过与否都不影响这个 bug。
+- 版本三处均为 `0.8.20`；`npm test` 105 pass / 0 fail；`node tools/build.mjs` 生成 443.0 KB 的 `dist/hush.html`。
+
+### 更早一轮交接状态（猫可杀 v0.8.19，2026-11-10）
+
+- 猫现在可以被打死：一块锋利的石头（`kills` 投掷物）命中、无敌星持续期间接触、或「反击时刻」触发，都会调 `killCat()`；猫碰到玩家改走 `hurt(c.cat)`，按普通伤害结算，应激反应/不死图腾/额外生命照常生效。
+- 猫死亡只持续到下一次声呐扫描：`killCat()` 记下死亡前最近一次扫描的距离（扫描尚在等待时取 `pending.d`，否则取 `lastScanDist`），`applyCageScan()` 用它而不是新 ping 的距离来放猫；扫描结束后猫在环上复活，而这次新扫描的距离成为下一次死亡的参照。
+- 版本三处均为 `0.8.19`；`npm test` 104 pass / 0 fail；`node tools/build.mjs` 生成 442.1 KB 的 `dist/hush.html`；`node tools/playtest.mjs` 全部 ready、无 errors。
+- 真实浏览器验证（无头 Edge）：猫被打死后 `dead=true` 且记住 224px，下一次扫描后复活在约 202px 的环上；无敌星/反击/应激/图腾/锋利石头分支全部按预期；另一次先 256px、再 96px 的扫描，复活仍落在 244px（继承 273px 的旧环），证明没有使用新 ping 的距离。
+- 已知取舍：扫描按可见射线的离散格记录，不按理想圆；猫的位置允许在目标半径 ±26px 内取整到格（测试容差 ±64px）；水/毒不可见，只通过声线颜色与速度表达。
+
+### 上一轮交接状态（猫笼 v0.8.18，2026-11-09）
+
+- 第一场 BOSS 关「薛定谔的猫笼」：实验室终室按 F 进入；25×25 每次声呐后按实际扫描重掷，只有扫到的格保留；猫不绘制、回应红环并以 0.8× 速度走向上次发声位置；五个激活装置后坍缩，中央出现大传送阵离开。
+- 版本三处均为 `0.8.18`；`npm test` 103 pass / 0 fail；`node tools/build.mjs` 生成 440.4 KB 的 `dist/hush.html`；`node tools/playtest.mjs` 全部 ready、无 errors。
+
+### 上一轮交接状态（反色柔和化 v0.8.17，2026-11-09）
 
 - 反色柔和化：`render()` 的滤镜改为 `invert(k * 0.9) brightness(1 - 0.18k)`，满负片是 `invert(0.9) brightness(0.82)`；淡入淡出全程连续，没有纯白闪屏。
 - 版本三处均为 `0.8.17`；`npm test` 95 pass / 0 fail；`npm run playtest` `ready: true`、`errors: []`（含 `file://` 单文件）；`node tools/build.mjs` 生成 409.8 KB。
 - 截图 `shots/invert-on.png` 已按新滤镜重拍（不入库）。
 
-### 上一轮交接状态（反色仪式 v0.8.16，2026-11-09）
+### 更早一轮交接状态（反色仪式 v0.8.16，2026-11-09）
 
 - 无敌星与「反击时刻」触发全屏反色仪式：0.5 秒停格 → 0.45 秒渐入负片 → 持续到 buff 结束 → 0.5 秒停格 → 0.45 秒渐出。停格期间 `update()` 在 `stepInvert` 后提前返回、`now` 不推进（声呐波纹也停住），反色滤镜只加在 `#game` 画布上，HUD/菜单保持原色。
 - 实现：`src/game.js` 的 `beginInvert / stepInvert / clearInvert` 与 `counterT`；触发点在 `useItem` 的无敌星分支和 `hurt()` 的反击分支；`render()` 末尾按 `invertK` 设 `canvas.style.filter`。死亡/重来/换图/胜利都会 `clearInvert()`。
@@ -344,9 +408,12 @@ ni/
 - 已知取舍：第三区门禁卡颜色规格未给，取冷白；消毒间“固定 5×5”按**内径**实现（外框 7×7）；门禁卡被取走后不再发每 10 秒声线（按“效果消失”处理）。这三点如果与设计原意不符，优先改这里。
 - 下一位继续时：先跑 `npm test`；实机用 `play.cmd` 后从 b2 进实验室，重点试 iii 型在墙角/门洞的蓄力与扑击、ii 型脚步是否足够可辨、放大房间后门洞是否仍然顺畅。
 
-### 已完成（截至 v0.8.17）
+### 已完成（截至 v0.8.21）
 
-- 四张地图：房间（BSP 多房间 + 内饰 + 钥匙/出口/三扇门）、迷宫（递归回溯 + 口袋）、移动迷宫（3×3×2 块、每 20 秒抽 5 块替换为另一层布局；玩家所在块被抽中则换块，脚下网格不改写；4/6/8 出口）、实验室（隐藏图，三区蛇形、门禁卡与单向门、培养皿、毒雾、5×5 内径消毒间、三种实验体）
+- 五张可用地图（`mech` 是占位，不算）：房间（BSP 多房间 + 内饰 + 钥匙/出口/三扇门）、迷宫（递归回溯 + 口袋）、移动迷宫（3×3×2 块、每 20 秒抽 5 块替换为另一层布局；玩家所在块被抽中则换块，脚下网格不改写；4/6/8 出口）、实验室（隐藏图，三区蛇形、门禁卡与单向门、培养皿、毒雾、5×5 内径消毒间、三种实验体）、猫笼（25×25 重掷、观测保留、猫可杀并按记忆距离复活、五装置坍缩）
+- v0.8.20 命数同步：局中装配/升级绝地求生立即按差值补当前命数，拆下时收束；修复之前只在进图时重算的问题
+- v0.8.19 猫可杀：锋利石头/无敌星/反击时刻可杀死猫，死亡期间红色危险暗角熄灭；下一次扫描按死亡前最近一次扫描的距离复活，未扫描时退回当前距离
+- v0.8.18 猫笼：实验室终点进入；每次声呐后只保留扫描格；猫沿“上次距离”环重定位并以 0.8× 速度走向声源；五装置后中央传送阵离开；记录 `bossBest/bossCleared`；标题页 8 格选图改为 5 个未启用难度位
 - v0.8.12 实验室：移动迷宫 b2 八门进入；主路 5/7 间 + 中段向下 2/3 间分支 + 8×12 卡房；主路尺寸按 5/7 间区分（13–19×10–16 与 10–14×8–14），室内有 1–2 处不贴外墙的短墙/立柱；iii 型只贴外墙刷新，到墙根后蓄力 2 秒再扑；ii 型游荡脚步出声；卡房守卫取卡后自动追击、玩家潜行则失去目标；实验室不出现在标题选图里
 - v0.8.13 重来语义：R / 暂停页重来不再重开当前地图，而是清空背包与进度、回到初始房间并生成新布局；不走入口快照，时间回溯不参与
 - v0.8.12 设置与手柄：音量/声线亮度滑杆、键鼠/手柄切换、15 项动作自由绑定（点一行再按键或手柄按钮，冲突交换，Esc 取消，localStorage 保存）；输入层改为动作绑定；首次点击或按键即创建音频上下文，修复初次进入无声
@@ -374,8 +441,8 @@ ni/
 ### 待做（按优先级）
 
 1. **机械地牢**：左右两半、牢门钥匙、紫色反光门、猎犬/死徒/镇守者（子弹可反弹三次）。
-2. **地图连接**：`enterMapExit` 已支持 `to/require/color`；已有 room→maze（单向）、迷宫右下角台阶旁 → 移动迷宫、移动迷宫 b2 → 实验室（八道门，需先打碎 b2 核心）。传送门一律单向，不再做回程门；移动迷宫仍可从地图选择或 `?map=moving` 进入，实验室可用 `?map=lab`（地图选择里只有调试模式显示）。补完 21 张图的图结构后，把 `BUILT_MAPS` 逐个放开。
-3. **城堡钥匙**：第一个击杀掉落（字段已留 `castleKey`，掉落逻辑未接）。
+2. **地图连接**：`enterMapExit` 已支持 `to/require/color`；已有 room→maze（单向）、迷宫右下角台阶旁 → 移动迷宫、移动迷宫 b2 → 实验室（八道门，需先打碎 b2 核心）→ 猫笼（实验室终室按 F）。传送门一律单向，不再做回程门；移动迷宫仍可从地图选择或 `?map=moving` 进入，实验室可用 `?map=lab`（地图选择里只有调试模式显示）。补完 22 个节点的图结构后，再把 `BUILT_MAPS` 逐个放开；当前 `BUILT_MAPS` 里的 `mech` 没有生成器，是占位。
+3. **城堡钥匙**：`killHunter()` 在房间图首杀已设 `castleKey=true`；缺的是城堡图本身与消费端（城堡门 `require:'castle'` 已生成）。
 4. **吸收门**：草原门应吸收声波不再反弹（`absorb` 集合已生成，`updateRays` 未消费）。
 5. **科技树**（用户已给格式：缩进父子、`名称 | 前置 | 价格 | 效果`；需先定"局外永久/局内"与货币量级）。
 6. 剩余道具效果细化：驱虫器对猎犬/死徒、尸骸对死徒的特殊反应。
@@ -395,7 +462,7 @@ ni/
 
 - 语义化版本 `v0.x.y`，**每个可见改动都打 tag**，并在 `CHANGELOG.md` 写"改了什么 + 为什么"。
 - 提交信息用 `fix:` / `feat:` / `docs:` / `perf:` 前缀，一句话说清根因（例：`fix: rewind revived into a stale floor`）。
-- 提交前检查：`npm test` 95/95、`playtest` 无异常、`dist` 已重建（`node tools/build.mjs`）。
+- 提交前检查：`npm test` 105/105、`playtest` 无异常、`dist` 已重建（`node tools/build.mjs`）。
 - 截图不进仓库（`.gitignore` 忽略 `shots*/`），README 用的图放 `docs/img/`。
 
 ---
